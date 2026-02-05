@@ -1,0 +1,10 @@
+{
+  "name": "downloader",
+  "version": "1.0.0",
+  "description": "Video downloader application",
+  "scripts": {
+    "start": "bash scripts/start_app.sh"
+  },
+  "author": "Jack Lee",
+  "license": "ISC"
+}
