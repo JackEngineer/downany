@@ -13,6 +13,7 @@ from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOp
 from src.core.download_manager import DownloadManager
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
+from src.ui.components import SearchResultItemWidget, ThumbnailLoader
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SearchTab")
@@ -46,6 +47,7 @@ class SearchTab(QWidget):
         self.config = ConfigManager()
         self.db = HistoryDB()
         self.search_thread = None
+        self.thumbnail_loader = ThumbnailLoader()
         self.init_ui()
 
     def init_ui(self):
@@ -117,14 +119,12 @@ class SearchTab(QWidget):
         self.result_list.clear()
 
         for video in results:
-            # 格式化时长
-            duration_str = self._format_duration(video.duration)
-
-            # 创建列表项
-            item_text = f"{video.title}\n上传者: {video.uploader} | 时长: {duration_str}"
-            item = QListWidgetItem(item_text)
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, video)
             self.result_list.addItem(item)
+            item_widget = SearchResultItemWidget(video, thumbnail_loader=self.thumbnail_loader)
+            item.setSizeHint(item_widget.sizeHint())
+            self.result_list.setItemWidget(item, item_widget)
 
         logger.info(f"显示 {len(results)} 个搜索结果")
 
