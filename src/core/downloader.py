@@ -78,6 +78,7 @@ class Downloader:
             'outtmpl': os.path.join(self.download_dir, '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'noplaylist': True,  # 默认不下载列表
+            'no_color': True,  # 禁用颜色输出，避免 ANSI 代码干扰解析
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
