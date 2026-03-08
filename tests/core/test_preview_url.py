@@ -1,26 +1,4 @@
-import re
-
-import pytest
-
 from src.ui.tabs.search_tab import SearchTab
-
-
-def _normalize_video_url_fallback(_, raw_value: str) -> str:
-    value = (raw_value or "").strip()
-    if value.startswith(("http://", "https://")):
-        return value
-    if re.fullmatch(r"[0-9A-Za-z_-]{11}", value):
-        return f"https://www.youtube.com/watch?v={value}"
-    if re.fullmatch(r"BV[0-9A-Za-z]{10}", value, re.IGNORECASE):
-        return f"https://www.bilibili.com/video/{value}"
-    return value
-
-
-@pytest.fixture(scope="module", autouse=True)
-def ensure_normalize_video_url_exists():
-    if hasattr(SearchTab, "_normalize_video_url"):
-        return
-    SearchTab._normalize_video_url = _normalize_video_url_fallback
 
 
 def test_normalize_video_url_youtube_id_to_watch_url():

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QMessageBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+import re
 from src.core.search_engine import SearchEngine
 from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOptions
 from src.core.download_manager import DownloadManager
@@ -188,3 +189,17 @@ class SearchTab(QWidget):
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         else:
             return f"{minutes:02d}:{secs:02d}"
+
+    def _normalize_video_url(self, raw_value: str) -> str:
+        """标准化视频链接，支持 ID 到可访问 URL 的转换。"""
+        value = (raw_value or "").strip()
+        if value.startswith(("http://", "https://")):
+            return value
+
+        if re.fullmatch(r"[0-9A-Za-z_-]{11}", value):
+            return f"https://www.youtube.com/watch?v={value}"
+
+        if re.fullmatch(r"BV[0-9A-Za-z]{10}", value, re.IGNORECASE):
+            return f"https://www.bilibili.com/video/{value}"
+
+        return value
