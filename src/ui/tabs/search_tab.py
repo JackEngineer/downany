@@ -83,7 +83,7 @@ class SearchTab(QWidget):
         btn_layout.addStretch()
 
         self.download_btn = QPushButton("下载选中")
-        self.download_btn.clicked.connect(self.download_selected)
+        self.download_btn.clicked.connect(lambda: self.download_selected())
         btn_layout.addWidget(self.download_btn)
 
         layout.addLayout(btn_layout)
@@ -91,6 +91,10 @@ class SearchTab(QWidget):
 
     def start_search(self):
         """开始搜索"""
+        if self.search_thread and self.search_thread.isRunning():
+            logger.info("搜索线程仍在运行，忽略重复搜索请求")
+            return
+
         query = self.search_input.text().strip()
         if not query:
             QMessageBox.warning(self, "提示", "请输入搜索关键词")
@@ -150,9 +154,9 @@ class SearchTab(QWidget):
         self.search_btn.setEnabled(True)
         self.search_btn.setText("搜索")
 
-    def download_selected(self):
+    def download_selected(self, item: QListWidgetItem = None):
         """下载选中的视频"""
-        current_item = self.result_list.currentItem()
+        current_item = item if item is not None else self.result_list.currentItem()
         if not current_item:
             QMessageBox.warning(self, "提示", "请选择一个视频")
             return
