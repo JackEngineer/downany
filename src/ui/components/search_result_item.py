@@ -106,10 +106,16 @@ class SearchResultItemWidget(QWidget):
 
     @staticmethod
     def _format_duration(seconds: int) -> str:
-        if seconds == 0:
+        if seconds in (None, "", 0):
             return "N/A"
 
-        seconds = int(seconds)
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return "N/A"
+
+        if seconds <= 0:
+            return "N/A"
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         secs = seconds % 60

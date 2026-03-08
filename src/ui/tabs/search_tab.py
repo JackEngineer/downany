@@ -386,11 +386,17 @@ class SearchTab(QWidget):
 
     def _format_duration(self, seconds: int) -> str:
         """格式化时长"""
-        if seconds == 0:
+        if seconds in (None, "", 0):
             return "N/A"
 
-        # 确保转换为整数
-        seconds = int(seconds)
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return "N/A"
+
+        if seconds <= 0:
+            return "N/A"
+
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
