@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QComboBox, QListWidget,
     QListWidgetItem, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QEvent, QTimer, Qt, QThread, pyqtSignal
 import re
 from src.core.search_engine import SearchEngine
 from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOptions
@@ -41,13 +41,13 @@ class SearchThread(QThread):
 class SearchTab(QWidget):
     """搜索标签页"""
 
-    def __init__(self, download_manager: DownloadManager):
+    def __init__(self, download_manager: DownloadManager, thumbnail_loader: ThumbnailLoader = None):
         super().__init__()
         self.download_manager = download_manager
         self.config = ConfigManager()
         self.db = HistoryDB()
         self.search_thread = None
-        self.thumbnail_loader = ThumbnailLoader()
+        self.thumbnail_loader = thumbnail_loader or ThumbnailLoader()
         self.init_ui()
 
     def init_ui(self):
@@ -76,6 +76,10 @@ class SearchTab(QWidget):
         # 结果列表
         self.result_list = QListWidget()
         self.result_list.itemDoubleClicked.connect(self.download_selected)
+        self.result_list.verticalScrollBar().valueChanged.connect(self._schedule_visible_thumbnail_load)
+        self.result_list.horizontalScrollBar().valueChanged.connect(self._schedule_visible_thumbnail_load)
+        self.result_list.viewport().installEventFilter(self)
+        self.result_list.installEventFilter(self)
         layout.addWidget(self.result_list)
 
         # 操作按钮
@@ -131,6 +135,29 @@ class SearchTab(QWidget):
             self.result_list.setItemWidget(item, item_widget)
 
         logger.info(f"显示 {len(results)} 个搜索结果")
+        self._schedule_visible_thumbnail_load()
+
+    def eventFilter(self, watched, event):
+        if watched in (self.result_list.viewport(), self.result_list) and event.type() == QEvent.Type.Resize:
+            self._schedule_visible_thumbnail_load()
+        return super().eventFilter(watched, event)
+
+    def _schedule_visible_thumbnail_load(self):
+        QTimer.singleShot(0, self._request_visible_thumbnails)
+
+    def _request_visible_thumbnails(self):
+        viewport_rect = self.result_list.viewport().rect()
+        for index in range(self.result_list.count()):
+            item = self.result_list.item(index)
+            if item is None:
+                continue
+            if not self.result_list.visualItemRect(item).intersects(viewport_rect):
+                continue
+
+            video_info = item.data(Qt.ItemDataRole.UserRole)
+            if not video_info:
+                continue
+            self.thumbnail_loader.request_thumbnail(video_info.url, video_info.thumbnail_url)
 
     def search_error(self, error_msg):
         """搜索错误"""

@@ -78,7 +78,6 @@ class SearchResultItemWidget(QWidget):
 
         self.thumbnail_loader.thumbnail_loaded.connect(self._on_thumbnail_loaded)
         self.thumbnail_loader.thumbnail_failed.connect(self._on_thumbnail_failed)
-        self.thumbnail_loader.request_thumbnail(self.item_key, self.video.thumbnail_url)
 
     def set_placeholder(self, text: str = "封面待加载") -> None:
         """显示占位封面文本。"""
