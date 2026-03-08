@@ -8,6 +8,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QEvent, QTimer, Qt, QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices, QPixmap
+import json
+import time
 import re
 from src.core.search_engine import SearchEngine
 from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOptions
@@ -15,9 +17,31 @@ from src.core.download_manager import DownloadManager
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
 from src.ui.components import SearchResultItemWidget, ThumbnailLoader, VideoPreviewWidget
+from src.ui.fluent_support import get_fluent_widget
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SearchTab")
+DEBUG_LOG_PATH = "/Users/jacklee/work/personal/trae/downloader/.cursor/debug-5680ec.log"
+DEBUG_SESSION_ID = "5680ec"
+
+
+def _debug_log(hypothesis_id: str, location: str, message: str, data: dict = None, run_id: str = "initial") -> None:
+    # region agent log
+    payload = {
+        "sessionId": DEBUG_SESSION_ID,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 
 class SearchThread(QThread):
@@ -56,23 +80,28 @@ class SearchTab(QWidget):
         self.thumbnail_loader.thumbnail_failed.connect(self._on_detail_thumbnail_failed)
 
     def init_ui(self):
+        line_edit_cls = get_fluent_widget("LineEdit") or QLineEdit
+        push_button_cls = get_fluent_widget("PushButton") or QPushButton
+        primary_button_cls = get_fluent_widget("PrimaryPushButton") or push_button_cls
+        combo_box_cls = get_fluent_widget("ComboBox") or QComboBox
+
         layout = QVBoxLayout()
 
         # 搜索栏
         search_layout = QHBoxLayout()
 
         search_layout.addWidget(QLabel("平台:"))
-        self.platform_combo = QComboBox()
+        self.platform_combo = combo_box_cls()
         self.platform_combo.addItem("YouTube", Platform.YOUTUBE)
         self.platform_combo.addItem("Bilibili", Platform.BILIBILI)
         search_layout.addWidget(self.platform_combo)
 
-        self.search_input = QLineEdit()
+        self.search_input = line_edit_cls()
         self.search_input.setPlaceholderText("输入搜索关键词...")
         self.search_input.returnPressed.connect(self.start_search)
         search_layout.addWidget(self.search_input)
 
-        self.search_btn = QPushButton("搜索")
+        self.search_btn = primary_button_cls("搜索")
         self.search_btn.clicked.connect(self.start_search)
         search_layout.addWidget(self.search_btn)
 
@@ -129,19 +158,19 @@ class SearchTab(QWidget):
         detail_layout.addWidget(self.preview_widget)
 
         action_layout = QHBoxLayout()
-        self.copy_link_btn = QPushButton("复制链接")
+        self.copy_link_btn = push_button_cls("复制链接")
         self.copy_link_btn.clicked.connect(self.copy_selected_link)
         action_layout.addWidget(self.copy_link_btn)
 
-        self.open_link_btn = QPushButton("打开链接")
+        self.open_link_btn = push_button_cls("打开链接")
         self.open_link_btn.clicked.connect(self.open_selected_link)
         action_layout.addWidget(self.open_link_btn)
 
-        self.download_btn = QPushButton("下载选中")
+        self.download_btn = primary_button_cls("下载选中")
         self.download_btn.clicked.connect(lambda: self.download_selected())
         action_layout.addWidget(self.download_btn)
 
-        self.preview_btn = QPushButton("直接预览")
+        self.preview_btn = push_button_cls("直接预览")
         self.preview_btn.clicked.connect(self.preview_selected_video)
         action_layout.addWidget(self.preview_btn)
         detail_layout.addLayout(action_layout)
@@ -158,6 +187,17 @@ class SearchTab(QWidget):
         layout.addWidget(splitter)
         self.setLayout(layout)
         self._reset_detail_panel()
+        _debug_log(
+            "H4_H5",
+            "search_tab.py:init_ui",
+            "search tab ui initialized",
+            {
+                "windowSize": [self.width(), self.height()],
+                "resultListMinSize": [self.result_list.minimumWidth(), self.result_list.minimumHeight()],
+                "previewMinSize": [self.preview_widget.minimumWidth(), self.preview_widget.minimumHeight()],
+                "appStyleSheetLength": len(QApplication.instance().styleSheet()) if QApplication.instance() else 0,
+            },
+        )
 
     def start_search(self):
         """开始搜索"""
@@ -170,7 +210,10 @@ class SearchTab(QWidget):
             QMessageBox.warning(self, "提示", "请输入搜索关键词")
             return
 
-        platform = self.platform_combo.currentData()
+        platform = self._resolve_selected_platform()
+        if platform is None:
+            QMessageBox.warning(self, "提示", "无法识别当前平台，请重新选择平台后重试")
+            return
         proxy = self.config.get_proxy_url() if self.config.is_proxy_enabled() else None
 
         # 禁用搜索按钮
@@ -189,9 +232,44 @@ class SearchTab(QWidget):
         self.search_thread.finished.connect(self.search_finished)
         self.search_thread.start()
 
+    def _resolve_selected_platform(self):
+        """
+        兼容原生 QComboBox 与 Fluent ComboBox 的平台解析：
+        - 优先使用 currentData()（原有路径）
+        - 若为空，按 currentText() 做稳定映射
+        """
+        platform = self.platform_combo.currentData() if hasattr(self.platform_combo, "currentData") else None
+        if platform is not None:
+            return platform
+
+        text = self.platform_combo.currentText().strip() if hasattr(self.platform_combo, "currentText") else ""
+        text_map = {
+            "YouTube": Platform.YOUTUBE,
+            "Bilibili": Platform.BILIBILI,
+        }
+        return text_map.get(text)
+
     def display_results(self, results):
         """显示搜索结果"""
         self.result_list.clear()
+        sample = []
+        for v in results[:3]:
+            sample.append(
+                {
+                    "url": (v.url or "")[:120],
+                    "thumbnailUrl": (v.thumbnail_url or "")[:160],
+                    "platform": v.platform.value if v.platform else "",
+                }
+            )
+        _debug_log(
+            "H1",
+            "search_tab.py:display_results",
+            "display results received",
+            {
+                "resultCount": len(results),
+                "sample": sample,
+            },
+        )
 
         for video in results:
             item = QListWidgetItem()
@@ -218,6 +296,7 @@ class SearchTab(QWidget):
 
     def _request_visible_thumbnails(self):
         viewport_rect = self.result_list.viewport().rect()
+        requested = 0
         for index in range(self.result_list.count()):
             item = self.result_list.item(index)
             if item is None:
@@ -229,8 +308,27 @@ class SearchTab(QWidget):
             if not video_info:
                 continue
             self.thumbnail_loader.request_thumbnail(video_info.url, video_info.thumbnail_url)
+            requested += 1
+        if requested:
+            _debug_log(
+                "H2",
+                "search_tab.py:_request_visible_thumbnails",
+                "requested thumbnails for visible items",
+                {
+                    "requestedCount": requested,
+                    "viewport": [viewport_rect.width(), viewport_rect.height()],
+                },
+            )
 
     def _on_selection_changed(self, current: QListWidgetItem, _previous: QListWidgetItem):
+        for index in range(self.result_list.count()):
+            item = self.result_list.item(index)
+            if not item:
+                continue
+            widget = self.result_list.itemWidget(item)
+            if widget and hasattr(widget, "set_selected"):
+                widget.set_selected(item is current)
+
         if not current:
             self._reset_detail_panel()
             return
@@ -238,6 +336,16 @@ class SearchTab(QWidget):
         if not video_info:
             self._reset_detail_panel()
             return
+        _debug_log(
+            "H6",
+            "search_tab.py:_on_selection_changed",
+            "selection changed",
+            {
+                "hasVideoInfo": bool(video_info),
+                "previewBtnEnabledBeforeUpdate": self.preview_btn.isEnabled(),
+                "url": (video_info.url or "")[:120],
+            },
+        )
         self._update_detail_panel(video_info)
 
     def _reset_detail_panel(self):
@@ -267,6 +375,17 @@ class SearchTab(QWidget):
         self.download_btn.setEnabled(True)
         self.preview_btn.setEnabled(True)
         self._update_detail_thumbnail(video_info)
+        _debug_log(
+            "H4_H5",
+            "search_tab.py:_update_detail_panel",
+            "detail panel updated for selection",
+            {
+                "titleLength": len(video_info.title or ""),
+                "detailThumbSize": [self.detail_thumbnail_label.width(), self.detail_thumbnail_label.height()],
+                "previewSize": [self.preview_widget.width(), self.preview_widget.height()],
+                "previewMinSize": [self.preview_widget.minimumWidth(), self.preview_widget.minimumHeight()],
+            },
+        )
 
     def _set_detail_thumbnail_placeholder(self, text: str):
         self.detail_thumbnail_label.clear()
@@ -283,6 +402,12 @@ class SearchTab(QWidget):
 
     def _update_detail_thumbnail(self, video_info: VideoInfo):
         if not video_info.thumbnail_url:
+            _debug_log(
+                "H1",
+                "search_tab.py:_update_detail_thumbnail",
+                "missing thumbnail url for selected video",
+                {"videoUrl": (video_info.url or "")[:120]},
+            )
             self._set_detail_thumbnail_placeholder("暂无封面")
             return
 
@@ -387,11 +512,30 @@ class SearchTab(QWidget):
         优先尝试应用内播放，失败时自动回退到浏览器打开。
         """
         current_item = self.result_list.currentItem()
+        _debug_log(
+            "H6",
+            "search_tab.py:preview_selected_video",
+            "preview button handler entered",
+            {
+                "hasCurrentItem": bool(current_item),
+                "previewBtnEnabled": self.preview_btn.isEnabled(),
+                "listCount": self.result_list.count(),
+            },
+        )
         if not current_item:
             QMessageBox.warning(self, "提示", "请选择一个视频")
             return
 
         video_info = current_item.data(Qt.ItemDataRole.UserRole)
+        _debug_log(
+            "H6",
+            "search_tab.py:preview_selected_video",
+            "preview selected video resolved",
+            {
+                "hasVideoInfo": bool(video_info),
+                "rawUrl": (video_info.url if video_info else "")[:120],
+            },
+        )
         normalized_url = self._normalize_video_url(video_info.url)
 
         # 重置回退标志
@@ -406,6 +550,15 @@ class SearchTab(QWidget):
 
         # 尝试应用内播放
         success = self.preview_widget.try_play(normalized_url)
+        _debug_log(
+            "H6",
+            "search_tab.py:preview_selected_video",
+            "preview widget try_play returned",
+            {
+                "normalizedUrl": normalized_url[:160],
+                "tryPlaySuccess": bool(success),
+            },
+        )
         if success:
             self.preview_status_label.setText("正在应用内预览视频")
             return

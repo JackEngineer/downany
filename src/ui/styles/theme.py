@@ -228,6 +228,25 @@ def get_qss_style() -> str:
     #searchPreviewStatus {{
         color: {Theme.TEXT_SECONDARY};
     }}
+
+    /* 搜索结果项 */
+    #searchResultThumbnail {{
+        background-color: #EEF2F7;
+        border: 1px solid {Theme.BORDER};
+        border-radius: 4px;
+    }}
+
+    #searchResultTitle {{
+        color: {Theme.TEXT_PRIMARY};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+
+    #searchResultMeta,
+    #searchResultThumbStatus {{
+        color: {Theme.TEXT_SECONDARY};
+        font-size: 12px;
+    }}
     """
 
 

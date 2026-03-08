@@ -1,4 +1,5 @@
 yt-dlp>=2025.01.01
 PyQt6>=6.6.0
+PyQt6-Fluent-Widgets
 pytest
 pytest-qt

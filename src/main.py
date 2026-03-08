@@ -9,6 +9,7 @@ sys.path.append(project_root)
 from PyQt6.QtWidgets import QApplication
 from src.ui.main_window import MainWindow
 from src.ui.styles import apply_theme
+from src.ui.fluent_support import setup_fluent_app
 
 def main():
     """
@@ -16,10 +17,12 @@ def main():
     """
     app = QApplication(sys.argv)
 
-    # 应用主题
-    apply_theme(app)
+    # 优先尝试启用 Fluent；不可用时回退到现有 QSS 主题
+    fluent_enabled = setup_fluent_app(app)
+    if not fluent_enabled:
+        apply_theme(app)
 
-    window = MainWindow()
+    window = MainWindow(use_fluent=fluent_enabled)
     window.show()
 
     sys.exit(app.exec())

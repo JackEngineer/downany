@@ -11,6 +11,7 @@ from src.core.download_task import DownloadTask, VideoInfo, DownloadOptions
 from src.core.platform_detector import PlatformDetector
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.config_manager import ConfigManager
+from src.ui.fluent_support import get_fluent_widget
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadTab")
@@ -26,6 +27,11 @@ class DownloadTab(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        line_edit_cls = get_fluent_widget("LineEdit") or QLineEdit
+        text_edit_cls = get_fluent_widget("TextEdit") or QTextEdit
+        push_button_cls = get_fluent_widget("PushButton") or QPushButton
+        primary_button_cls = get_fluent_widget("PrimaryPushButton") or push_button_cls
+
         layout = QVBoxLayout()
         layout.setSpacing(15)
 
@@ -36,7 +42,7 @@ class DownloadTab(QWidget):
         # URL 输入
         url_layout = QHBoxLayout()
         url_layout.addWidget(QLabel("视频链接:"))
-        self.single_url_input = QLineEdit()
+        self.single_url_input = line_edit_cls()
         self.single_url_input.setPlaceholderText("请输入视频链接...")
         url_layout.addWidget(self.single_url_input)
         single_layout.addLayout(url_layout)
@@ -44,7 +50,7 @@ class DownloadTab(QWidget):
         # 按钮
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        self.single_download_btn = QPushButton("开始下载")
+        self.single_download_btn = primary_button_cls("开始下载")
         self.single_download_btn.clicked.connect(self.start_single_download)
         btn_layout.addWidget(self.single_download_btn)
         btn_layout.addStretch()
@@ -58,7 +64,7 @@ class DownloadTab(QWidget):
         batch_layout = QVBoxLayout()
 
         batch_layout.addWidget(QLabel("请输入视频链接 (每行一个):"))
-        self.batch_url_input = QTextEdit()
+        self.batch_url_input = text_edit_cls()
         self.batch_url_input.setPlaceholderText("https://example.com/video1\\nhttps://example.com/video2\\n...")
         self.batch_url_input.setMaximumHeight(150)
         batch_layout.addWidget(self.batch_url_input)
@@ -66,7 +72,7 @@ class DownloadTab(QWidget):
         # 按钮
         batch_btn_layout = QHBoxLayout()
         batch_btn_layout.addStretch()
-        self.batch_download_btn = QPushButton("开始批量下载")
+        self.batch_download_btn = primary_button_cls("开始批量下载")
         self.batch_download_btn.clicked.connect(self.start_batch_download)
         batch_btn_layout.addWidget(self.batch_download_btn)
         batch_btn_layout.addStretch()

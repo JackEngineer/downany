@@ -20,6 +20,20 @@ class SearchEngine:
     }
 
     @staticmethod
+    def _build_fallback_thumbnail(platform: Platform, entry: dict) -> str:
+        """为缺失封面的结果生成平台级回退封面链接。"""
+        thumbnail = entry.get('thumbnail') or ''
+        if thumbnail:
+            return thumbnail
+
+        # ytsearch + extract_flat 可能不给 thumbnail，这里用视频 ID 生成标准封面
+        if platform == Platform.YOUTUBE:
+            video_id = (entry.get('id') or '').strip()
+            if video_id:
+                return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        return ''
+
+    @staticmethod
     def search(platform: Platform, query: str, max_results: int = 20, proxy: Optional[str] = None) -> List[VideoInfo]:
         """
         在指定平台搜索视频。
@@ -77,7 +91,7 @@ class SearchEngine:
                     url=entry.get('url', '') or entry.get('webpage_url', ''),
                     title=entry.get('title', 'Unknown'),
                     duration=entry.get('duration', 0),
-                    thumbnail_url=entry.get('thumbnail', ''),
+                    thumbnail_url=SearchEngine._build_fallback_thumbnail(platform, entry),
                     uploader=entry.get('uploader', 'Unknown'),
                     platform=platform,
                 )

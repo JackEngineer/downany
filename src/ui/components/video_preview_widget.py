@@ -6,6 +6,10 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+import json
+import time
+import yt_dlp
+from src.ui.fluent_support import get_fluent_widget
 
 
 class VideoPreviewWidget(QWidget):
@@ -24,31 +28,51 @@ class VideoPreviewWidget(QWidget):
         self._setup_player()
         self._current_url = ""
 
+    def _debug_log(self, hypothesis_id: str, location: str, message: str, data: dict = None, run_id: str = "initial") -> None:
+        # region agent log
+        payload = {
+            "sessionId": "5680ec",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(time.time() * 1000),
+        }
+        try:
+            with open("/Users/jacklee/work/personal/trae/downloader/.cursor/debug-5680ec.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        # endregion
+
     def _setup_ui(self):
         """初始化UI。"""
-        self.setMinimumSize(480, 270)
+        push_button_cls = get_fluent_widget("PushButton") or QPushButton
+        self.setMinimumSize(320, 180)
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
         # 视频显示区域
         self.video_widget = QVideoWidget()
-        self.video_widget.setMinimumSize(480, 270)
+        self.video_widget.setMinimumSize(320, 180)
+        self.video_widget.setMaximumHeight(240)
         layout.addWidget(self.video_widget)
 
         # 控制栏
         controls = QHBoxLayout()
         controls.setSpacing(8)
 
-        self.play_btn = QPushButton("播放")
+        self.play_btn = push_button_cls("播放")
         self.play_btn.clicked.connect(self.play)
         controls.addWidget(self.play_btn)
 
-        self.pause_btn = QPushButton("暂停")
+        self.pause_btn = push_button_cls("暂停")
         self.pause_btn.clicked.connect(self.pause)
         controls.addWidget(self.pause_btn)
 
-        self.stop_btn = QPushButton("停止")
+        self.stop_btn = push_button_cls("停止")
         self.stop_btn.clicked.connect(self.stop)
         controls.addWidget(self.stop_btn)
 
@@ -77,6 +101,12 @@ class VideoPreviewWidget(QWidget):
     def _on_error(self, error, error_string):
         """处理播放错误。"""
         self.status_label.setText(f"播放失败: {error_string}")
+        self._debug_log(
+            "H3",
+            "video_preview_widget.py:_on_error",
+            "player error occurred",
+            {"error": str(error), "errorString": error_string},
+        )
         self.playback_failed.emit(error_string)
 
     def _on_state_changed(self, state):
@@ -107,6 +137,12 @@ class VideoPreviewWidget(QWidget):
         """
         if not url:
             self.status_label.setText("无效链接")
+            self._debug_log(
+                "H3",
+                "video_preview_widget.py:try_play",
+                "try_play received empty url",
+                {},
+            )
             self.playback_failed.emit("empty_url")
             return False
 
@@ -115,6 +151,15 @@ class VideoPreviewWidget(QWidget):
         if self._needs_parsing(url):
             # 尝试解析，如果失败则返回False让上层回退
             parsed_url = self._try_parse_url(url)
+            self._debug_log(
+                "H3",
+                "video_preview_widget.py:try_play",
+                "url requires parsing",
+                {
+                    "sourceUrl": url[:160],
+                    "parsedUrlPresent": bool(parsed_url),
+                },
+            )
             if not parsed_url:
                 self.status_label.setText("该链接需要解析，尝试回退浏览器")
                 self.playback_failed.emit("needs_parsing")
@@ -124,6 +169,12 @@ class VideoPreviewWidget(QWidget):
         self._current_url = url
         self.player.setSource(QUrl(url))
         self.player.play()
+        self._debug_log(
+            "H3",
+            "video_preview_widget.py:try_play",
+            "started player play sequence",
+            {"playUrl": url[:160]},
+        )
         return True
 
     def _needs_parsing(self, url: str) -> bool:
@@ -148,9 +199,35 @@ class VideoPreviewWidget(QWidget):
         简单实现：目前直接返回空表示需要回退浏览器。
         后续可接入 yt-dlp 解析直链。
         """
-        # TODO: 接入 yt-dlp 解析直链
-        # 当前版本：直接返回空，让上层回退浏览器
-        return ""
+        # 使用 yt-dlp 提取可播放直链（最小字段，避免额外开销）
+        try:
+            with yt_dlp.YoutubeDL({
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
+            }) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if not info:
+                return ""
+
+            direct_url = info.get("url") or ""
+            if direct_url:
+                return direct_url
+
+            formats = info.get("formats") or []
+            for fmt in reversed(formats):
+                fmt_url = (fmt or {}).get("url")
+                if fmt_url:
+                    return fmt_url
+            return ""
+        except Exception as exc:
+            self._debug_log(
+                "H3",
+                "video_preview_widget.py:_try_parse_url",
+                "parse direct url failed",
+                {"sourceUrl": url[:160], "error": str(exc)},
+            )
+            return ""
 
     def play(self):
         """开始/继续播放。"""
