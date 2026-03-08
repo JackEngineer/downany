@@ -14,7 +14,7 @@ from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOp
 from src.core.download_manager import DownloadManager
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
-from src.ui.components import SearchResultItemWidget, ThumbnailLoader
+from src.ui.components import SearchResultItemWidget, ThumbnailLoader, VideoPreviewWidget
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SearchTab")
@@ -120,6 +120,12 @@ class SearchTab(QWidget):
         self.detail_thumbnail_status_label = QLabel("封面待加载")
         self.detail_thumbnail_status_label.setObjectName("searchDetailThumbnailStatus")
         detail_layout.addWidget(self.detail_thumbnail_status_label)
+
+        # 视频预览区域
+        self.preview_widget = VideoPreviewWidget()
+        self.preview_widget.setObjectName("videoPreviewWidget")
+        self.preview_widget.playback_failed.connect(self._on_preview_failed)
+        detail_layout.addWidget(self.preview_widget)
 
         action_layout = QHBoxLayout()
         self.copy_link_btn = QPushButton("复制链接")
@@ -237,8 +243,9 @@ class SearchTab(QWidget):
         self.detail_title_label.setText("请选择一个搜索结果")
         self.detail_meta_label.setText("平台: - | 上传者: - | 时长: -")
         self.detail_url_label.setText("链接: -")
-        self.preview_status_label.setText("预览入口已就绪，待播放器接入")
+        self.preview_status_label.setText("请选择视频进行预览")
         self._set_detail_thumbnail_placeholder("封面待加载")
+        self.preview_widget.clear()
         self.copy_link_btn.setEnabled(False)
         self.open_link_btn.setEnabled(False)
         self.download_btn.setEnabled(False)
@@ -253,7 +260,7 @@ class SearchTab(QWidget):
         self.detail_title_label.setText(video_info.title or "Unknown")
         self.detail_meta_label.setText(f"平台: {platform_name} | 上传者: {uploader} | 时长: {duration}")
         self.detail_url_label.setText(f"链接: {normalized_url}")
-        self.preview_status_label.setText("可点击“直接预览”进入后续播放器流程")
+        self.preview_status_label.setText("可点击“直接预览”播放视频（失败时自动回退浏览器）")
         self.copy_link_btn.setEnabled(True)
         self.open_link_btn.setEnabled(True)
         self.download_btn.setEnabled(True)
@@ -374,15 +381,60 @@ class SearchTab(QWidget):
         self.preview_status_label.setText("已尝试打开链接")
 
     def preview_selected_video(self):
-        """预览入口（Task5 将接入真实播放器）。"""
+        """
+        预览选中的视频。
+        优先尝试应用内播放，失败时自动回退到浏览器打开。
+        """
         current_item = self.result_list.currentItem()
         if not current_item:
             QMessageBox.warning(self, "提示", "请选择一个视频")
             return
+
         video_info = current_item.data(Qt.ItemDataRole.UserRole)
+        normalized_url = self._normalize_video_url(video_info.url)
+
         self.preview_status_label.setText(
-            f"预览加载中：{video_info.title or '当前视频'}（播放器即将支持）"
+            f"正在尝试预览：{video_info.title or '当前视频'}..."
         )
+
+        # 先停止当前播放
+        self.preview_widget.stop()
+
+        # 尝试应用内播放
+        success = self.preview_widget.try_play(normalized_url)
+        if success:
+            self.preview_status_label.setText("正在应用内预览视频")
+            return
+
+        # 应用内播放失败或需要解析，自动回退到浏览器
+        self._fallback_to_browser_preview(video_info, normalized_url)
+
+    def _on_preview_failed(self, reason: str):
+        """处理预览失败信号。"""
+        logger.warning(f"预览失败: {reason}")
+        # 失败已在 try_play 中处理回退，这里主要用于状态更新
+
+    def _fallback_to_browser_preview(self, video_info: VideoInfo, url: str):
+        """回退到浏览器打开视频链接。"""
+        self.preview_status_label.setText(
+            f"应用内预览不可用，正在尝试浏览器打开..."
+        )
+
+        if not url:
+            QMessageBox.warning(self, "提示", "无法获取视频链接")
+            self.preview_status_label.setText("无法获取视频链接")
+            return
+
+        success = QDesktopServices.openUrl(QUrl(url))
+        if success:
+            self.preview_status_label.setText("已在浏览器打开视频预览")
+        else:
+            QMessageBox.warning(
+                self, "提示", "无法打开链接，请检查默认浏览器设置"
+            )
+            self.preview_status_label.setText(
+                "浏览器打开失败，请复制链接手动访问"
+            )
 
     def _format_duration(self, seconds: int) -> str:
         """格式化时长"""
