@@ -195,6 +195,39 @@ def get_qss_style() -> str:
         border: none;
         font-weight: bold;
     }}
+
+    /* 搜索详情区 */
+    #searchDetailPanel {{
+        background: {Theme.CARD_BACKGROUND};
+        border: 1px solid {Theme.BORDER};
+        border-radius: 8px;
+        padding: 10px;
+    }}
+
+    #searchDetailTitle {{
+        font-size: 16px;
+        font-weight: 600;
+        color: {Theme.TEXT_PRIMARY};
+    }}
+
+    #searchDetailMeta {{
+        color: {Theme.TEXT_SECONDARY};
+    }}
+
+    #searchDetailUrl {{
+        color: {Theme.INFO};
+    }}
+
+    #searchDetailThumbnail {{
+        border: 1px solid {Theme.BORDER};
+        border-radius: 6px;
+        background: #EEF2F7;
+    }}
+
+    #searchDetailThumbnailStatus,
+    #searchPreviewStatus {{
+        color: {Theme.TEXT_SECONDARY};
+    }}
     """
 
 

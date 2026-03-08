@@ -2,11 +2,12 @@
 搜索标签页，支持在平台内搜索视频。
 """
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
     QPushButton, QLabel, QComboBox, QListWidget,
-    QListWidgetItem, QMessageBox
+    QListWidgetItem, QMessageBox, QSplitter, QFrame
 )
-from PyQt6.QtCore import QEvent, QTimer, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QEvent, QTimer, Qt, QThread, pyqtSignal, QUrl
+from PyQt6.QtGui import QDesktopServices, QPixmap
 import re
 from src.core.search_engine import SearchEngine
 from src.core.download_task import Platform, DownloadTask, VideoInfo, DownloadOptions
@@ -48,7 +49,10 @@ class SearchTab(QWidget):
         self.db = HistoryDB()
         self.search_thread = None
         self.thumbnail_loader = thumbnail_loader or ThumbnailLoader()
+        self._detail_placeholder_pixmap = QPixmap()
         self.init_ui()
+        self.thumbnail_loader.thumbnail_loaded.connect(self._on_detail_thumbnail_loaded)
+        self.thumbnail_loader.thumbnail_failed.connect(self._on_detail_thumbnail_failed)
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -73,25 +77,80 @@ class SearchTab(QWidget):
 
         layout.addLayout(search_layout)
 
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
         # 结果列表
         self.result_list = QListWidget()
         self.result_list.itemDoubleClicked.connect(self.download_selected)
+        self.result_list.currentItemChanged.connect(self._on_selection_changed)
         self.result_list.verticalScrollBar().valueChanged.connect(self._schedule_visible_thumbnail_load)
         self.result_list.horizontalScrollBar().valueChanged.connect(self._schedule_visible_thumbnail_load)
         self.result_list.viewport().installEventFilter(self)
         self.result_list.installEventFilter(self)
-        layout.addWidget(self.result_list)
+        splitter.addWidget(self.result_list)
 
-        # 操作按钮
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
+        # 详情区
+        detail_panel = QFrame()
+        detail_panel.setObjectName("searchDetailPanel")
+        detail_layout = QVBoxLayout()
+        detail_layout.setSpacing(10)
+
+        self.detail_title_label = QLabel("请选择一个搜索结果")
+        self.detail_title_label.setObjectName("searchDetailTitle")
+        self.detail_title_label.setWordWrap(True)
+        detail_layout.addWidget(self.detail_title_label)
+
+        self.detail_meta_label = QLabel("平台: - | 上传者: - | 时长: -")
+        self.detail_meta_label.setObjectName("searchDetailMeta")
+        self.detail_meta_label.setWordWrap(True)
+        detail_layout.addWidget(self.detail_meta_label)
+
+        self.detail_url_label = QLabel("链接: -")
+        self.detail_url_label.setObjectName("searchDetailUrl")
+        self.detail_url_label.setWordWrap(True)
+        self.detail_url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        detail_layout.addWidget(self.detail_url_label)
+
+        self.detail_thumbnail_label = QLabel()
+        self.detail_thumbnail_label.setObjectName("searchDetailThumbnail")
+        self.detail_thumbnail_label.setMinimumSize(320, 180)
+        self.detail_thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        detail_layout.addWidget(self.detail_thumbnail_label)
+
+        self.detail_thumbnail_status_label = QLabel("封面待加载")
+        self.detail_thumbnail_status_label.setObjectName("searchDetailThumbnailStatus")
+        detail_layout.addWidget(self.detail_thumbnail_status_label)
+
+        action_layout = QHBoxLayout()
+        self.copy_link_btn = QPushButton("复制链接")
+        self.copy_link_btn.clicked.connect(self.copy_selected_link)
+        action_layout.addWidget(self.copy_link_btn)
+
+        self.open_link_btn = QPushButton("打开链接")
+        self.open_link_btn.clicked.connect(self.open_selected_link)
+        action_layout.addWidget(self.open_link_btn)
 
         self.download_btn = QPushButton("下载选中")
         self.download_btn.clicked.connect(lambda: self.download_selected())
-        btn_layout.addWidget(self.download_btn)
+        action_layout.addWidget(self.download_btn)
 
-        layout.addLayout(btn_layout)
+        self.preview_btn = QPushButton("直接预览")
+        self.preview_btn.clicked.connect(self.preview_selected_video)
+        action_layout.addWidget(self.preview_btn)
+        detail_layout.addLayout(action_layout)
+
+        self.preview_status_label = QLabel("预览入口已就绪，待播放器接入")
+        self.preview_status_label.setObjectName("searchPreviewStatus")
+        detail_layout.addWidget(self.preview_status_label)
+        detail_layout.addStretch()
+
+        detail_panel.setLayout(detail_layout)
+        splitter.addWidget(detail_panel)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        layout.addWidget(splitter)
         self.setLayout(layout)
+        self._reset_detail_panel()
 
     def start_search(self):
         """开始搜索"""
@@ -111,6 +170,7 @@ class SearchTab(QWidget):
         self.search_btn.setEnabled(False)
         self.search_btn.setText("搜索中...")
         self.result_list.clear()
+        self._reset_detail_panel()
 
         # 保存搜索历史
         self.db.add_search_record(platform.value, query)
@@ -136,6 +196,10 @@ class SearchTab(QWidget):
 
         logger.info(f"显示 {len(results)} 个搜索结果")
         self._schedule_visible_thumbnail_load()
+        if self.result_list.count() > 0:
+            self.result_list.setCurrentRow(0)
+        else:
+            self._reset_detail_panel()
 
     def eventFilter(self, watched, event):
         if watched in (self.result_list.viewport(), self.result_list) and event.type() == QEvent.Type.Resize:
@@ -158,6 +222,87 @@ class SearchTab(QWidget):
             if not video_info:
                 continue
             self.thumbnail_loader.request_thumbnail(video_info.url, video_info.thumbnail_url)
+
+    def _on_selection_changed(self, current: QListWidgetItem, _previous: QListWidgetItem):
+        if not current:
+            self._reset_detail_panel()
+            return
+        video_info = current.data(Qt.ItemDataRole.UserRole)
+        if not video_info:
+            self._reset_detail_panel()
+            return
+        self._update_detail_panel(video_info)
+
+    def _reset_detail_panel(self):
+        self.detail_title_label.setText("请选择一个搜索结果")
+        self.detail_meta_label.setText("平台: - | 上传者: - | 时长: -")
+        self.detail_url_label.setText("链接: -")
+        self.preview_status_label.setText("预览入口已就绪，待播放器接入")
+        self._set_detail_thumbnail_placeholder("封面待加载")
+        self.copy_link_btn.setEnabled(False)
+        self.open_link_btn.setEnabled(False)
+        self.download_btn.setEnabled(False)
+        self.preview_btn.setEnabled(False)
+
+    def _update_detail_panel(self, video_info: VideoInfo):
+        platform_name = video_info.platform.value if video_info.platform else "Unknown"
+        uploader = video_info.uploader or "Unknown"
+        duration = self._format_duration(video_info.duration)
+        normalized_url = self._normalize_video_url(video_info.url)
+
+        self.detail_title_label.setText(video_info.title or "Unknown")
+        self.detail_meta_label.setText(f"平台: {platform_name} | 上传者: {uploader} | 时长: {duration}")
+        self.detail_url_label.setText(f"链接: {normalized_url}")
+        self.preview_status_label.setText("可点击“直接预览”进入后续播放器流程")
+        self.copy_link_btn.setEnabled(True)
+        self.open_link_btn.setEnabled(True)
+        self.download_btn.setEnabled(True)
+        self.preview_btn.setEnabled(True)
+        self._update_detail_thumbnail(video_info)
+
+    def _set_detail_thumbnail_placeholder(self, text: str):
+        self.detail_thumbnail_label.clear()
+        self.detail_thumbnail_status_label.setText(text)
+
+    def _set_detail_thumbnail(self, pixmap: QPixmap):
+        scaled = pixmap.scaled(
+            self.detail_thumbnail_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.detail_thumbnail_label.setPixmap(scaled)
+        self.detail_thumbnail_status_label.setText("封面已加载")
+
+    def _update_detail_thumbnail(self, video_info: VideoInfo):
+        if not video_info.thumbnail_url:
+            self._set_detail_thumbnail_placeholder("暂无封面")
+            return
+
+        cached = self.thumbnail_loader._pixmap_cache.get(video_info.thumbnail_url)
+        if cached is not None and not cached.isNull():
+            self._set_detail_thumbnail(cached)
+            return
+
+        self._set_detail_thumbnail_placeholder("封面加载中...")
+        self.thumbnail_loader.request_thumbnail(video_info.url, video_info.thumbnail_url)
+
+    def _on_detail_thumbnail_loaded(self, item_key: str, pixmap: QPixmap):
+        current_item = self.result_list.currentItem()
+        if not current_item:
+            return
+        current_video = current_item.data(Qt.ItemDataRole.UserRole)
+        if not current_video or current_video.url != item_key:
+            return
+        self._set_detail_thumbnail(pixmap)
+
+    def _on_detail_thumbnail_failed(self, item_key: str, _reason: str):
+        current_item = self.result_list.currentItem()
+        if not current_item:
+            return
+        current_video = current_item.data(Qt.ItemDataRole.UserRole)
+        if not current_video or current_video.url != item_key:
+            return
+        self._set_detail_thumbnail_placeholder("暂无封面")
 
     def search_error(self, error_msg):
         """搜索错误"""
@@ -204,6 +349,40 @@ class SearchTab(QWidget):
         # 添加到下载管理器
         self.download_manager.add_task(task)
         QMessageBox.information(self, "成功", f"已添加到下载队列: {video_info.title}")
+
+    def _selected_video_url(self) -> str:
+        current_item = self.result_list.currentItem()
+        if not current_item:
+            return ""
+        video_info = current_item.data(Qt.ItemDataRole.UserRole)
+        if not video_info:
+            return ""
+        return self._normalize_video_url(video_info.url)
+
+    def copy_selected_link(self):
+        url = self._selected_video_url()
+        if not url:
+            return
+        QApplication.clipboard().setText(url)
+        self.preview_status_label.setText("链接已复制，可继续下载或预览")
+
+    def open_selected_link(self):
+        url = self._selected_video_url()
+        if not url:
+            return
+        QDesktopServices.openUrl(QUrl(url))
+        self.preview_status_label.setText("已尝试打开链接")
+
+    def preview_selected_video(self):
+        """预览入口（Task5 将接入真实播放器）。"""
+        current_item = self.result_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "提示", "请选择一个视频")
+            return
+        video_info = current_item.data(Qt.ItemDataRole.UserRole)
+        self.preview_status_label.setText(
+            f"预览加载中：{video_info.title or '当前视频'}（播放器即将支持）"
+        )
 
     def _format_duration(self, seconds: int) -> str:
         """格式化时长"""
