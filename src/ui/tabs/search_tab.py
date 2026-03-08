@@ -50,6 +50,7 @@ class SearchTab(QWidget):
         self.search_thread = None
         self.thumbnail_loader = thumbnail_loader or ThumbnailLoader()
         self._detail_placeholder_pixmap = QPixmap()
+        self._preview_fallback_triggered = False  # 防止重复回退
         self.init_ui()
         self.thumbnail_loader.thumbnail_loaded.connect(self._on_detail_thumbnail_loaded)
         self.thumbnail_loader.thumbnail_failed.connect(self._on_detail_thumbnail_failed)
@@ -393,6 +394,9 @@ class SearchTab(QWidget):
         video_info = current_item.data(Qt.ItemDataRole.UserRole)
         normalized_url = self._normalize_video_url(video_info.url)
 
+        # 重置回退标志
+        self._preview_fallback_triggered = False
+
         self.preview_status_label.setText(
             f"正在尝试预览：{video_info.title or '当前视频'}..."
         )
@@ -407,12 +411,38 @@ class SearchTab(QWidget):
             return
 
         # 应用内播放失败或需要解析，自动回退到浏览器
-        self._fallback_to_browser_preview(video_info, normalized_url)
+        self._trigger_fallback(video_info, normalized_url)
 
     def _on_preview_failed(self, reason: str):
-        """处理预览失败信号。"""
-        logger.warning(f"预览失败: {reason}")
-        # 失败已在 try_play 中处理回退，这里主要用于状态更新
+        """处理预览失败信号（异步播放失败时触发回退）。"""
+        logger.warning(f"预览异步失败: {reason}")
+
+        # 避免重复回退
+        if self._preview_fallback_triggered:
+            return
+
+        # 获取当前选中的视频信息
+        current_item = self.result_list.currentItem()
+        if not current_item:
+            return
+
+        video_info = current_item.data(Qt.ItemDataRole.UserRole)
+        if not video_info:
+            return
+
+        # 异步失败时也需要回退到浏览器
+        normalized_url = self._normalize_video_url(video_info.url)
+        self.preview_status_label.setText("应用内播放失败，正在尝试浏览器打开...")
+        self._trigger_fallback(video_info, normalized_url)
+
+    def _trigger_fallback(self, video_info: VideoInfo, url: str):
+        """
+        触发浏览器回退（带重复保护）。
+        """
+        if self._preview_fallback_triggered:
+            return
+        self._preview_fallback_triggered = True
+        self._fallback_to_browser_preview(video_info, url)
 
     def _fallback_to_browser_preview(self, video_info: VideoInfo, url: str):
         """回退到浏览器打开视频链接。"""
