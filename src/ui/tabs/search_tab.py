@@ -1,8 +1,6 @@
 """
 搜索标签页，支持在平台内搜索视频。
 """
-import re
-
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
     QPushButton, QLabel, QComboBox, QListWidget,
@@ -190,17 +188,3 @@ class SearchTab(QWidget):
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         else:
             return f"{minutes:02d}:{secs:02d}"
-
-    def _normalize_video_url(self, raw_value: str) -> str:
-        """将用户输入标准化为可访问的视频 URL。"""
-        value = (raw_value or "").strip()
-        if value.startswith(("http://", "https://")):
-            return value
-
-        if re.fullmatch(r"[0-9A-Za-z_-]{11}", value):
-            return f"https://www.youtube.com/watch?v={value}"
-
-        if re.fullmatch(r"BV[0-9A-Za-z]{10}", value, re.IGNORECASE):
-            return f"https://www.bilibili.com/video/{value}"
-
-        return value
