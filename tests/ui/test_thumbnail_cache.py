@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from time import monotonic
 
 import PyQt6
 from PyQt6.QtCore import Qt
@@ -109,7 +110,7 @@ def test_cache_hit_skips_new_network_request():
 
     pixmap = QPixmap(120, 68)
     pixmap.fill(QColor("#2288DD"))
-    loader._pixmap_cache[item_key] = pixmap
+    loader._pixmap_cache[thumbnail_url] = pixmap
 
     class FakeNetworkManager:
         def __init__(self):
@@ -129,3 +130,40 @@ def test_cache_hit_skips_new_network_request():
 
     assert fake_network_manager.calls == 0
     assert loaded_keys == [item_key]
+
+
+def test_switch_item_key_to_new_thumbnail_url_not_blocked_by_old_failed_cache():
+    loader = ThumbnailLoader()
+    item_key = "video-1"
+    old_thumbnail_url = "https://example.com/thumbnail-old.jpg"
+    new_thumbnail_url = "https://example.com/thumbnail-new.jpg"
+    loader._failed_cache_expiry[old_thumbnail_url] = monotonic() + 30
+
+    class FakeSignal:
+        def connect(self, _callback):
+            return None
+
+    class FakeReply:
+        def __init__(self):
+            self.finished = FakeSignal()
+
+    class FakeNetworkManager:
+        def __init__(self):
+            self.calls = 0
+            self.requested_urls = []
+
+        def get(self, request):
+            self.calls += 1
+            self.requested_urls.append(request.url().toString())
+            return FakeReply()
+
+    fake_network_manager = FakeNetworkManager()
+    loader._network_manager = fake_network_manager
+
+    failed_events = []
+    loader.thumbnail_failed.connect(lambda key, reason: failed_events.append((key, reason)))
+    loader.request_thumbnail(item_key, new_thumbnail_url)
+
+    assert fake_network_manager.calls == 1
+    assert fake_network_manager.requested_urls == [new_thumbnail_url]
+    assert failed_events == []

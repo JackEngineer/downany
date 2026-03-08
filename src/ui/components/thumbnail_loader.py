@@ -4,7 +4,7 @@
 """
 from collections import OrderedDict
 from time import monotonic
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
@@ -22,10 +22,11 @@ class ThumbnailLoader(QObject):
         self._loaded_callbacks: List[Callable[[str, QPixmap], None]] = []
         self._max_cache_size = max(1, max_cache_size)
         self._failure_ttl_seconds = max(0.0, failure_ttl_seconds)
+        # 缓存语义按 thumbnail_url 维度
         self._pixmap_cache: "OrderedDict[str, QPixmap]" = OrderedDict()
         self._failed_cache_expiry: Dict[str, float] = {}
-        self._in_flight_keys: Dict[str, str] = {}
-        self._reply_context: Dict[QNetworkReply, Tuple[str, str]] = {}
+        self._in_flight_waiters: Dict[str, List[str]] = {}
+        self._reply_context: Dict[QNetworkReply, str] = {}
         self._network_manager = QNetworkAccessManager(self)
 
     def add_loaded_callback(self, callback: Callable[[str, QPixmap], None]) -> None:
@@ -50,59 +51,63 @@ class ThumbnailLoader(QObject):
     def _emit_loaded_async(self, item_key: str, pixmap: QPixmap) -> None:
         QTimer.singleShot(0, lambda: self.emit_loaded(item_key, pixmap))
 
-    def _touch_cache(self, item_key: str, pixmap: QPixmap) -> None:
-        self._pixmap_cache[item_key] = pixmap
-        self._pixmap_cache.move_to_end(item_key)
+    def _touch_cache(self, thumbnail_url: str, pixmap: QPixmap) -> None:
+        self._pixmap_cache[thumbnail_url] = pixmap
+        self._pixmap_cache.move_to_end(thumbnail_url)
         while len(self._pixmap_cache) > self._max_cache_size:
             self._pixmap_cache.popitem(last=False)
 
-    def _set_failure_cache(self, item_key: str) -> None:
+    def _set_failure_cache(self, thumbnail_url: str) -> None:
         if self._failure_ttl_seconds <= 0:
             return
-        self._failed_cache_expiry[item_key] = monotonic() + self._failure_ttl_seconds
+        self._failed_cache_expiry[thumbnail_url] = monotonic() + self._failure_ttl_seconds
 
-    def _is_failure_cached(self, item_key: str) -> bool:
-        expires_at = self._failed_cache_expiry.get(item_key)
+    def _is_failure_cached(self, thumbnail_url: str) -> bool:
+        expires_at = self._failed_cache_expiry.get(thumbnail_url)
         if expires_at is None:
             return False
         if monotonic() >= expires_at:
-            self._failed_cache_expiry.pop(item_key, None)
+            self._failed_cache_expiry.pop(thumbnail_url, None)
             return False
         return True
 
     def _on_reply_finished(self, reply: QNetworkReply) -> None:
-        context = self._reply_context.pop(reply, None)
-        if not context:
+        thumbnail_url = self._reply_context.pop(reply, None)
+        if not thumbnail_url:
             reply.deleteLater()
             return
 
-        item_key, _request_url = context
-        self._in_flight_keys.pop(item_key, None)
+        waiting_item_keys = self._in_flight_waiters.pop(thumbnail_url, [])
 
         if reply.error() != QNetworkReply.NetworkError.NoError:
-            self._set_failure_cache(item_key)
-            self.emit_failed(item_key, reply.errorString() or "thumbnail_request_failed")
+            self._set_failure_cache(thumbnail_url)
+            reason = reply.errorString() or "thumbnail_request_failed"
+            for item_key in waiting_item_keys:
+                self.emit_failed(item_key, reason)
             reply.deleteLater()
             return
 
         image_data = bytes(reply.readAll())
         image = QImage.fromData(image_data)
         if image.isNull():
-            self._set_failure_cache(item_key)
-            self.emit_failed(item_key, "invalid_thumbnail_image")
+            self._set_failure_cache(thumbnail_url)
+            for item_key in waiting_item_keys:
+                self.emit_failed(item_key, "invalid_thumbnail_image")
             reply.deleteLater()
             return
 
         pixmap = QPixmap.fromImage(image)
         if pixmap.isNull():
-            self._set_failure_cache(item_key)
-            self.emit_failed(item_key, "invalid_thumbnail_pixmap")
+            self._set_failure_cache(thumbnail_url)
+            for item_key in waiting_item_keys:
+                self.emit_failed(item_key, "invalid_thumbnail_pixmap")
             reply.deleteLater()
             return
 
-        self._failed_cache_expiry.pop(item_key, None)
-        self._touch_cache(item_key, pixmap)
-        self.emit_loaded(item_key, pixmap)
+        self._failed_cache_expiry.pop(thumbnail_url, None)
+        self._touch_cache(thumbnail_url, pixmap)
+        for item_key in waiting_item_keys:
+            self.emit_loaded(item_key, pixmap)
         reply.deleteLater()
 
     def request_thumbnail(self, item_key: str, thumbnail_url: str) -> None:
@@ -111,24 +116,24 @@ class ThumbnailLoader(QObject):
             self.emit_failed(item_key, "empty_thumbnail_url")
             return
 
-        cached = self._pixmap_cache.get(item_key)
+        cached = self._pixmap_cache.get(thumbnail_url)
         if cached is not None and not cached.isNull():
-            self._pixmap_cache.move_to_end(item_key)
+            self._pixmap_cache.move_to_end(thumbnail_url)
             self._emit_loaded_async(item_key, cached)
             return
 
-        if self._is_failure_cached(item_key):
+        if self._is_failure_cached(thumbnail_url):
             self.emit_failed(item_key, "thumbnail_recently_failed")
             return
 
-        in_flight_url = self._in_flight_keys.get(item_key)
-        if in_flight_url == thumbnail_url:
-            return
-        if in_flight_url is not None:
+        waiters = self._in_flight_waiters.get(thumbnail_url)
+        if waiters is not None:
+            if item_key not in waiters:
+                waiters.append(item_key)
             return
 
         request = QNetworkRequest(QUrl(thumbnail_url))
         reply = self._network_manager.get(request)
-        self._in_flight_keys[item_key] = thumbnail_url
-        self._reply_context[reply] = (item_key, thumbnail_url)
+        self._in_flight_waiters[thumbnail_url] = [item_key]
+        self._reply_context[reply] = thumbnail_url
         reply.finished.connect(lambda r=reply: self._on_reply_finished(r))
