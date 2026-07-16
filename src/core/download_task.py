@@ -27,6 +27,7 @@ class Platform(Enum):
     TIKTOK = "tiktok"
     TWITTER = "twitter"
     INSTAGRAM = "instagram"
+    PORNHUB = "pornhub"
     UNKNOWN = "unknown"
 
 
@@ -63,7 +64,7 @@ class DownloadTask:
     status: TaskStatus = TaskStatus.PENDING
     progress: float = 0.0  # 0-100
     speed: str = "0 B/s"  # 下载速度
-    eta: str = "N/A"  # 预计剩余时间
+    eta: str = "暂无"  # 预计剩余时间
     file_path: str = ""  # 下载完成后的文件路径
     error_message: str = ""  # 错误信息
     created_at: datetime = field(default_factory=datetime.now)

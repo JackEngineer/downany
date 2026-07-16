@@ -1,5 +1,3 @@
-yt-dlp>=2025.01.01
-PyQt6>=6.6.0
-PyQt6-Fluent-Widgets
-pytest
-pytest-qt
+yt-dlp==2026.2.4
+PyQt6==6.10.2
+PyQt6-Fluent-Widgets==1.11.1

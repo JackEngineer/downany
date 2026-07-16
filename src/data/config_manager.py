@@ -3,7 +3,10 @@
 """
 import os
 from typing import Optional
+
 from PyQt6.QtCore import QSettings
+
+from src.core.quality import normalize_quality
 
 
 class ConfigManager:
@@ -48,6 +51,9 @@ class ConfigManager:
         if not self.settings.contains("download_subtitles"):
             self.settings.setValue("download_subtitles", False)
 
+        if not self.settings.contains("theme_mode"):
+            self.settings.setValue("theme_mode", "system")
+
     # 下载目录
     def get_download_dir(self) -> str:
         return self.settings.value("download_dir", type=str)
@@ -84,10 +90,30 @@ class ConfigManager:
 
     # 默认质量
     def get_default_quality(self) -> str:
-        return self.settings.value("default_quality", type=str)
+        return normalize_quality(self.settings.value("default_quality", "best", type=str))
 
     def set_default_quality(self, quality: str):
-        self.settings.setValue("default_quality", quality)
+        self.settings.setValue("default_quality", normalize_quality(quality))
+
+    def get_proxy_for_download(self) -> Optional[str]:
+        """启用且非空时返回代理 URL，否则 None。"""
+        if not self.is_proxy_enabled():
+            return None
+        url = (self.get_proxy_url() or "").strip()
+        return url or None
+
+    def build_download_options(self, output_path: Optional[str] = None):
+        """统一构造各入口共用的 DownloadOptions。"""
+        from src.core.download_task import DownloadOptions
+
+        speed = self.get_speed_limit() or 0
+        return DownloadOptions(
+            quality=self.get_default_quality(),
+            download_subtitles=self.is_download_subtitles(),
+            output_path=output_path or self.get_download_dir(),
+            speed_limit=speed if speed > 0 else None,
+            proxy=self.get_proxy_for_download(),
+        )
 
     # 字幕下载
     def is_download_subtitles(self) -> bool:
@@ -95,3 +121,14 @@ class ConfigManager:
 
     def set_download_subtitles(self, enabled: bool):
         self.settings.setValue("download_subtitles", enabled)
+
+    # 主题模式
+    def get_theme_mode(self) -> str:
+        value = self.settings.value("theme_mode", "system", type=str)
+        return value if value in {"system", "light", "dark"} else "system"
+
+    def set_theme_mode(self, mode: str):
+        normalized = (mode or "system").strip().lower()
+        if normalized not in {"system", "light", "dark"}:
+            normalized = "system"
+        self.settings.setValue("theme_mode", normalized)

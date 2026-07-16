@@ -6,5 +6,5 @@
     "start": "bash scripts/start_app.sh"
   },
   "author": "Jack Lee",
-  "license": "ISC"
+  "license": "MIT"
 }

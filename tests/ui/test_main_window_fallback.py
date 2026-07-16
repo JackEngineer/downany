@@ -4,13 +4,13 @@ from pathlib import Path
 import PyQt6
 from PyQt6.QtWidgets import QApplication, QWidget
 
-import src.ui.main_window as main_window_module
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault(
     "QT_QPA_PLATFORM_PLUGIN_PATH",
     str(Path(PyQt6.__file__).resolve().parent / "Qt6" / "plugins" / "platforms"),
 )
+
+import src.ui.main_window as main_window_module
 
 APP = QApplication.instance() or QApplication([])
 

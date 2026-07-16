@@ -75,7 +75,7 @@ def test_selection_updates_detail_panel_and_enables_preview(monkeypatch):
 
     assert tab.preview_btn.isEnabled() is True
     assert tab.detail_title_label.text() == "详情测试视频 2"
-    assert tab.detail_url_label.text() == "链接: https://example.com/watch?v=video2"
+    assert tab.detail_url_label.text() == "链接：https://example.com/watch?v=video2"
 
 
 def test_selection_handles_none_duration_without_crash(monkeypatch):
@@ -92,4 +92,4 @@ def test_selection_handles_none_duration_without_crash(monkeypatch):
     tab.result_list.setCurrentRow(0)
     _flush_events()
 
-    assert "时长: N/A" in tab.detail_meta_label.text()
+    assert "时长：暂无" in tab.detail_meta_label.text()

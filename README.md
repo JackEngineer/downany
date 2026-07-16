@@ -1,38 +1,63 @@
-# Resource Downloader (资源下载器)
+# Trae 视频下载器
 
-基于 yt-dlp 和 PyQt6 开发的 macOS 视频下载工具。
+基于 Python、yt-dlp 和 PyQt6 的 macOS 视频下载应用；另含并行推进的 SwiftUI 原生版（`swift-app/`）。
 
-## 功能特性
+## 功能
 
-- 支持多种视频网站下载
-- **支持批量下载 (Batch Download)**
-- 图形化界面操作 (Tab 分页设计)
-- 实时进度显示
-- 自动合并视频与音频
+- **平台识别**：YouTube、Bilibili、抖音、TikTok、Twitter、Instagram、Pornhub 等
+- **站内搜索**：YouTube / Bilibili / Pornhub，封面懒加载与应用内预览
+- **下载工作台**：单条 / 批量 URL 入队
+- **队列管理**：可配置并发、暂停 / 恢复 / 取消 / 重试、实时进度
+- **历史记录**：SQLite 存储，可检索与重新下载
+- **设置**：下载目录、并发、限速、代理、画质、字幕、主题
 
-## 开发环境设置
+## 快速开始
 
-1. 运行环境安装脚本：
+```bash
+./scripts/install_env.sh
+source venv/bin/activate
+python src/main.py
+# 或
+npm start
+```
 
-   ```bash
-   ./scripts/install_env.sh
-   ```
+安装 FFmpeg（可选，建议）：
 
-2. 激活虚拟环境：
+```bash
+./scripts/install_ffmpeg.sh
+# 生产环境建议锁定校验：FFMPEG_SHA256=<hash> ./scripts/install_ffmpeg.sh
+```
 
-   ```bash
-   source venv/bin/activate
-   ```
+## 架构（Python）
 
-3. 运行程序：
+```
+src/
+├── core/          # 下载调度、yt-dlp、搜索、平台识别、元数据
+├── data/          # SQLite 历史、QSettings 配置
+├── ui/            # 主窗口、tabs、components、主题
+└── utils/         # 日志
+```
 
-   ```bash
-   python src/main.py
-   ```
+配置：`~/Library/Preferences/com.Trae.Downloader.plist`  
+历史：`~/.trae_downloader/history.db`
 
-## 依赖
+## Swift 原生版
 
-- Python 3.9+
-- yt-dlp
-- PyQt6
-- ffmpeg (运行环境脚本会自动尝试安装，或使用 `./scripts/install_ffmpeg.sh` 手动安装)
+见 [swift-app/README.md](swift-app/README.md)。构建：
+
+```bash
+cd swift-app && swift test
+./scripts/package_swift_app.sh
+```
+
+## 测试与 CI
+
+```bash
+pip install -r requirements-dev.txt
+QT_QPA_PLATFORM=offscreen pytest -q
+cd swift-app && swift test
+```
+
+## 许可证
+
+MIT

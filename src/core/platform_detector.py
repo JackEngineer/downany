@@ -35,6 +35,9 @@ class PlatformDetector:
         Platform.INSTAGRAM: [
             r'(?:https?://)?(?:www\.)?instagram\.com/',
         ],
+        Platform.PORNHUB: [
+            r'(?:https?://)?(?:www\.)?pornhub\.com/',
+        ],
     }
 
     # 平台图标 (emoji)
@@ -45,6 +48,7 @@ class PlatformDetector:
         Platform.TIKTOK: "🎵",
         Platform.TWITTER: "🐦",
         Platform.INSTAGRAM: "📷",
+        Platform.PORNHUB: "🔞",
         Platform.UNKNOWN: "🌐",
     }
 
@@ -56,6 +60,7 @@ class PlatformDetector:
         Platform.TIKTOK: "#000000",
         Platform.TWITTER: "#1DA1F2",
         Platform.INSTAGRAM: "#E4405F",
+        Platform.PORNHUB: "#FF9900",
         Platform.UNKNOWN: "#808080",
     }
 

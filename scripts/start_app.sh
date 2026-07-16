@@ -1,14 +1,15 @@
 #!/bin/bash
 # 启动 Downloader 应用
 
-# 获取当前工作目录作为项目根目录
-PROJECT_ROOT=$(pwd)
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+START_LOG="$PROJECT_ROOT/.start_app_last.log"
 
 if [ -f "$PROJECT_ROOT/src/main.py" ]; then
     echo "正在启动 Downloader 应用..."
 else
     echo "错误: 在 $PROJECT_ROOT 下未找到 src/main.py"
-    echo "请在项目根目录下运行此技能。"
     exit 1
 fi
 
@@ -45,4 +46,39 @@ if [ "$(uname)" == "Darwin" ]; then
 fi
 
 # 运行应用
-$PYTHON_EXEC "$PROJECT_ROOT/src/main.py"
+run_app() {
+    local qt_platform="$1"
+    local app_exit_code=0
+    rm -f "$START_LOG"
+
+    if [ -n "$qt_platform" ]; then
+        export QT_QPA_PLATFORM="$qt_platform"
+    else
+        unset QT_QPA_PLATFORM
+    fi
+
+    "$PYTHON_EXEC" "$PROJECT_ROOT/src/main.py" 2>&1 | tee "$START_LOG"
+    app_exit_code=${PIPESTATUS[0]}
+
+    return "$app_exit_code"
+}
+
+if [ -n "${QT_QPA_PLATFORM}" ]; then
+    run_app "${QT_QPA_PLATFORM}"
+    APP_EXIT_CODE=$?
+else
+    # 首次按默认参数启动，遇到无头环境时自动回退到 offscreen
+    run_app ""
+    APP_EXIT_CODE=$?
+
+    if [ "$APP_EXIT_CODE" -ne 0 ]; then
+        if grep -qi "no screens available" "$START_LOG" 2>/dev/null; then
+            echo "检测到当前环境无可用显示屏，自动切换到无头启动..."
+            run_app offscreen
+            APP_EXIT_CODE=$?
+        fi
+    fi
+fi
+
+rm -f "$START_LOG"
+exit "$APP_EXIT_CODE"

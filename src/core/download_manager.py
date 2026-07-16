@@ -1,12 +1,20 @@
 """
 下载管理器，负责任务队列和并发控制。
 """
+from __future__ import annotations
+
 import queue
+import re
 import threading
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Dict, Optional, Set
+
 from PyQt6.QtCore import QObject, pyqtSignal
+
 from src.core.download_task import DownloadTask, TaskStatus
-from src.core.downloader import Downloader
+from src.core.downloader import DownloadCancelled, DownloadError, Downloader
+from src.core.quality import build_format_selector
+from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
 from src.data.models import DownloadRecord
@@ -17,16 +25,16 @@ logger = setup_logger("DownloadManager")
 
 class DownloadManager(QObject):
     """下载管理器单例类"""
+
     _instance = None
 
-    # 信号定义
-    task_added = pyqtSignal(str)  # task_id
-    task_started = pyqtSignal(str)  # task_id
-    task_progress = pyqtSignal(str, dict)  # task_id, progress_dict
-    task_completed = pyqtSignal(str)  # task_id
-    task_failed = pyqtSignal(str, str)  # task_id, error_message
-    task_paused = pyqtSignal(str)  # task_id
-    task_cancelled = pyqtSignal(str)  # task_id
+    task_added = pyqtSignal(str)
+    task_started = pyqtSignal(str)
+    task_progress = pyqtSignal(str, dict)
+    task_completed = pyqtSignal(str)
+    task_failed = pyqtSignal(str, str)
+    task_paused = pyqtSignal(str)
+    task_cancelled = pyqtSignal(str)
 
     def __new__(cls):
         if cls._instance is None:
@@ -41,219 +49,298 @@ class DownloadManager(QObject):
         super().__init__()
         self._initialized = True
 
-        # 配置和数据库
         self.config = ConfigManager()
         self.db = HistoryDB()
 
-        # 任务队列和字典
-        self.task_queue = queue.Queue()
+        self._lock = threading.RLock()
+        self.task_queue: queue.Queue = queue.Queue()
         self.tasks: Dict[str, DownloadTask] = {}
-
-        # 当前下载的任务
         self.active_tasks: Dict[str, threading.Thread] = {}
+        self._resume_requested: Set[str] = set()
 
-        # 调度线程
-        self.scheduler_thread = None
+        self.scheduler_thread: Optional[threading.Thread] = None
         self.running = False
 
         logger.info("下载管理器初始化完成")
 
     def start(self):
         """启动调度器"""
-        if self.running:
-            return
-
-        self.running = True
-        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
-        self.scheduler_thread.start()
+        with self._lock:
+            if self.running:
+                return
+            self.running = True
+            self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+            self.scheduler_thread.start()
         logger.info("调度器已启动")
 
-    def stop(self):
-        """停止调度器"""
-        self.running = False
-        if self.scheduler_thread:
-            self.scheduler_thread.join(timeout=5)
+    def stop(self, join_timeout: float = 5.0):
+        """停止调度器并尝试结束活动下载。"""
+        with self._lock:
+            self.running = False
+            for task_id, task in list(self.tasks.items()):
+                if task_id in self.active_tasks and task.status == TaskStatus.DOWNLOADING:
+                    task.status = TaskStatus.CANCELLED
+            threads = list(self.active_tasks.values())
+            scheduler = self.scheduler_thread
+
+        if scheduler and scheduler.is_alive():
+            scheduler.join(timeout=join_timeout)
+
+        for thread in threads:
+            if thread.is_alive():
+                thread.join(timeout=join_timeout)
+
         logger.info("调度器已停止")
 
     def add_task(self, task: DownloadTask):
         """添加任务到队列"""
-        self.tasks[task.id] = task
-        self.task_queue.put(task.id)
+        with self._lock:
+            self.tasks[task.id] = task
+            self.task_queue.put(task.id)
         self.task_added.emit(task.id)
         logger.info(f"添加任务: {task.video_info.title}")
 
     def pause_task(self, task_id: str):
-        """暂停任务 (伪暂停: 取消下载)"""
-        if task_id in self.tasks:
-            task = self.tasks[task_id]
-            if task.status == TaskStatus.DOWNLOADING:
-                task.status = TaskStatus.PAUSED
-                self.task_paused.emit(task_id)
-                logger.info(f"暂停任务: {task.video_info.title}")
+        """暂停任务（中断当前下载；恢复时重新入队）。"""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task or task.status != TaskStatus.DOWNLOADING:
+                return
+            task.status = TaskStatus.PAUSED
+        self.task_paused.emit(task_id)
+        logger.info(f"暂停任务: {task.video_info.title}")
 
     def resume_task(self, task_id: str):
-        """恢复任务 (重新添加到队列)"""
-        if task_id in self.tasks:
-            task = self.tasks[task_id]
-            if task.status == TaskStatus.PAUSED:
-                task.status = TaskStatus.PENDING
-                self.task_queue.put(task_id)
-                logger.info(f"恢复任务: {task.video_info.title}")
+        """恢复暂停任务；若旧下载线程仍在收尾则等 finally 再入队。"""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task or task.status != TaskStatus.PAUSED:
+                return
+            if task_id in self.active_tasks:
+                self._resume_requested.add(task_id)
+                logger.info(f"恢复任务等待旧线程退出: {task.video_info.title}")
+                return
+            task.status = TaskStatus.PENDING
+            task.error_message = ""
+            self.task_queue.put(task_id)
+        logger.info(f"恢复任务: {task.video_info.title}")
 
     def cancel_task(self, task_id: str):
         """取消任务"""
-        if task_id in self.tasks:
-            task = self.tasks[task_id]
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return
+            if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED):
+                return
             task.status = TaskStatus.CANCELLED
-            self.task_cancelled.emit(task_id)
-            logger.info(f"取消任务: {task.video_info.title}")
+        self.task_cancelled.emit(task_id)
+        logger.info(f"取消任务: {task.video_info.title}")
 
     def retry_task(self, task_id: str):
         """重试失败的任务"""
-        if task_id in self.tasks:
-            task = self.tasks[task_id]
-            if task.status == TaskStatus.FAILED:
-                task.status = TaskStatus.PENDING
-                task.error_message = ""
-                task.progress = 0.0
-                self.task_queue.put(task_id)
-                logger.info(f"重试任务: {task.video_info.title}")
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task or task.status != TaskStatus.FAILED:
+                return
+            if task_id in self.active_tasks:
+                return
+            task.status = TaskStatus.PENDING
+            task.error_message = ""
+            task.progress = 0.0
+            self.task_queue.put(task_id)
+        logger.info(f"重试任务: {task.video_info.title}")
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
-        """获取任务"""
-        return self.tasks.get(task_id)
+        with self._lock:
+            return self.tasks.get(task_id)
 
     def get_all_tasks(self) -> Dict[str, DownloadTask]:
-        """获取所有任务"""
-        return self.tasks
+        with self._lock:
+            return dict(self.tasks)
 
     def _scheduler_loop(self):
-        """调度器主循环"""
-        while self.running:
-            try:
-                # 检查并发数
+        while True:
+            with self._lock:
+                if not self.running:
+                    break
                 max_concurrent = self.config.get_concurrent_downloads()
-                active_count = len([t for t in self.tasks.values() if t.status == TaskStatus.DOWNLOADING])
+                active_count = len(self.active_tasks)
 
-                if active_count < max_concurrent:
-                    # 从队列获取任务
-                    try:
-                        task_id = self.task_queue.get(timeout=1)
-                        task = self.tasks.get(task_id)
+            if active_count < max_concurrent:
+                try:
+                    task_id = self.task_queue.get(timeout=1)
+                except queue.Empty:
+                    continue
 
-                        if task and task.status == TaskStatus.PENDING:
-                            # 启动下载线程
-                            download_thread = threading.Thread(
-                                target=self._download_task,
-                                args=(task,),
-                                daemon=True
-                            )
-                            self.active_tasks[task_id] = download_thread
-                            download_thread.start()
+                with self._lock:
+                    if not self.running:
+                        break
+                    task = self.tasks.get(task_id)
+                    if not task or task.status != TaskStatus.PENDING:
+                        continue
+                    if task_id in self.active_tasks:
+                        continue
+                    if len(self.active_tasks) >= max_concurrent:
+                        self.task_queue.put(task_id)
+                        continue
 
-                    except queue.Empty:
-                        pass
-
-            except Exception as e:
-                logger.error(f"调度器错误: {str(e)}")
+                    download_thread = threading.Thread(
+                        target=self._download_task,
+                        args=(task,),
+                        daemon=True,
+                    )
+                    self.active_tasks[task_id] = download_thread
+                    download_thread.start()
+            else:
+                threading.Event().wait(0.2)
 
     def _download_task(self, task: DownloadTask):
-        """执行下载任务"""
-        from datetime import datetime
-
         try:
-            # 更新状态
-            task.status = TaskStatus.DOWNLOADING
-            task.started_at = datetime.now()
+            with self._lock:
+                if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                    return
+                task.status = TaskStatus.DOWNLOADING
+                task.started_at = datetime.now()
             self.task_started.emit(task.id)
 
-            # 创建下载器
+            # 补齐元数据（失败不阻断下载）
+            if not task.video_info.title or task.video_info.title in (
+                "正在获取信息...",
+                "未命名视频",
+                "",
+            ):
+                proxy = task.options.proxy or None
+                info = VideoInfoExtractor.extract(task.video_info.url, proxy=proxy)
+                if info:
+                    with self._lock:
+                        task.video_info = info
+
+            with self._lock:
+                if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                    raise DownloadCancelled(
+                        "任务已取消" if task.status == TaskStatus.CANCELLED else "任务已暂停"
+                    )
+
             downloader = Downloader(task.options.output_path)
 
-            # 设置进度回调
             def progress_callback(d):
-                if task.status == TaskStatus.CANCELLED:
-                    raise Exception("任务已取消")
+                with self._lock:
+                    if task.status == TaskStatus.CANCELLED:
+                        raise DownloadCancelled("任务已取消")
+                    if task.status == TaskStatus.PAUSED:
+                        raise DownloadCancelled("任务已暂停")
 
                 try:
-                    # 清理可能的 ANSI 颜色代码
-                    import re
-                    percent_str = d.get('_percent_str', '0%')
-                    # 移除 ANSI 转义序列
-                    percent_str = re.sub(r'\x1b\[[0-9;]*m', '', str(percent_str))
-                    task.progress = float(percent_str.replace('%', '').strip())
-                except (ValueError, AttributeError):
-                    task.progress = 0.0
+                    percent_str = d.get("_percent_str", "0%")
+                    percent_str = re.sub(r"\x1b\[[0-9;]*m", "", str(percent_str))
+                    task.progress = float(percent_str.replace("%", "").strip() or 0)
+                except (ValueError, AttributeError, TypeError):
+                    downloaded = d.get("downloaded_bytes") or 0
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                    if total:
+                        task.progress = min(100.0, downloaded * 100.0 / total)
 
-                task.speed = d.get('_speed_str', '0 B/s')
-                task.eta = d.get('_eta_str', 'N/A')
-                self.task_progress.emit(task.id, d)
+                task.speed = d.get("_speed_str", "0 B/s")
+                task.eta = d.get("_eta_str", "暂无")
+                # 只传精简进度，避免巨型 dict 卡 UI
+                slim = {
+                    "status": d.get("status"),
+                    "_percent_str": d.get("_percent_str"),
+                    "_speed_str": d.get("_speed_str"),
+                    "_eta_str": d.get("_eta_str"),
+                    "filename": d.get("filename"),
+                }
+                self.task_progress.emit(task.id, slim)
 
             downloader.set_callbacks(progress=progress_callback)
 
-            # 构建下载选项
-            opts = {}
+            opts: Dict = {}
+            format_selector = build_format_selector(
+                task.options.quality, task.options.format_id
+            )
+            if format_selector:
+                opts["format"] = format_selector
 
-            # 格式选择
-            if task.options.format_id:
-                opts['format'] = task.options.format_id
-            elif task.options.quality != 'best':
-                opts['format'] = f'bestvideo[height<={task.options.quality[:-1]}]+bestaudio/best'
-
-            # 速度限制
             if task.options.speed_limit and task.options.speed_limit > 0:
-                opts['ratelimit'] = task.options.speed_limit
+                opts["ratelimit"] = task.options.speed_limit
 
-            # 代理
-            if task.options.proxy:
-                opts['proxy'] = task.options.proxy
+            proxy = (task.options.proxy or "").strip()
+            if proxy:
+                opts["proxy"] = proxy
 
-            # 字幕
             if task.options.download_subtitles:
-                opts['writesubtitles'] = True
-                opts['writeautomaticsub'] = True
+                opts["writesubtitles"] = True
+                opts["writeautomaticsub"] = True
 
-            # 执行下载
-            downloader.download(task.video_info.url, opts)
+            file_path = downloader.download(task.video_info.url, opts)
 
-            # 下载完成
-            task.status = TaskStatus.COMPLETED
-            task.progress = 100.0
-            task.completed_at = datetime.now()
+            with self._lock:
+                if task.status == TaskStatus.CANCELLED:
+                    self._save_to_history(task)
+                    return
+                if task.status == TaskStatus.PAUSED:
+                    return
+                task.status = TaskStatus.COMPLETED
+                task.progress = 100.0
+                task.completed_at = datetime.now()
+                task.file_path = file_path or task.file_path
+                self._save_to_history(task)
+
             self.task_completed.emit(task.id)
 
-            # 保存到历史记录
-            self._save_to_history(task)
-
-        except Exception as e:
-            if task.status != TaskStatus.CANCELLED:
+        except DownloadCancelled as e:
+            with self._lock:
+                if task.status == TaskStatus.PAUSED:
+                    logger.info(f"任务已暂停中断: {task.video_info.title}")
+                else:
+                    task.status = TaskStatus.CANCELLED
+                    task.error_message = str(e)
+                    self._save_to_history(task)
+                    self.task_cancelled.emit(task.id)
+                    logger.info(f"任务已取消: {task.video_info.title}")
+        except (DownloadError, Exception) as e:
+            with self._lock:
+                if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                    return
                 task.status = TaskStatus.FAILED
                 task.error_message = str(e)
-                self.task_failed.emit(task.id, str(e))
-                logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
-
+                self._save_to_history(task)
+            self.task_failed.emit(task.id, str(e))
+            logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
         finally:
-            # 清理活动任务
-            if task.id in self.active_tasks:
-                del self.active_tasks[task.id]
+            requeue = False
+            with self._lock:
+                self.active_tasks.pop(task.id, None)
+                if task.id in self._resume_requested:
+                    self._resume_requested.discard(task.id)
+                    if task.status == TaskStatus.PAUSED:
+                        task.status = TaskStatus.PENDING
+                        task.error_message = ""
+                        self.task_queue.put(task.id)
+                        requeue = True
+            if requeue:
+                logger.info(f"暂停任务线程退出后重新入队: {task.video_info.title}")
 
     def _save_to_history(self, task: DownloadTask):
-        """保存任务到历史记录"""
+        """保存任务到历史记录（调用方应持有锁或接受竞态窗口很小）。"""
         record = DownloadRecord(
             id=task.id,
             url=task.video_info.url,
             title=task.video_info.title,
             platform=task.video_info.platform.value,
-            duration=task.video_info.duration,
-            thumbnail_url=task.video_info.thumbnail_url,
-            uploader=task.video_info.uploader,
+            duration=task.video_info.duration or 0,
+            thumbnail_url=task.video_info.thumbnail_url or "",
+            uploader=task.video_info.uploader or "",
             status=task.status.value,
             file_path=task.file_path,
-            file_size=task.video_info.file_size,
+            file_size=task.video_info.file_size or 0,
             created_at=task.created_at,
             started_at=task.started_at,
             completed_at=task.completed_at,
-            error_message=task.error_message
+            error_message=task.error_message,
         )
-        self.db.add_download_record(record)
-
+        try:
+            self.db.add_download_record(record)
+        except Exception as exc:
+            logger.error(f"写入历史失败: {exc}")

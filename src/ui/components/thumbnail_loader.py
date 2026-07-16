@@ -3,14 +3,17 @@
 提供异步加载、内存缓存、失败短缓存和重复请求去重能力。
 """
 from collections import OrderedDict
-import json
 from time import monotonic
-import time
 from typing import Callable, Dict, List
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+
+from src.utils.logger import setup_logger
+
+
+logger = setup_logger("ThumbnailLoader")
 
 
 class ThumbnailLoader(QObject):
@@ -30,24 +33,8 @@ class ThumbnailLoader(QObject):
         self._in_flight_waiters: Dict[str, List[str]] = {}
         self._reply_context: Dict[QNetworkReply, str] = {}
         self._network_manager = QNetworkAccessManager(self)
-
-    def _debug_log(self, hypothesis_id: str, location: str, message: str, data: dict = None, run_id: str = "initial") -> None:
-        # region agent log
-        payload = {
-            "sessionId": "5680ec",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data or {},
-            "timestamp": int(time.time() * 1000),
-        }
-        try:
-            with open("/Users/jacklee/work/personal/trae/downloader/.cursor/debug-5680ec.log", "a", encoding="utf-8") as f:
-                f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
-        # endregion
+        self._session_id = 0
+        self._aborted = False
 
     def add_loaded_callback(self, callback: Callable[[str, QPixmap], None]) -> None:
         """注册缩略图加载成功回调。"""
@@ -77,6 +64,20 @@ class ThumbnailLoader(QObject):
         while len(self._pixmap_cache) > self._max_cache_size:
             self._pixmap_cache.popitem(last=False)
 
+    def has_cached(self, thumbnail_url: str) -> bool:
+        """检查缩略图是否已缓存。"""
+
+        cached = self._pixmap_cache.get(thumbnail_url)
+        return cached is not None and not cached.isNull()
+
+    def get_cached_pixmap(self, thumbnail_url: str) -> QPixmap | None:
+        """获取缓存的缩略图。"""
+
+        cached = self._pixmap_cache.get(thumbnail_url)
+        if cached is None or cached.isNull():
+            return None
+        return cached
+
     def _set_failure_cache(self, thumbnail_url: str) -> None:
         if self._failure_ttl_seconds <= 0:
             return
@@ -98,21 +99,20 @@ class ThumbnailLoader(QObject):
             return
 
         waiting_item_keys = self._in_flight_waiters.pop(thumbnail_url, [])
+        if self._aborted:
+            reply.deleteLater()
+            return
 
         if reply.error() != QNetworkReply.NetworkError.NoError:
             self._set_failure_cache(thumbnail_url)
             reason = reply.errorString() or "thumbnail_request_failed"
             status_code = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
-            self._debug_log(
-                "H2",
-                "thumbnail_loader.py:_on_reply_finished",
-                "thumbnail request failed",
-                {
-                    "thumbnailUrl": thumbnail_url[:180],
-                    "reason": reason,
-                    "statusCode": int(status_code) if status_code is not None else None,
-                    "waiterCount": len(waiting_item_keys),
-                },
+            logger.debug(
+                "封面请求失败 url=%s reason=%s status=%s waiters=%s",
+                thumbnail_url[:180],
+                reason,
+                int(status_code) if status_code is not None else None,
+                len(waiting_item_keys),
             )
             for item_key in waiting_item_keys:
                 self.emit_failed(item_key, reason)
@@ -123,15 +123,11 @@ class ThumbnailLoader(QObject):
         image = QImage.fromData(image_data)
         if image.isNull():
             self._set_failure_cache(thumbnail_url)
-            self._debug_log(
-                "H2",
-                "thumbnail_loader.py:_on_reply_finished",
-                "thumbnail image decode failed",
-                {
-                    "thumbnailUrl": thumbnail_url[:180],
-                    "bytesLength": len(image_data),
-                    "waiterCount": len(waiting_item_keys),
-                },
+            logger.debug(
+                "封面图片解码失败 url=%s bytes=%s waiters=%s",
+                thumbnail_url[:180],
+                len(image_data),
+                len(waiting_item_keys),
             )
             for item_key in waiting_item_keys:
                 self.emit_failed(item_key, "invalid_thumbnail_image")
@@ -141,15 +137,12 @@ class ThumbnailLoader(QObject):
         pixmap = QPixmap.fromImage(image)
         if pixmap.isNull():
             self._set_failure_cache(thumbnail_url)
-            self._debug_log(
-                "H2",
-                "thumbnail_loader.py:_on_reply_finished",
-                "thumbnail pixmap creation failed",
-                {
-                    "thumbnailUrl": thumbnail_url[:180],
-                    "imageSize": [image.width(), image.height()],
-                    "waiterCount": len(waiting_item_keys),
-                },
+            logger.debug(
+                "封面位图创建失败 url=%s size=%sx%s waiters=%s",
+                thumbnail_url[:180],
+                image.width(),
+                image.height(),
+                len(waiting_item_keys),
             )
             for item_key in waiting_item_keys:
                 self.emit_failed(item_key, "invalid_thumbnail_pixmap")
@@ -158,45 +151,51 @@ class ThumbnailLoader(QObject):
 
         self._failed_cache_expiry.pop(thumbnail_url, None)
         self._touch_cache(thumbnail_url, pixmap)
-        self._debug_log(
-            "H2",
-            "thumbnail_loader.py:_on_reply_finished",
-            "thumbnail loaded successfully",
-            {
-                "thumbnailUrl": thumbnail_url[:180],
-                "size": [pixmap.width(), pixmap.height()],
-                "waiterCount": len(waiting_item_keys),
-            },
+        logger.debug(
+            "封面加载完成 url=%s size=%sx%s waiters=%s",
+            thumbnail_url[:180],
+            pixmap.width(),
+            pixmap.height(),
+            len(waiting_item_keys),
         )
         for item_key in waiting_item_keys:
             self.emit_loaded(item_key, pixmap)
         reply.deleteLater()
 
+    def abort_all(self) -> None:
+        """取消所有在途请求并清空等待队列。"""
+        self._aborted = True
+        self._session_id += 1
+        replies = list(self._reply_context.keys())
+        self._reply_context.clear()
+        self._in_flight_waiters.clear()
+        for reply in replies:
+            try:
+                reply.abort()
+            except Exception:
+                pass
+            reply.deleteLater()
+        self._aborted = False
+
+    def shutdown(self) -> None:
+        """窗口关闭时调用。"""
+        self.abort_all()
+
     def request_thumbnail(self, item_key: str, thumbnail_url: str) -> None:
         """请求加载缩略图（缓存命中时立即返回，未命中时异步加载）。"""
         if not thumbnail_url:
-            self._debug_log(
-                "H1",
-                "thumbnail_loader.py:request_thumbnail",
-                "empty thumbnail url",
-                {"itemKey": (item_key or "")[:120]},
-            )
+            logger.debug("封面地址为空 item=%s", (item_key or "")[:120])
             self.emit_failed(item_key, "empty_thumbnail_url")
             return
 
-        cached = self._pixmap_cache.get(thumbnail_url)
-        if cached is not None and not cached.isNull():
+        cached = self.get_cached_pixmap(thumbnail_url)
+        if cached is not None:
             self._pixmap_cache.move_to_end(thumbnail_url)
             self._emit_loaded_async(item_key, cached)
             return
 
         if self._is_failure_cached(thumbnail_url):
-            self._debug_log(
-                "H2",
-                "thumbnail_loader.py:request_thumbnail",
-                "thumbnail skipped due failure cache",
-                {"thumbnailUrl": thumbnail_url[:180], "itemKey": (item_key or "")[:120]},
-            )
+            logger.debug("封面短期失败缓存命中 url=%s item=%s", thumbnail_url[:180], (item_key or "")[:120])
             self.emit_failed(item_key, "thumbnail_recently_failed")
             return
 
