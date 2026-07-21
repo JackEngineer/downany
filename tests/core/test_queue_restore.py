@@ -86,3 +86,18 @@ def test_manager_without_store_still_works():
     manager.add_task(task)
     manager.restore_tasks()  # 无存储时为空操作
     assert task.id in manager.get_all_tasks()
+
+
+def test_stop_marks_downloading_as_paused_not_cancelled(tmp_path):
+    """规格 8.3：退出不取消任何任务，下载中转为已暂停并持久化。"""
+    store = QueueStore(str(tmp_path / "q.db"))
+    manager = _make_manager(store)
+    task = _make_task(status=TaskStatus.DOWNLOADING)
+    with manager._lock:
+        manager.tasks[task.id] = task
+    store.upsert_task(task)
+
+    manager.stop(join_timeout=1)
+
+    assert task.status == TaskStatus.PAUSED
+    assert store.load_tasks()[0].status == TaskStatus.PAUSED

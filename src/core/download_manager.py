@@ -79,14 +79,19 @@ class DownloadManager:
         logger.info("调度器已启动")
 
     def stop(self, join_timeout: float = 5.0):
-        """停止调度器并尝试结束活动下载。"""
+        """停止调度器。下载中的任务中断并标记为已暂停（保留半成品，可续传）。"""
+        paused_tasks = []
         with self._lock:
             self.running = False
-            for task_id, task in list(self.tasks.items()):
-                if task_id in self.active_tasks and task.status == TaskStatus.DOWNLOADING:
-                    task.status = TaskStatus.CANCELLED
+            for task in self.tasks.values():
+                if task.status == TaskStatus.DOWNLOADING:
+                    task.status = TaskStatus.PAUSED
+                    paused_tasks.append(task)
             threads = list(self.active_tasks.values())
             scheduler = self.scheduler_thread
+
+        for task in paused_tasks:
+            self._persist(task)
 
         if scheduler and scheduler.is_alive():
             scheduler.join(timeout=join_timeout)
