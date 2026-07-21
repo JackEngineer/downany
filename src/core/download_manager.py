@@ -138,6 +138,11 @@ class DownloadManager:
         with self._lock:
             return dict(self.tasks)
 
+    def get_snapshot(self) -> List[TaskSnapshot]:
+        """所有任务的不可变快照（锁内构建，锁外安全使用）。"""
+        with self._lock:
+            return [task.to_snapshot() for task in self.tasks.values()]
+
     def remove_task(self, task_id: str) -> bool:
         """从列表移除已结束任务（不中断进行中的下载）。"""
         with self._lock:
