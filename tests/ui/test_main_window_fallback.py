@@ -22,6 +22,9 @@ class DummyDownloadManager:
     def stop(self):
         return None
 
+    def get_all_tasks(self):
+        return {}
+
 
 class DummyTab(QWidget):
     def __init__(self, *_args, **_kwargs):
@@ -29,7 +32,7 @@ class DummyTab(QWidget):
 
 
 def test_main_window_fallback_uses_qtabwidget(monkeypatch):
-    monkeypatch.setattr(main_window_module, "DownloadManager", DummyDownloadManager)
+    monkeypatch.setattr(main_window_module, "create_default_manager", DummyDownloadManager)
     monkeypatch.setattr(main_window_module, "SearchTab", DummyTab)
     monkeypatch.setattr(main_window_module, "DownloadTab", DummyTab)
     monkeypatch.setattr(main_window_module, "QueueTab", DummyTab)

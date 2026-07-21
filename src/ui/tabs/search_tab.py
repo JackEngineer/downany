@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtCore import QEvent, QTimer, Qt, QThread, pyqtSignal, QUrl
-from PyQt6.QtGui import QDesktopServices, QPixmap
+from PyQt6.QtCore import QEvent, QSettings, QTimer, Qt, QThread, pyqtSignal, QUrl
+from PyQt6.QtGui import QDesktopServices, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
+    QCompleter,
     QHBoxLayout,
     QLineEdit,
     QComboBox,
@@ -22,14 +23,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.download_manager import DownloadManager
 from src.core.download_task import DownloadTask, Platform, VideoInfo
 from src.core.search_engine import SearchEngine
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
 from src.ui.components import SearchResultItemWidget, ThumbnailLoader, VideoPreviewWidget
 from src.ui.components.chrome import BodyLabel, PageHeader, SectionCard, StatusBadge
+from src.ui.components.toast import ToastService
 from src.ui.fluent_support import get_fluent_widget
+from src.ui.qt_manager_adapter import QtDownloadManager
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SearchTab")
@@ -38,31 +40,48 @@ logger = setup_logger("SearchTab")
 class SearchThread(QThread):
     """搜索线程。"""
 
-    results_signal = pyqtSignal(list)
-    error_signal = pyqtSignal(str)
+    results_signal = pyqtSignal(int, list)
+    error_signal = pyqtSignal(int, str)
 
-    def __init__(self, platform: Platform, query: str, proxy: str = None):
+    def __init__(self, request_id: int, platform: Platform, query: str, max_results: int = 20, proxy: str = None):
         super().__init__()
+        self.request_id = request_id
         self.platform = platform
         self.query = query
+        self.max_results = max_results
         self.proxy = proxy
 
     def run(self):
+        if self.isInterruptionRequested():
+            return
         try:
-            results = SearchEngine.search(self.platform, self.query, max_results=20, proxy=self.proxy)
-            self.results_signal.emit(results)
+            results = SearchEngine.search(
+                self.platform, self.query, max_results=self.max_results, proxy=self.proxy
+            )
+            if self.isInterruptionRequested():
+                return
+            self.results_signal.emit(self.request_id, results)
         except Exception as e:
-            self.error_signal.emit(str(e))
+            if not self.isInterruptionRequested():
+                self.error_signal.emit(self.request_id, str(e))
 
 
 class SearchTab(QWidget):
     """搜索标签页。"""
 
-    def __init__(self, download_manager: DownloadManager, thumbnail_loader: ThumbnailLoader = None):
+    def __init__(
+        self,
+        download_manager: QtDownloadManager,
+        thumbnail_loader: ThumbnailLoader = None,
+        toast: ToastService | None = None,
+        main_window=None,
+    ):
         super().__init__()
         self.download_manager = download_manager
+        self.main_window = main_window
         self.config = ConfigManager()
         self.db = HistoryDB()
+        self.toast = toast
         self.search_thread = None
         self.thumbnail_loader = thumbnail_loader or ThumbnailLoader()
         self._detail_placeholder_pixmap = QPixmap()
@@ -73,7 +92,14 @@ class SearchTab(QWidget):
         self._thumbnail_requests_enabled = False
         self._thumbnail_load_pending = False
         self._thumbnail_load_scheduled = False
+        self._search_request_id = 0
+        self._active_search_request_id = 0
+        self._max_results = 20
+        self._last_query = ""
+        self._previous_list_item: QListWidgetItem | None = None
+        self._ui_settings = QSettings("Trae", "DownloaderUI")
         self.init_ui()
+        self._setup_search_completer()
         self.thumbnail_loader.thumbnail_loaded.connect(self._on_detail_thumbnail_loaded)
         self.thumbnail_loader.thumbnail_failed.connect(self._on_detail_thumbnail_failed)
         self.refresh_overview()
@@ -115,13 +141,22 @@ class SearchTab(QWidget):
 
         self.search_input = line_edit_cls()
         self.search_input.setPlaceholderText("输入关键词")
+        self.search_input.setToolTip("支持搜索历史下拉与回车搜索")
         self.search_input.returnPressed.connect(self.start_search)
         search_row.addWidget(self.search_input, 1)
 
         self.search_btn = primary_button_cls("搜索")
         self.search_btn.setObjectName("primaryActionButton")
-        self.search_btn.clicked.connect(self.start_search)
+        self.search_btn.setToolTip("开始搜索或取消进行中的搜索")
+        self.search_btn.clicked.connect(self._on_search_button_clicked)
         search_row.addWidget(self.search_btn)
+
+        self.load_more_btn = push_button_cls("加载更多")
+        self.load_more_btn.setObjectName("ghostActionButton")
+        self.load_more_btn.setToolTip("在当前关键词下加载更多结果")
+        self.load_more_btn.clicked.connect(self.load_more_results)
+        self.load_more_btn.setEnabled(False)
+        search_row.addWidget(self.load_more_btn)
         search_layout.addLayout(search_row)
 
         search_hint = BodyLabel("搜索结果会按列表懒加载封面，选中后右侧详情会同步更新。")
@@ -137,6 +172,7 @@ class SearchTab(QWidget):
 
         self.result_list = QListWidget()
         self.result_list.setObjectName("SearchResultList")
+        self.result_list.setToolTip("双击或按回车将选中项加入队列")
         self.result_list.itemDoubleClicked.connect(self.download_selected)
         self.result_list.currentItemChanged.connect(self._on_selection_changed)
         self.result_list.verticalScrollBar().valueChanged.connect(self._schedule_visible_thumbnail_load)
@@ -234,10 +270,72 @@ class SearchTab(QWidget):
         splitter.addWidget(detail_card)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
+        self._splitter = splitter
         layout.addWidget(splitter, 1)
+
+        splitter_state = self._ui_settings.value("searchTab/splitterState")
+        if splitter_state is not None:
+            try:
+                splitter.restoreState(splitter_state)
+            except Exception:
+                pass
 
         self.setLayout(layout)
         self._reset_detail_panel()
+
+    def _setup_search_completer(self):
+        getter = getattr(self.db, "get_recent_searches", None)
+        recent = getter(limit=15) if callable(getter) else []
+        queries = []
+        for record in recent:
+            text = (record.query or "").strip()
+            if text and text not in queries:
+                queries.append(text)
+        completer = QCompleter(queries, self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.search_input.setCompleter(completer)
+
+    def _on_search_button_clicked(self):
+        if self.search_thread and self.search_thread.isRunning():
+            self.cancel_search()
+            return
+        self.start_search()
+
+    def cancel_search(self):
+        if self.search_thread and self.search_thread.isRunning():
+            self.search_thread.requestInterruption()
+            self.search_thread.quit()
+        self.search_finished()
+        self._set_results_state("搜索已取消。")
+
+    def load_more_results(self):
+        if not self._last_query:
+            return
+        self._max_results += 20
+        self.start_search(append=True)
+
+    def shutdown(self):
+        splitter_state = getattr(self, "_splitter", None)
+        if splitter_state is not None:
+            self._ui_settings.setValue("searchTab/splitterState", splitter_state.saveState())
+
+        for index in range(self.result_list.count()):
+            item = self.result_list.item(index)
+            if not item:
+                continue
+            widget = self.result_list.itemWidget(item)
+            if widget and hasattr(widget, "shutdown"):
+                widget.shutdown()
+
+        if self.search_thread and self.search_thread.isRunning():
+            self.search_thread.requestInterruption()
+            self.search_thread.quit()
+            self.search_thread.wait(2000)
+        if hasattr(self, "preview_widget"):
+            self.preview_widget.shutdown()
+        if hasattr(self, "thumbnail_loader"):
+            self.thumbnail_loader.shutdown()
 
     def _on_platform_changed(self, *_args):
         self._current_platform = self._resolve_selected_platform() or Platform.YOUTUBE
@@ -256,10 +354,10 @@ class SearchTab(QWidget):
             ]
         )
 
-    def start_search(self):
+    def start_search(self, append: bool = False):
         """开始搜索。"""
 
-        if self.search_thread and self.search_thread.isRunning():
+        if self.search_thread and self.search_thread.isRunning() and not append:
             logger.info("搜索线程仍在运行，忽略重复搜索请求")
             return
 
@@ -274,16 +372,25 @@ class SearchTab(QWidget):
             return
         proxy = self.config.get_proxy_for_download()
 
-        self.search_btn.setEnabled(False)
-        self.search_btn.setText("搜索中…")
-        self.result_list.clear()
-        self._search_result_count = 0
+        if not append:
+            self._max_results = 20
+            self.result_list.clear()
+            self._search_result_count = 0
+            self._reset_detail_panel()
+
+        self._last_query = query
+        self._search_request_id += 1
+        self._active_search_request_id = self._search_request_id
+
+        self.search_btn.setText("取消")
         self._set_results_state("正在搜索，请稍候…")
-        self._reset_detail_panel()
 
         self.db.add_search_record(platform.value, query)
+        self._setup_search_completer()
 
-        self.search_thread = SearchThread(platform, query, proxy)
+        self.search_thread = SearchThread(
+            self._active_search_request_id, platform, query, self._max_results, proxy
+        )
         self.search_thread.results_signal.connect(self.display_results)
         self.search_thread.error_signal.connect(self.search_error)
         self.search_thread.finished.connect(self.search_finished)
@@ -303,27 +410,46 @@ class SearchTab(QWidget):
         }
         return text_map.get(text)
 
-    def display_results(self, results):
+    def display_results(self, request_id: int, results):
         """显示搜索结果。"""
 
-        self._search_result_count = len(results)
-        self._set_results_state("未找到匹配结果，请换个关键词试试。")
+        if request_id != self._active_search_request_id:
+            return
+
+        existing_urls = set()
+        for index in range(self.result_list.count()):
+            item = self.result_list.item(index)
+            if not item:
+                continue
+            video = item.data(Qt.ItemDataRole.UserRole)
+            if video:
+                existing_urls.add(video.url)
+
+        added = 0
         for video in results:
+            if video.url in existing_urls:
+                continue
+            existing_urls.add(video.url)
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, video)
             self.result_list.addItem(item)
             item_widget = SearchResultItemWidget(video, thumbnail_loader=self.thumbnail_loader)
             item.setSizeHint(item_widget.sizeHint())
             self.result_list.setItemWidget(item, item_widget)
+            added += 1
 
-        logger.info(f"显示 {len(results)} 个搜索结果")
+        self._search_result_count = self.result_list.count()
+        self._set_results_state("未找到匹配结果，请换个关键词试试。")
+        self.load_more_btn.setEnabled(self._search_result_count > 0)
+
+        logger.info(f"显示 {added} 个新搜索结果，共 {self._search_result_count} 条")
         self._thumbnail_requests_enabled = False
         self._thumbnail_load_pending = False
         self._thumbnail_load_scheduled = False
         QTimer.singleShot(0, self._enable_thumbnail_requests)
-        if self.result_list.count() > 0:
+        if self.result_list.count() > 0 and added > 0 and self.result_list.currentRow() < 0:
             self.result_list.setCurrentRow(0)
-        else:
+        elif self.result_list.count() == 0:
             self._reset_detail_panel()
         self.results_state_label.setVisible(self.result_list.count() == 0)
         self.refresh_overview()
@@ -337,8 +463,13 @@ class SearchTab(QWidget):
         self.results_state_label.setVisible(self.result_list.count() == 0)
 
     def eventFilter(self, watched, event):
-        if watched in (self.result_list.viewport(), self.result_list) and event.type() == QEvent.Type.Resize:
-            self._schedule_visible_thumbnail_load()
+        if watched in (self.result_list.viewport(), self.result_list):
+            if event.type() == QEvent.Type.Resize:
+                self._schedule_visible_thumbnail_load()
+            if event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent):
+                if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    self.download_selected()
+                    return True
         return super().eventFilter(watched, event)
 
     def _schedule_visible_thumbnail_load(self):
@@ -379,14 +510,18 @@ class SearchTab(QWidget):
         if requested:
             logger.info(f"为可视项请求 {requested} 个封面")
 
-    def _on_selection_changed(self, current: QListWidgetItem, _previous: QListWidgetItem):
-        for index in range(self.result_list.count()):
-            item = self.result_list.item(index)
-            if not item:
-                continue
-            widget = self.result_list.itemWidget(item)
-            if widget and hasattr(widget, "set_selected"):
-                widget.set_selected(item is current)
+    def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
+        if previous and previous is not current:
+            prev_widget = self.result_list.itemWidget(previous)
+            if prev_widget and hasattr(prev_widget, "set_selected"):
+                prev_widget.set_selected(False)
+
+        if current:
+            curr_widget = self.result_list.itemWidget(current)
+            if curr_widget and hasattr(curr_widget, "set_selected"):
+                curr_widget.set_selected(True)
+
+        self._previous_list_item = current
 
         if not current:
             self._reset_detail_panel()
@@ -493,8 +628,11 @@ class SearchTab(QWidget):
             return
         self._set_detail_thumbnail_placeholder("暂无封面")
 
-    def search_error(self, error_msg):
+    def search_error(self, request_id: int, error_msg: str):
         """搜索错误。"""
+
+        if request_id != self._active_search_request_id:
+            return
 
         if "412" in error_msg or "Precondition Failed" in error_msg:
             error_text = (
@@ -513,19 +651,7 @@ class SearchTab(QWidget):
     def search_finished(self):
         """搜索完成。"""
 
-        self.search_btn.setEnabled(True)
         self.search_btn.setText("搜索")
-
-    def shutdown(self):
-        """窗口关闭时停止搜索线程与预览资源。"""
-        if self.search_thread and self.search_thread.isRunning():
-            self.search_thread.requestInterruption()
-            self.search_thread.quit()
-            self.search_thread.wait(2000)
-        if hasattr(self, "preview_widget"):
-            self.preview_widget.shutdown()
-        if hasattr(self, "thumbnail_loader"):
-            self.thumbnail_loader.shutdown()
 
     def download_selected(self, item: QListWidgetItem = None):
         """下载选中的视频。"""
@@ -540,7 +666,16 @@ class SearchTab(QWidget):
         options = self.config.build_download_options()
         task = DownloadTask(video_info=video_info, options=options)
         self.download_manager.add_task(task)
-        QMessageBox.information(self, "已加入队列", f"已添加到下载队列：{video_info.title}")
+        if self.toast:
+            action_cb = None
+            if self.main_window and hasattr(self.main_window, "switch_to_queue"):
+                action_cb = self.main_window.switch_to_queue
+            self.toast.show_success(
+                "已加入队列",
+                video_info.title or "任务已添加",
+                action_label="查看队列" if action_cb else None,
+                action_cb=action_cb,
+            )
 
     def _selected_video_url(self) -> str:
         current_item = self.result_list.currentItem()

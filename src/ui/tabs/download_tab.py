@@ -3,6 +3,11 @@
 """
 from __future__ import annotations
 
+import re
+from urllib.parse import urlparse
+
+from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QClipboard, QGuiApplication
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -14,24 +19,39 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.core.download_manager import DownloadManager
-from src.core.download_task import DownloadTask, VideoInfo
+from src.core.download_task import DownloadTask, Platform, TaskStatus, VideoInfo
 from src.core.platform_detector import PlatformDetector
 from src.data.config_manager import ConfigManager
 from src.ui.components.chrome import BodyLabel, PageHeader, SectionCard, StatusBadge
+from src.ui.components.toast import ToastService
 from src.ui.fluent_support import get_fluent_widget
+from src.ui.qt_manager_adapter import QtDownloadManager
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadTab")
+
+_URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 
 class DownloadTab(QWidget):
     """下载标签页。"""
 
-    def __init__(self, download_manager: DownloadManager):
+    def __init__(
+        self,
+        download_manager: QtDownloadManager,
+        toast: ToastService | None = None,
+        main_window=None,
+    ):
         super().__init__()
         self.download_manager = download_manager
         self.config = ConfigManager()
+        self.toast = toast
+        self.main_window = main_window
+        self._clipboard_prompted = False
+        self._batch_validate_timer = QTimer(self)
+        self._batch_validate_timer.setSingleShot(True)
+        self._batch_validate_timer.setInterval(300)
+        self._batch_validate_timer.timeout.connect(self._update_batch_preview)
         self.init_ui()
         self.refresh_overview()
 
@@ -70,6 +90,7 @@ class DownloadTab(QWidget):
         url_layout.addWidget(QLabel("视频链接"))
         self.single_url_input = line_edit_cls()
         self.single_url_input.setPlaceholderText("请输入视频页面链接或视频 ID")
+        self.single_url_input.setToolTip("支持常见视频平台链接")
         url_layout.addWidget(self.single_url_input, 1)
         single_layout.addLayout(url_layout)
 
@@ -77,10 +98,16 @@ class DownloadTab(QWidget):
         single_hint.setObjectName("PageHint")
         single_layout.addWidget(single_hint)
 
+        self.clipboard_hint = BodyLabel("")
+        self.clipboard_hint.setObjectName("PageHint")
+        self.clipboard_hint.hide()
+        single_layout.addWidget(self.clipboard_hint)
+
         single_btn_row = QHBoxLayout()
         single_btn_row.addStretch()
-        self.single_download_btn = primary_button_cls("开始下载")
+        self.single_download_btn = primary_button_cls("加入队列")
         self.single_download_btn.setObjectName("primaryActionButton")
+        self.single_download_btn.setToolTip("将当前链接加入下载队列")
         self.single_download_btn.clicked.connect(self.start_single_download)
         single_btn_row.addWidget(self.single_download_btn)
         single_layout.addLayout(single_btn_row)
@@ -93,16 +120,18 @@ class DownloadTab(QWidget):
             "https://example.com/video-1\nhttps://example.com/video-2\n…"
         )
         self.batch_url_input.setMaximumHeight(180)
+        self.batch_url_input.textChanged.connect(self._schedule_batch_preview)
         batch_layout.addWidget(self.batch_url_input)
 
-        batch_hint = BodyLabel("批量模式下，某一条失败不会中断后续任务。")
-        batch_hint.setObjectName("PageHint")
-        batch_layout.addWidget(batch_hint)
+        self.batch_preview_label = BodyLabel("粘贴链接后将自动识别数量。")
+        self.batch_preview_label.setObjectName("PageHint")
+        batch_layout.addWidget(self.batch_preview_label)
 
         batch_btn_row = QHBoxLayout()
         batch_btn_row.addStretch()
-        self.batch_download_btn = primary_button_cls("加入批量任务")
+        self.batch_download_btn = primary_button_cls("加入队列")
         self.batch_download_btn.setObjectName("primaryActionButton")
+        self.batch_download_btn.setToolTip("将批量链接全部加入队列")
         self.batch_download_btn.clicked.connect(self.start_batch_download)
         batch_btn_row.addWidget(self.batch_download_btn)
         batch_layout.addLayout(batch_btn_row)
@@ -145,21 +174,20 @@ class DownloadTab(QWidget):
         self.download_dir_label.setObjectName("PageHint")
         overview_layout.addWidget(self.download_dir_label)
 
-        tip_card = SectionCard("使用提示", "保持工作流更稳定、更可控。")
-        tip_layout = tip_card.body_layout
-        tips = [
-            "• 批量下载建议一次只加入你真正要处理的链接。",
-            "• 代理和字幕设置会直接影响新加入的任务。",
-            "• 任务会自动进入队列，失败后可以在队列页重试。",
-        ]
-        for tip in tips:
-            tip_label = BodyLabel(tip)
-            tip_label.setWordWrap(True)
-            tip_label.setObjectName("PageHint")
-            tip_layout.addWidget(tip_label)
+        recent_card = SectionCard("最近任务", "点击查看队列中的最新任务。")
+        recent_layout = recent_card.body_layout
+        self.recent_tasks_label = BodyLabel("暂无最近任务")
+        self.recent_tasks_label.setObjectName("PageHint")
+        self.recent_tasks_label.setWordWrap(True)
+        recent_layout.addWidget(self.recent_tasks_label)
+
+        self.view_queue_btn = push_button_cls("查看队列")
+        self.view_queue_btn.setObjectName("ghostActionButton")
+        self.view_queue_btn.clicked.connect(self._go_to_queue)
+        recent_layout.addWidget(self.view_queue_btn)
 
         right_column.addWidget(overview_card)
-        right_column.addWidget(tip_card)
+        right_column.addWidget(recent_card)
         right_column.addStretch()
 
         content_layout.addLayout(left_column, 2)
@@ -168,11 +196,60 @@ class DownloadTab(QWidget):
 
         self.setLayout(layout)
 
-    def refresh_overview(self):
-        """刷新右侧摘要。"""
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._check_clipboard()
 
+    def _check_clipboard(self):
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is None:
+            return
+        text = clipboard.text().strip()
+        if not text or not _URL_PATTERN.search(text):
+            self.clipboard_hint.hide()
+            return
+        if self._clipboard_prompted:
+            return
+        self._clipboard_prompted = True
+        self.clipboard_hint.setText("检测到剪贴板中有链接，可直接粘贴到输入框。")
+        self.clipboard_hint.show()
+        if self.toast:
+            self.toast.show_info(
+                "检测到剪贴板链接",
+                "可一键填入下载框",
+                action_label="填入",
+                action_cb=self._fill_from_clipboard,
+            )
+
+    def _fill_from_clipboard(self):
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is None:
+            return
+        text = clipboard.text().strip()
+        if text:
+            self.single_url_input.setText(text.splitlines()[0].strip())
+
+    def _go_to_queue(self):
+        if self.main_window and hasattr(self.main_window, "switch_to_queue"):
+            self.main_window.switch_to_queue()
+
+    def _schedule_batch_preview(self):
+        self._batch_validate_timer.start()
+
+    def _update_batch_preview(self):
+        lines = [line.strip() for line in self.batch_url_input.toPlainText().splitlines() if line.strip()]
+        if not lines:
+            self.batch_preview_label.setText("粘贴链接后将自动识别数量。")
+            return
+        valid = sum(1 for line in lines if PlatformDetector.detect(line) != Platform.UNKNOWN)
+        invalid = len(lines) - valid
+        self.batch_preview_label.setText(f"识别到 {valid} 条链接，{invalid} 条无法识别平台。")
+
+    def refresh_overview(self):
         tasks = list(self.download_manager.get_all_tasks().values())
-        pending = sum(1 for task in tasks if task.status.value in {"pending", "downloading", "paused"})
+        pending = sum(
+            1 for task in tasks if task.status.value in {"pending", "downloading", "paused"}
+        )
         self.header.set_metrics(
             [
                 ("待处理任务", str(pending), "正在排队或下载中的任务"),
@@ -193,9 +270,14 @@ class DownloadTab(QWidget):
         self.overview_concurrent_badge.setText(str(self.config.get_concurrent_downloads()))
         self.download_dir_label.setText(f"下载目录：{self.config.get_download_dir()}")
 
-    def start_single_download(self):
-        """开始单个下载。"""
+        recent = sorted(tasks, key=lambda t: t.created_at, reverse=True)[:3]
+        if not recent:
+            self.recent_tasks_label.setText("暂无最近任务")
+        else:
+            lines = [f"• {task.video_info.title or self._url_placeholder(task.video_info.url)}" for task in recent]
+            self.recent_tasks_label.setText("\n".join(lines))
 
+    def start_single_download(self):
         url = self.single_url_input.text().strip()
         if not url:
             QMessageBox.warning(self, "需要链接", "请先输入有效的视频链接")
@@ -203,10 +285,15 @@ class DownloadTab(QWidget):
 
         self._add_download_task(url)
         self.single_url_input.clear()
+        if self.toast:
+            self.toast.show_success(
+                "已加入队列",
+                "任务已添加到下载队列",
+                action_label="查看队列",
+                action_cb=self._go_to_queue,
+            )
 
     def start_batch_download(self):
-        """开始批量下载。"""
-
         text = self.batch_url_input.toPlainText()
         urls = [line.strip() for line in text.split("\n") if line.strip()]
 
@@ -218,16 +305,21 @@ class DownloadTab(QWidget):
             self._add_download_task(url)
 
         self.batch_url_input.clear()
-        QMessageBox.information(self, "已加入队列", f"已添加 {len(urls)} 个下载任务到队列")
+        self._update_batch_preview()
+        if self.toast:
+            self.toast.show_success(
+                f"已加入 {len(urls)} 个任务",
+                "批量任务已添加到下载队列",
+                action_label="查看队列",
+                action_cb=self._go_to_queue,
+            )
         self.refresh_overview()
 
     def _add_download_task(self, url: str):
-        """添加下载任务。"""
-
         platform = PlatformDetector.detect(url)
         video_info = VideoInfo(
             url=url,
-            title="正在获取信息…",
+            title=self._url_placeholder(url),
             platform=platform,
         )
 
@@ -236,3 +328,15 @@ class DownloadTab(QWidget):
         self.download_manager.add_task(task)
         logger.info(f"添加下载任务: {url}")
         self.refresh_overview()
+
+    @staticmethod
+    def _url_placeholder(url: str) -> str:
+        try:
+            parsed = urlparse(url)
+            host = parsed.netloc or "未知来源"
+            path = (parsed.path or "").strip("/")
+            if path:
+                return f"{host}/{path.split('/')[-1][:40]}"
+            return host
+        except Exception:
+            return url[:60]
