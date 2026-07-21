@@ -55,6 +55,26 @@ class DownloadOptions:
     proxy: Optional[str] = None  # 代理地址
 
 
+@dataclass(frozen=True)
+class TaskSnapshot:
+    """任务的不可变快照，用于跨线程/跨进程只读展示。"""
+    id: str
+    url: str
+    title: str
+    platform: str
+    status: str
+    progress: float
+    downloaded_bytes: int
+    total_bytes: int
+    speed: str
+    eta: str
+    file_path: str
+    error_message: str
+    created_at: str
+    started_at: Optional[str]
+    completed_at: Optional[str]
+
+
 @dataclass
 class DownloadTask:
     """下载任务数据类"""
@@ -63,6 +83,8 @@ class DownloadTask:
     options: DownloadOptions = field(default_factory=DownloadOptions)
     status: TaskStatus = TaskStatus.PENDING
     progress: float = 0.0  # 0-100
+    downloaded_bytes: int = 0
+    total_bytes: int = 0
     speed: str = "0 B/s"  # 下载速度
     eta: str = "暂无"  # 预计剩余时间
     file_path: str = ""  # 下载完成后的文件路径
@@ -83,6 +105,8 @@ class DownloadTask:
             'uploader': self.video_info.uploader,
             'status': self.status.value,
             'progress': self.progress,
+            'downloaded_bytes': self.downloaded_bytes,
+            'total_bytes': self.total_bytes,
             'speed': self.speed,
             'eta': self.eta,
             'file_path': self.file_path,
@@ -92,3 +116,23 @@ class DownloadTask:
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
         }
+
+    def to_snapshot(self) -> "TaskSnapshot":
+        """生成不可变快照。"""
+        return TaskSnapshot(
+            id=self.id,
+            url=self.video_info.url,
+            title=self.video_info.title,
+            platform=self.video_info.platform.value,
+            status=self.status.value,
+            progress=self.progress,
+            downloaded_bytes=self.downloaded_bytes,
+            total_bytes=self.total_bytes,
+            speed=self.speed,
+            eta=self.eta,
+            file_path=self.file_path,
+            error_message=self.error_message,
+            created_at=self.created_at.isoformat(),
+            started_at=self.started_at.isoformat() if self.started_at else None,
+            completed_at=self.completed_at.isoformat() if self.completed_at else None,
+        )

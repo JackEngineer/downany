@@ -7,9 +7,9 @@ import queue
 import re
 import threading
 from datetime import datetime
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
-from src.core.download_task import DownloadTask, TaskStatus
+from src.core.download_task import DownloadTask, TaskSnapshot, TaskStatus
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
 from src.core.interfaces import DownloadConfig, HistoryWriter
