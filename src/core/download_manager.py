@@ -287,6 +287,7 @@ class DownloadManager:
             self.events.emit("task_completed", {"task_id": task.id})
 
         except DownloadCancelled as e:
+            cancelled = False
             with self._lock:
                 if task.status == TaskStatus.PAUSED:
                     logger.info(f"任务已暂停中断: {task.video_info.title}")
@@ -294,8 +295,10 @@ class DownloadManager:
                     task.status = TaskStatus.CANCELLED
                     task.error_message = str(e)
                     self._save_to_history(task)
-                    self.events.emit("task_cancelled", {"task_id": task.id})
-                    logger.info(f"任务已取消: {task.video_info.title}")
+                    cancelled = True
+            if cancelled:
+                self.events.emit("task_cancelled", {"task_id": task.id})
+                logger.info(f"任务已取消: {task.video_info.title}")
         except (DownloadError, Exception) as e:
             with self._lock:
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):

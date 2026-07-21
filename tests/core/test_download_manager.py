@@ -49,8 +49,11 @@ def test_download_failure_marks_failed_and_emits_event(manager):
         instance.download.side_effect = DownloadError("boom")
         mock_cls.return_value = instance
         manager.add_task(task)
-        assert _wait_until(lambda: task.status == TaskStatus.FAILED)
+        assert _wait_until(
+            lambda: any(e == "task_failed" for e, _ in events)
+        )
 
+    assert task.status == TaskStatus.FAILED
     assert "boom" in task.error_message
     manager.db.add_download_record.assert_called()
     assert ("task_added", {"task_id": task.id}) in events
