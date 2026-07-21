@@ -36,6 +36,21 @@ def test_unsubscribe_stops_delivery():
     assert received == ["a"]
 
 
+def test_listener_exception_does_not_break_others():
+    emitter = EventEmitter()
+    received = []
+
+    def bad_listener(event, payload):
+        raise RuntimeError("boom")
+
+    emitter.subscribe(bad_listener)
+    emitter.subscribe(lambda event, payload: received.append(event))
+
+    emitter.emit("task_added")
+
+    assert received == ["task_added"]
+
+
 def test_concurrent_emit_is_safe():
     emitter = EventEmitter()
     received = []

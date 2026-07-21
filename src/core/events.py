@@ -4,6 +4,10 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
+from src.utils.logger import setup_logger
+
+logger = setup_logger("Events")
+
 Listener = Callable[[str, Dict[str, Any]], None]
 
 
@@ -31,4 +35,7 @@ class EventEmitter:
             listeners = list(self._listeners)
         data = payload if payload is not None else {}
         for listener in listeners:
-            listener(event, data)
+            try:
+                listener(event, data)
+            except Exception:
+                logger.exception(f"事件监听器执行失败: {event}")
