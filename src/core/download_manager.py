@@ -6,6 +6,7 @@ from __future__ import annotations
 import queue
 import re
 import threading
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
@@ -16,6 +17,7 @@ from src.core.interfaces import DownloadConfig, HistoryWriter
 from src.core.quality import build_format_selector
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.models import DownloadRecord
+from src.data.queue_store import QueueStore
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadManager")
@@ -24,10 +26,17 @@ logger = setup_logger("DownloadManager")
 class DownloadManager:
     """下载管理器（Qt 无关）。事件通过 self.events 分发。"""
 
-    def __init__(self, config: DownloadConfig, db: HistoryWriter):
+    def __init__(
+        self,
+        config: DownloadConfig,
+        db: HistoryWriter,
+        queue_store: Optional[QueueStore] = None,
+    ):
         self.config = config
         self.db = db
+        self.queue_store = queue_store
         self.events = EventEmitter()
+        self._last_progress_persist: Dict[str, float] = {}
 
         self._lock = threading.RLock()
         self.task_queue: queue.Queue = queue.Queue()
@@ -39,6 +48,25 @@ class DownloadManager:
         self.running = False
 
         logger.info("下载管理器初始化完成")
+
+    def restore_tasks(self) -> None:
+        """从队列存储恢复任务。下载中降级为已暂停；等待中重新入队。"""
+        if self.queue_store is None:
+            return
+        restored = self.queue_store.load_tasks()
+        downgraded = []
+        with self._lock:
+            for task in restored:
+                if task.status == TaskStatus.DOWNLOADING:
+                    task.status = TaskStatus.PAUSED
+                    downgraded.append(task)
+                self.tasks[task.id] = task
+                if task.status == TaskStatus.PENDING:
+                    self.task_queue.put(task.id)
+        for task in downgraded:
+            self._persist(task)
+        if restored:
+            logger.info(f"从数据库恢复 {len(restored)} 个任务")
 
     def start(self):
         """启动调度器"""
@@ -69,11 +97,29 @@ class DownloadManager:
 
         logger.info("调度器已停止")
 
+    def _persist(self, task: DownloadTask) -> None:
+        """把任务当前状态写入队列存储；失败只记日志，不影响下载。"""
+        if self.queue_store is None:
+            return
+        try:
+            self.queue_store.upsert_task(task)
+        except Exception as exc:
+            logger.error(f"持久化任务失败 {task.id}: {exc}")
+
+    def _persist_remove(self, task_id: str) -> None:
+        if self.queue_store is None:
+            return
+        try:
+            self.queue_store.remove_task(task_id)
+        except Exception as exc:
+            logger.error(f"删除持久化任务失败 {task_id}: {exc}")
+
     def add_task(self, task: DownloadTask):
         """添加任务到队列"""
         with self._lock:
             self.tasks[task.id] = task
             self.task_queue.put(task.id)
+        self._persist(task)
         self.events.emit("task_added", {"task_id": task.id})
         logger.info(f"添加任务: {task.video_info.title}")
 
@@ -84,6 +130,7 @@ class DownloadManager:
             if not task or task.status != TaskStatus.DOWNLOADING:
                 return
             task.status = TaskStatus.PAUSED
+        self._persist(task)
         self.events.emit("task_paused", {"task_id": task_id})
         logger.info(f"暂停任务: {task.video_info.title}")
 
@@ -100,6 +147,7 @@ class DownloadManager:
             task.status = TaskStatus.PENDING
             task.error_message = ""
             self.task_queue.put(task_id)
+        self._persist(task)
         logger.info(f"恢复任务: {task.video_info.title}")
 
     def cancel_task(self, task_id: str):
@@ -111,6 +159,7 @@ class DownloadManager:
             if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED):
                 return
             task.status = TaskStatus.CANCELLED
+        self._persist(task)
         self.events.emit("task_cancelled", {"task_id": task_id})
         logger.info(f"取消任务: {task.video_info.title}")
 
@@ -128,6 +177,7 @@ class DownloadManager:
             task.downloaded_bytes = 0
             task.total_bytes = 0
             self.task_queue.put(task_id)
+        self._persist(task)
         logger.info(f"重试任务: {task.video_info.title}")
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
@@ -154,7 +204,8 @@ class DownloadManager:
             if task_id in self.active_tasks:
                 return False
             self.tasks.pop(task_id, None)
-            return True
+        self._persist_remove(task_id)
+        return True
 
     def _scheduler_loop(self):
         while True:
@@ -199,6 +250,7 @@ class DownloadManager:
                     return
                 task.status = TaskStatus.DOWNLOADING
                 task.started_at = datetime.now()
+            self._persist(task)
             self.events.emit("task_started", {"task_id": task.id})
 
             # 补齐元数据（失败不阻断下载）
@@ -253,6 +305,17 @@ class DownloadManager:
                     "total_bytes": total,
                     "progress": task.progress,
                 }
+                if self.queue_store is not None:
+                    now = time.monotonic()
+                    last = self._last_progress_persist.get(task.id, 0.0)
+                    if now - last >= 2.0:
+                        self._last_progress_persist[task.id] = now
+                        try:
+                            self.queue_store.update_progress(
+                                task.id, task.progress, downloaded, total
+                            )
+                        except Exception as exc:
+                            logger.error(f"持久化进度失败 {task.id}: {exc}")
                 self.events.emit("task_progress", {"task_id": task.id, "progress": slim})
 
             downloader.set_callbacks(progress=progress_callback)
@@ -289,6 +352,7 @@ class DownloadManager:
                 task.file_path = file_path or task.file_path
                 self._save_to_history(task)
 
+            self._persist(task)
             self.events.emit("task_completed", {"task_id": task.id})
 
         except DownloadCancelled as e:
@@ -301,6 +365,7 @@ class DownloadManager:
                     task.error_message = str(e)
                     self._save_to_history(task)
                     cancelled = True
+            self._persist(task)
             if cancelled:
                 self.events.emit("task_cancelled", {"task_id": task.id})
                 logger.info(f"任务已取消: {task.video_info.title}")
@@ -311,6 +376,7 @@ class DownloadManager:
                 task.status = TaskStatus.FAILED
                 task.error_message = str(e)
                 self._save_to_history(task)
+            self._persist(task)
             self.events.emit("task_failed", {"task_id": task.id, "error": str(e)})
             logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
         finally:
@@ -325,6 +391,7 @@ class DownloadManager:
                         self.task_queue.put(task.id)
                         requeue = True
             if requeue:
+                self._persist(task)
                 logger.info(f"暂停任务线程退出后重新入队: {task.video_info.title}")
 
     def _save_to_history(self, task: DownloadTask):

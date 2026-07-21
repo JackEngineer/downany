@@ -9,6 +9,7 @@ from src.core.download_manager import DownloadManager
 from src.core.download_task import DownloadTask
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
+from src.data.queue_store import QueueStore
 
 
 class QtDownloadManager(QObject):
@@ -76,6 +77,9 @@ class QtDownloadManager(QObject):
 
 
 def create_default_manager() -> QtDownloadManager:
-    """PyQt 应用的默认装配：真实配置 + 真实历史库。"""
-    core = DownloadManager(config=ConfigManager(), db=HistoryDB())
+    """PyQt 应用的默认装配：真实配置 + 真实历史库 + 队列持久化。"""
+    db = HistoryDB()
+    store = QueueStore(db.db_path)
+    core = DownloadManager(config=ConfigManager(), db=db, queue_store=store)
+    core.restore_tasks()
     return QtDownloadManager(core)
