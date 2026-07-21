@@ -9,48 +9,25 @@ import threading
 from datetime import datetime
 from typing import Dict, Optional, Set
 
-from PyQt6.QtCore import QObject, pyqtSignal
-
 from src.core.download_task import DownloadTask, TaskStatus
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
+from src.core.events import EventEmitter
+from src.core.interfaces import DownloadConfig, HistoryWriter
 from src.core.quality import build_format_selector
 from src.core.video_info_extractor import VideoInfoExtractor
-from src.data.config_manager import ConfigManager
-from src.data.database import HistoryDB
 from src.data.models import DownloadRecord
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadManager")
 
 
-class DownloadManager(QObject):
-    """下载管理器单例类"""
+class DownloadManager:
+    """下载管理器（Qt 无关）。事件通过 self.events 分发。"""
 
-    _instance = None
-
-    task_added = pyqtSignal(str)
-    task_started = pyqtSignal(str)
-    task_progress = pyqtSignal(str, dict)
-    task_completed = pyqtSignal(str)
-    task_failed = pyqtSignal(str, str)
-    task_paused = pyqtSignal(str)
-    task_cancelled = pyqtSignal(str)
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self):
-        if self._initialized:
-            return
-
-        super().__init__()
-        self._initialized = True
-
-        self.config = ConfigManager()
-        self.db = HistoryDB()
+    def __init__(self, config: DownloadConfig, db: HistoryWriter):
+        self.config = config
+        self.db = db
+        self.events = EventEmitter()
 
         self._lock = threading.RLock()
         self.task_queue: queue.Queue = queue.Queue()
@@ -97,7 +74,7 @@ class DownloadManager(QObject):
         with self._lock:
             self.tasks[task.id] = task
             self.task_queue.put(task.id)
-        self.task_added.emit(task.id)
+        self.events.emit("task_added", {"task_id": task.id})
         logger.info(f"添加任务: {task.video_info.title}")
 
     def pause_task(self, task_id: str):
@@ -107,7 +84,7 @@ class DownloadManager(QObject):
             if not task or task.status != TaskStatus.DOWNLOADING:
                 return
             task.status = TaskStatus.PAUSED
-        self.task_paused.emit(task_id)
+        self.events.emit("task_paused", {"task_id": task_id})
         logger.info(f"暂停任务: {task.video_info.title}")
 
     def resume_task(self, task_id: str):
@@ -134,7 +111,7 @@ class DownloadManager(QObject):
             if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED):
                 return
             task.status = TaskStatus.CANCELLED
-        self.task_cancelled.emit(task_id)
+        self.events.emit("task_cancelled", {"task_id": task_id})
         logger.info(f"取消任务: {task.video_info.title}")
 
     def retry_task(self, task_id: str):
@@ -148,6 +125,8 @@ class DownloadManager(QObject):
             task.status = TaskStatus.PENDING
             task.error_message = ""
             task.progress = 0.0
+            task.downloaded_bytes = 0
+            task.total_bytes = 0
             self.task_queue.put(task_id)
         logger.info(f"重试任务: {task.video_info.title}")
 
@@ -158,6 +137,19 @@ class DownloadManager(QObject):
     def get_all_tasks(self) -> Dict[str, DownloadTask]:
         with self._lock:
             return dict(self.tasks)
+
+    def remove_task(self, task_id: str) -> bool:
+        """从列表移除已结束任务（不中断进行中的下载）。"""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return False
+            if task.status in (TaskStatus.DOWNLOADING, TaskStatus.PENDING, TaskStatus.PAUSED):
+                return False
+            if task_id in self.active_tasks:
+                return False
+            self.tasks.pop(task_id, None)
+            return True
 
     def _scheduler_loop(self):
         while True:
@@ -202,7 +194,7 @@ class DownloadManager(QObject):
                     return
                 task.status = TaskStatus.DOWNLOADING
                 task.started_at = datetime.now()
-            self.task_started.emit(task.id)
+            self.events.emit("task_started", {"task_id": task.id})
 
             # 补齐元数据（失败不阻断下载）
             if not task.video_info.title or task.video_info.title in (
@@ -231,27 +223,32 @@ class DownloadManager(QObject):
                     if task.status == TaskStatus.PAUSED:
                         raise DownloadCancelled("任务已暂停")
 
+                downloaded = int(d.get("downloaded_bytes") or 0)
+                total = int(d.get("total_bytes") or d.get("total_bytes_estimate") or 0)
+                task.downloaded_bytes = downloaded
+                task.total_bytes = total
+
                 try:
                     percent_str = d.get("_percent_str", "0%")
                     percent_str = re.sub(r"\x1b\[[0-9;]*m", "", str(percent_str))
                     task.progress = float(percent_str.replace("%", "").strip() or 0)
                 except (ValueError, AttributeError, TypeError):
-                    downloaded = d.get("downloaded_bytes") or 0
-                    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                     if total:
                         task.progress = min(100.0, downloaded * 100.0 / total)
 
                 task.speed = d.get("_speed_str", "0 B/s")
                 task.eta = d.get("_eta_str", "暂无")
-                # 只传精简进度，避免巨型 dict 卡 UI
                 slim = {
                     "status": d.get("status"),
                     "_percent_str": d.get("_percent_str"),
                     "_speed_str": d.get("_speed_str"),
                     "_eta_str": d.get("_eta_str"),
                     "filename": d.get("filename"),
+                    "downloaded_bytes": downloaded,
+                    "total_bytes": total,
+                    "progress": task.progress,
                 }
-                self.task_progress.emit(task.id, slim)
+                self.events.emit("task_progress", {"task_id": task.id, "progress": slim})
 
             downloader.set_callbacks(progress=progress_callback)
 
@@ -287,7 +284,7 @@ class DownloadManager(QObject):
                 task.file_path = file_path or task.file_path
                 self._save_to_history(task)
 
-            self.task_completed.emit(task.id)
+            self.events.emit("task_completed", {"task_id": task.id})
 
         except DownloadCancelled as e:
             with self._lock:
@@ -297,7 +294,7 @@ class DownloadManager(QObject):
                     task.status = TaskStatus.CANCELLED
                     task.error_message = str(e)
                     self._save_to_history(task)
-                    self.task_cancelled.emit(task.id)
+                    self.events.emit("task_cancelled", {"task_id": task.id})
                     logger.info(f"任务已取消: {task.video_info.title}")
         except (DownloadError, Exception) as e:
             with self._lock:
@@ -306,7 +303,7 @@ class DownloadManager(QObject):
                 task.status = TaskStatus.FAILED
                 task.error_message = str(e)
                 self._save_to_history(task)
-            self.task_failed.emit(task.id, str(e))
+            self.events.emit("task_failed", {"task_id": task.id, "error": str(e)})
             logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
         finally:
             requeue = False
