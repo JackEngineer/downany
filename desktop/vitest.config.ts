@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  plugins: [react()],
   test: {
-    include: ["electron/**/*.test.ts"],
+    environment: "jsdom",
+    include: ["electron/**/*.test.ts", "renderer/**/*.test.ts", "renderer/**/*.test.tsx"],
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

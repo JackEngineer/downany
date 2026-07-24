@@ -15,6 +15,12 @@ const api = {
   openPath(target: string): Promise<string> {
     return ipcRenderer.invoke("app:openPath", target);
   },
+  showItemInFolder(target: string): Promise<void> {
+    return ipcRenderer.invoke("app:showItemInFolder", target);
+  },
+  selectDirectory(): Promise<string | null> {
+    return ipcRenderer.invoke("app:selectDirectory");
+  },
   quit(): Promise<void> {
     return ipcRenderer.invoke("app:quit");
   },

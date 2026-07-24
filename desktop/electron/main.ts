@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   shell,
 } from "electron";
@@ -26,8 +27,8 @@ if (!gotLock) {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: 1100,
+    height: 720,
     minWidth: 800,
     minHeight: 560,
     title: "视频下载器",
@@ -94,6 +95,18 @@ function registerIpc(): void {
 
   ipcMain.handle("app:openPath", async (_evt, target: string) => {
     return shell.openPath(target);
+  });
+
+  ipcMain.handle("app:showItemInFolder", async (_evt, target: string) => {
+    shell.showItemInFolder(target);
+  });
+
+  ipcMain.handle("app:selectDirectory", async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
   });
 
   ipcMain.handle("app:quit", async () => {
