@@ -164,6 +164,54 @@ class HistoryDB:
             conn.commit()
         logger.info(f"删除下载记录: {record_id}")
 
+    def delete_download_records(self, record_ids: List[str]) -> int:
+        if not record_ids:
+            return 0
+        with self._get_connection() as conn:
+            placeholders = ",".join("?" for _ in record_ids)
+            cursor = conn.execute(
+                f"DELETE FROM download_history WHERE id IN ({placeholders})",
+                tuple(record_ids),
+            )
+            conn.commit()
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        logger.info(f"批量删除下载记录: {deleted}")
+        return deleted
+
+    def clear_download_history(self) -> None:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM download_history")
+            conn.commit()
+        logger.info("已清空下载历史")
+
+    def list_download_records(
+        self,
+        offset: int = 0,
+        limit: int = 50,
+        status: Optional[str] = None,
+        query: Optional[str] = None,
+    ) -> List[DownloadRecord]:
+        clauses = []
+        params: list = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if query:
+            clauses.append("(title LIKE ? OR url LIKE ? OR uploader LIKE ?)")
+            like = f"%{query}%"
+            params.extend([like, like, like])
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([max(0, int(limit)), max(0, int(offset))])
+        sql = f"""
+            SELECT * FROM download_history
+            {where}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(sql, tuple(params))
+            return [self._row_to_record(row) for row in cursor.fetchall()]
+
     def add_search_record(self, platform: str, query: str):
         with self._get_connection() as conn:
             conn.execute(
