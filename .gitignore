@@ -18,3 +18,7 @@ bin/ffprobe
 *.app
 .idea/
 .vscode/
+desktop/node_modules/
+desktop/dist/
+desktop/dist-electron/
+desktop/out/

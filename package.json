@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Video downloader application",
   "scripts": {
-    "start": "bash scripts/start_app.sh"
+    "start": "bash scripts/start_app.sh",
+    "desktop": "npm --prefix desktop run dev",
+    "desktop:test": "npm --prefix desktop test"
   },
   "author": "Jack Lee",
   "license": "MIT"
