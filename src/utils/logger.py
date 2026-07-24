@@ -16,8 +16,8 @@ def setup_logger(name: str = "Downloader") -> logging.Logger:
 
     # 如果已经有 handler，就不再添加，防止重复日志
     if not logger.handlers:
-        # 控制台处理器
-        console_handler = logging.StreamHandler(sys.stdout)
+        # 控制台处理器（stderr，避免污染 Sidecar stdout 协议流）
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(logging.INFO)
         
         # 格式化
