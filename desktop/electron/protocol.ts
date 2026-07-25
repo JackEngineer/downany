@@ -5,6 +5,7 @@ export const Methods = [
   "app.getSnapshot",
   "app.ping",
   "app.shutdown",
+  "app.runMigration",
   "download.parseUrls",
   "download.cancelParse",
   "download.createTasks",

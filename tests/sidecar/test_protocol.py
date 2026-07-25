@@ -11,6 +11,7 @@ def test_required_methods_exist():
         "app.getSnapshot",
         "app.ping",
         "app.shutdown",
+        "app.runMigration",
         "download.parseUrls",
         "download.cancelParse",
         "download.createTasks",

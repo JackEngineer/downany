@@ -44,35 +44,35 @@ git checkout -b electron-phase-3
 
 ### Task 1: 旧数据迁移（Sidecar）
 
-- 源：`~/Library/Preferences/com.Trae.Downloader.plist`、`~/.trae_downloader/history.db`
-- 目标：`AppPaths` 下 config.json + history.db
-- 标记文件：`data_dir/.migration_v1_done`
-- method：`app.runMigration` → `{ status: "skipped"|"migrated"|"failed", message, details }`
-- 启动时 server 可自动跑一次（幂等）
+- [x] 源：`~/Library/Preferences/com.Trae.Downloader.plist`、`~/.trae_downloader/history.db`
+- [x] 目标：`AppPaths` 下 config.json + history.db
+- [x] 标记文件：`data_dir/.migration_v1_done`
+- [x] method：`app.runMigration` → `{ status: "skipped"|"migrated"|"failed", message, details }`
+- [x] 启动时 server 可自动跑一次（幂等）
 
 ### Task 2: yt-dlp 独立更新
 
-- `updater.checkYtDlp` / `updater.updateYtDlp`
-- 下载到 `data_dir/bin/yt-dlp`；自检 `--version`；失败保留旧文件
-- 设置页按钮：「检查更新」「更新 yt-dlp」
+- [x] `updater.checkYtDlp` / `updater.updateYtDlp`
+- [x] 下载到 `data_dir/bin/yt-dlp`；自检 `--version`；失败保留旧文件
+- [x] 设置页按钮：「检查更新」「更新 yt-dlp」
 
 ### Task 3: Electron 菜单与快捷键
 
-- 应用菜单：新建任务、队列、历史、设置、退出
-- 加速键与 Renderer 路由 IPC 同步（`app:navigate`）
+- [x] 应用菜单：新建任务、队列、历史、设置、退出
+- [x] 加速键与 Renderer 路由 IPC 同步（`app:navigate`）
 
 ### Task 4: 通知、Dock、窗口几何、系统主题
 
-- 任务完成/失败且窗口失焦 → `Notification`
-- Dock badge = 活跃任务数（Main 听 sidecar 事件或轮询 snapshot）
-- `window-state.json` 持久化 bounds
-- `nativeTheme` 变化通知 Renderer；`theme_mode=system` 时应用
+- [x] 任务完成/失败且窗口失焦 → `Notification`
+- [x] Dock badge = 活跃任务数（Main 听 sidecar 事件或轮询 snapshot）
+- [x] `window-state.json` 持久化 bounds
+- [x] `nativeTheme` 变化通知 Renderer；`theme_mode=system` 时应用
 
 ### Task 5: 验收
 
-- pytest sidecar 新测 + 全量 sidecar
-- desktop test + build
-- 手工冒烟菜单/迁移（可用假 plist）
+- [x] pytest sidecar 新测 + 全量 sidecar
+- [x] desktop test + build
+- [ ] 手工冒烟菜单/迁移（可用假 plist）
 
 ---
 

@@ -11,6 +11,9 @@ from src.core.download_task import DownloadTask, TaskStatus, VideoInfo
 from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, ParseTimeout
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
+from src.sidecar import ytdlp_updater
+from src.sidecar.migration import run_migration
+from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import ErrorCode, EventName, Method
 from src.utils.logger import setup_logger
 
@@ -79,11 +82,16 @@ class HandlerContext:
         db: HistoryDB,
         manager: DownloadManager,
         emit_event: EmitEvent,
+        paths: AppPaths,
+        *,
+        last_migration: Optional[Dict[str, Any]] = None,
     ):
         self.config = config
         self.db = db
         self.manager = manager
         self.emit_event = emit_event
+        self.paths = paths
+        self.last_migration = last_migration
         self.shutdown_requested = False
         self._parse_jobs: Dict[str, _ParseJob] = {}
         self._parse_lock = threading.Lock()
@@ -98,6 +106,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.APP_PING.value: _ping,
         Method.APP_GET_SNAPSHOT.value: _get_snapshot,
         Method.APP_SHUTDOWN.value: _shutdown,
+        Method.APP_RUN_MIGRATION.value: _run_migration,
         Method.SETTINGS_GET.value: _settings_get,
         Method.SETTINGS_UPDATE.value: _settings_update,
         Method.DOWNLOAD_CREATE_TASKS.value: _create_tasks,
@@ -114,8 +123,8 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.HISTORY_LIST.value: _history_list,
         Method.HISTORY_DELETE.value: _history_delete,
         Method.HISTORY_CLEAR.value: _history_clear,
-        Method.UPDATER_CHECK_YTDLP.value: _updater_stub,
-        Method.UPDATER_UPDATE_YTDLP.value: _updater_stub,
+        Method.UPDATER_CHECK_YTDLP.value: _check_ytdlp,
+        Method.UPDATER_UPDATE_YTDLP.value: _update_ytdlp,
     }
     handler = handlers.get(method)
     if handler is None:
@@ -129,13 +138,22 @@ def _ping(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _get_snapshot(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     tasks = [ctx.snapshot_task(t) for t in ctx.manager.get_all_tasks().values()]
-    return {"tasks": tasks, "settings": ctx.config.to_dict()}
+    body: Dict[str, Any] = {"tasks": tasks, "settings": ctx.config.to_dict()}
+    if ctx.last_migration is not None:
+        body["migration"] = ctx.last_migration
+    return body
 
 
 def _shutdown(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     ctx.manager.stop()
     ctx.shutdown_requested = True
     return {"ok": True}
+
+
+def _run_migration(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    result = run_migration(ctx.paths)
+    ctx.last_migration = result
+    return result
 
 
 def _settings_get(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -379,9 +397,19 @@ def _history_clear(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, An
     return {"ok": True}
 
 
-def _updater_stub(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    raise HandlerError(
-        ErrorCode.NOT_IMPLEMENTED,
-        "yt-dlp 独立更新将在阶段 3 实现",
-        retryable=False,
-    )
+def _check_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return ytdlp_updater.check_update(ctx.paths)
+    except Exception as exc:
+        raise HandlerError(ErrorCode.INTERNAL, f"检查 yt-dlp 更新失败: {exc}") from exc
+
+
+def _update_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    download_url = payload.get("downloadUrl") or payload.get("download_url")
+    try:
+        return ytdlp_updater.update_ytdlp(
+            ctx.paths,
+            download_url=str(download_url) if download_url else None,
+        )
+    except Exception as exc:
+        raise HandlerError(ErrorCode.INTERNAL, f"更新 yt-dlp 失败: {exc}") from exc

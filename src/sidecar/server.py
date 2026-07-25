@@ -12,6 +12,7 @@ from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
 from src.sidecar.codec import ProtocolError, decode_line, encode_message
 from src.sidecar.handlers import HandlerContext, HandlerError, dispatch
+from src.sidecar.migration import run_migration
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import (
     APP_NAME,
@@ -39,6 +40,14 @@ class SidecarServer:
     @classmethod
     def from_paths(cls, paths: AppPaths) -> "SidecarServer":
         paths.ensure()
+        # 在打开历史库之前执行迁移（幂等）
+        migration_result = run_migration(paths)
+        logger.info(
+            "启动迁移: status=%s message=%s",
+            migration_result.get("status"),
+            migration_result.get("message"),
+        )
+
         HistoryDB._instance = None
         config = JsonConfig(str(paths.config_path))
         db = HistoryDB(db_path=str(paths.history_db_path))
@@ -52,6 +61,8 @@ class SidecarServer:
             db=db,
             manager=manager,
             emit_event=lambda _name, _payload: None,
+            paths=paths,
+            last_migration=migration_result,
         )
         server = cls(ctx, paths)
         ctx.emit_event = server._write_event

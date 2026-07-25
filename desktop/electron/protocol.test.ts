@@ -11,6 +11,7 @@ describe("protocol constants", () => {
     expect(Methods).toContain("app.getSnapshot");
     expect(Methods).toContain("app.ping");
     expect(Methods).toContain("app.shutdown");
+    expect(Methods).toContain("app.runMigration");
     expect(Methods).toContain("updater.updateYtDlp");
     expect(new Set(Methods).size).toBe(Methods.length);
   });

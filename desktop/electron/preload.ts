@@ -2,6 +2,15 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type { ConnectionState, ProtocolEvent } from "./protocol";
 
+export type AppRoute = "new" | "queue" | "history" | "settings";
+export type NativeThemeMode = "light" | "dark";
+
+export type MigrationResult = {
+  status: "skipped" | "migrated" | "failed";
+  message?: string;
+  details?: Record<string, unknown>;
+};
+
 const api = {
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
@@ -21,6 +30,9 @@ const api = {
   selectDirectory(): Promise<string | null> {
     return ipcRenderer.invoke("app:selectDirectory");
   },
+  getNativeTheme(): Promise<NativeThemeMode> {
+    return ipcRenderer.invoke("app:getNativeTheme");
+  },
   quit(): Promise<void> {
     return ipcRenderer.invoke("app:quit");
   },
@@ -33,6 +45,22 @@ const api = {
     const listener = (_: Electron.IpcRendererEvent, state: ConnectionState) => handler(state);
     ipcRenderer.on("sidecar:state", listener);
     return () => ipcRenderer.removeListener("sidecar:state", listener);
+  },
+  onNavigate(handler: (route: AppRoute) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, route: AppRoute) => handler(route);
+    ipcRenderer.on("app:navigate", listener);
+    return () => ipcRenderer.removeListener("app:navigate", listener);
+  },
+  onNativeTheme(handler: (mode: NativeThemeMode) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, mode: NativeThemeMode) => handler(mode);
+    ipcRenderer.on("app:nativeTheme", listener);
+    return () => ipcRenderer.removeListener("app:nativeTheme", listener);
+  },
+  onMigration(handler: (result: MigrationResult) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, result: MigrationResult) =>
+      handler(result);
+    ipcRenderer.on("app:migration", listener);
+    return () => ipcRenderer.removeListener("app:migration", listener);
   },
 };
 

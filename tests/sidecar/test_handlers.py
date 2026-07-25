@@ -6,14 +6,16 @@ from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
 from src.sidecar.handlers import HandlerContext, HandlerError, dispatch
+from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import ErrorCode, Method
 
 
 def _ctx(tmp_path):
     HistoryDB._instance = None
-    cfg = JsonConfig(str(tmp_path / "config.json"))
-    db = HistoryDB(db_path=str(tmp_path / "history.db"))
-    store = QueueStore(str(tmp_path / "history.db"))
+    paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs").ensure()
+    cfg = JsonConfig(str(paths.config_path))
+    db = HistoryDB(db_path=str(paths.history_db_path))
+    store = QueueStore(str(paths.history_db_path))
     manager = DownloadManager(config=cfg, db=db, queue_store=store)
     events = []
     ctx = HandlerContext(
@@ -21,6 +23,7 @@ def _ctx(tmp_path):
         db=db,
         manager=manager,
         emit_event=lambda name, payload: events.append((name, payload)),
+        paths=paths,
     )
     return ctx, events
 
@@ -62,11 +65,28 @@ def test_shutdown_sets_flag(tmp_path):
     assert ctx.shutdown_requested is True
 
 
-def test_updater_not_implemented(tmp_path):
+def test_run_migration_via_handler(tmp_path):
     ctx, _ = _ctx(tmp_path)
-    with pytest.raises(HandlerError) as exc_info:
-        dispatch(ctx, Method.UPDATER_CHECK_YTDLP.value, {})
-    assert exc_info.value.code == ErrorCode.NOT_IMPLEMENTED
+    result = dispatch(ctx, Method.APP_RUN_MIGRATION.value, {})
+    assert result["status"] in {"skipped", "migrated", "failed"}
+    again = dispatch(ctx, Method.APP_RUN_MIGRATION.value, {})
+    assert again["status"] == "skipped"
+
+
+def test_check_ytdlp_handler(tmp_path, monkeypatch):
+    ctx, _ = _ctx(tmp_path)
+
+    def fake_check(_paths):
+        return {
+            "currentVersion": "1.0.0",
+            "latestVersion": "2.0.0",
+            "updateAvailable": True,
+            "downloadUrl": "https://example.com/yt-dlp",
+        }
+
+    monkeypatch.setattr("src.sidecar.ytdlp_updater.check_update", fake_check)
+    result = dispatch(ctx, Method.UPDATER_CHECK_YTDLP.value, {})
+    assert result["updateAvailable"] is True
 
 
 def test_unknown_method(tmp_path):

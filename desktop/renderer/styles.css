@@ -315,6 +315,20 @@ button.danger {
   gap: 8px;
 }
 
+.settings-section {
+  margin-top: 28px;
+  max-width: 720px;
+}
+
+.settings-section h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.muted.small {
+  font-size: 12px;
+}
+
 .settings-control input {
   flex: 1;
 }

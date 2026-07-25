@@ -25,6 +25,7 @@ export function Shell() {
   const connection = useAppStore((s) => s.connection);
   const route = useAppStore((s) => s.route);
   const setRoute = useAppStore((s) => s.setRoute);
+  const settings = useAppStore((s) => s.settings);
   const compact = useCompact();
 
   useEffect(() => {
@@ -42,6 +43,23 @@ export function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [setRoute]);
+
+  useEffect(() => {
+    return window.api.onNavigate((next) => setRoute(next));
+  }, [setRoute]);
+
+  useEffect(() => {
+    const applySystem = async (mode?: "light" | "dark") => {
+      const themeMode = useAppStore.getState().settings?.theme_mode || "system";
+      if (themeMode !== "system") return;
+      const resolved = mode || (await window.api.getNativeTheme());
+      document.documentElement.setAttribute("data-theme", resolved);
+    };
+    void applySystem();
+    return window.api.onNativeTheme((mode) => {
+      void applySystem(mode);
+    });
+  }, [settings?.theme_mode]);
 
   if (connection === "failed") {
     return (
