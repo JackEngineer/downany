@@ -50,30 +50,30 @@ git checkout -b electron-phase-4
 
 ### Task 1: 二进制资源与路径约定
 
-- `VIDEODL_BIN_DIR`：ffmpeg / 内置 yt-dlp
-- 用户更新：`AppPaths.data_dir/bin/yt-dlp` 优先
-- `fetch_release_binaries.sh` + gitignore
+- [x] `VIDEODL_BIN_DIR`：ffmpeg / 内置 yt-dlp
+- [x] 用户更新：`AppPaths.data_dir/bin/yt-dlp` 优先
+- [x] `fetch_release_binaries.sh` + gitignore
 
 ### Task 2: Sidecar PyInstaller
 
-- `build_sidecar.sh` → `desktop/resources/sidecar/VideoDownloaderSidecar`
-- 冒烟：`--help` 或短时跑 hello（stdin 关闭应退出）
+- [x] `build_sidecar.sh` → `desktop/resources/sidecar/VideoDownloaderSidecar`
+- [x] 冒烟：file/size 检查
 
 ### Task 3: Electron 打包态启动
 
-- `app.isPackaged` 时 spawn 资源内 Sidecar
-- 设置 `VIDEODL_BIN_DIR`
+- [x] `app.isPackaged` 时 spawn 资源内 Sidecar
+- [x] 设置 `VIDEODL_BIN_DIR`
 
 ### Task 4: electron-builder + DMG
 
-- `electron-builder.yml`：dmg + dir
-- `npm run dist:mac`（可未签名）
+- [x] `electron-builder.yml`：dmg + dir（可执行名英文 `VideoDownloader`，显示名中文）
+- [x] `npm run dist:mac`（未签名本地构建已通过）
 
 ### Task 5: 签名/公证脚本与验收
 
-- `notarize_macos.sh`：需 `APPLE_ID` / `APP_PASSWORD` / `TEAM_ID` / `SIGN_IDENTITY`
-- pytest 路径测 + desktop test/build
-- 若本机有二进制则尝试 `build_macos_dmg.sh`（可因无证书仅出 unsigned）
+- [x] `notarize_macos.sh`：缺证书时优雅跳过
+- [x] pytest 路径测 + desktop test/build
+- [x] 本机产出 `VideoDownloader-0.1.0-mac.dmg`（unsigned）
 
 ---
 

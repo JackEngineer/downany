@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from src.sidecar.bin_paths import resolve_bundled_ytdlp_path
 from src.sidecar.paths import AppPaths
 from src.utils.logger import setup_logger
 
@@ -28,10 +29,13 @@ def ytdlp_path(paths: AppPaths) -> Path:
 
 
 def resolve_ytdlp_executable(paths: AppPaths) -> str:
-    """优先用户更新版，否则模块方式（开发态）。"""
+    """优先用户更新版，其次打包保底二进制，否则空（走 Python 模块）。"""
     candidate = ytdlp_path(paths)
     if candidate.is_file() and os.access(candidate, os.X_OK):
         return str(candidate)
+    bundled = resolve_bundled_ytdlp_path()
+    if bundled is not None:
+        return str(bundled)
     return ""
 
 

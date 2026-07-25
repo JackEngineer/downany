@@ -1,7 +1,5 @@
 import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -10,6 +8,7 @@ import {
   ProtocolErrorBody,
   ProtocolEvent,
 } from "./protocol";
+import { resolveSidecarLaunch } from "./paths";
 
 interface PendingRequest {
   resolve: (payload: unknown) => void;
@@ -111,17 +110,14 @@ export class SidecarProcess extends EventEmitter {
   }
 
   private async spawnAndHandshake(): Promise<void> {
-    const python =
-      this.opts.pythonPath ||
-      process.env.VIDEODL_PYTHON ||
-      path.join(this.opts.repoRoot, "venv", "bin", "python");
-    const env = { ...process.env };
-    if (this.opts.dataDir) {
-      env.VIDEODL_DATA_DIR = this.opts.dataDir;
-    }
-    this.proc = spawn(python, ["-m", "src.sidecar"], {
-      cwd: this.opts.repoRoot,
-      env,
+    const launch = resolveSidecarLaunch(__dirname, {
+      pythonPath: this.opts.pythonPath,
+      dataDir: this.opts.dataDir,
+      repoRoot: this.opts.repoRoot,
+    });
+    this.proc = spawn(launch.command, launch.args, {
+      cwd: launch.cwd,
+      env: launch.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -146,7 +142,7 @@ export class SidecarProcess extends EventEmitter {
     this.write({
       protocolVersion: PROTOCOL_VERSION,
       type: "hello",
-      payload: { app: "electron", appVersion: "0.1.0-phase1" },
+      payload: { app: "electron", appVersion: "0.1.0-phase4" },
       timestamp: new Date().toISOString(),
     });
   }
@@ -285,16 +281,4 @@ export class SidecarProcess extends EventEmitter {
   }
 }
 
-export function resolveRepoRoot(fromDir: string): string {
-  // dist-electron -> desktop -> repo
-  const candidate = path.resolve(fromDir, "..", "..");
-  if (fs.existsSync(path.join(candidate, "src", "sidecar"))) {
-    return candidate;
-  }
-  // electron source during some setups
-  const alt = path.resolve(fromDir, "..");
-  if (fs.existsSync(path.join(alt, "src", "sidecar"))) {
-    return alt;
-  }
-  return candidate;
-}
+export { resolveRepoRoot } from "./paths";

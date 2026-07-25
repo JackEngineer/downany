@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 from typing import Callable, Optional, Dict, Any
 
 import yt_dlp
 
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
+from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.utils.logger import setup_logger
 
 logger = setup_logger("CoreDownloader")
@@ -67,13 +69,11 @@ class Downloader:
             DownloadCancelled: 用户取消/暂停
             DownloadError: 其它下载失败
         """
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        local_ffmpeg = os.path.join(project_root, "bin", "ffmpeg")
-
-        ffmpeg_location = None
-        if os.path.exists(local_ffmpeg) and os.access(local_ffmpeg, os.X_OK):
-            ffmpeg_location = local_ffmpeg
-            logger.info(f"使用本地 FFmpeg: {local_ffmpeg}")
+        project_root = Path(__file__).resolve().parents[2]
+        ffmpeg_path = resolve_ffmpeg_path(project_root=project_root)
+        ffmpeg_location = str(ffmpeg_path) if ffmpeg_path is not None else None
+        if ffmpeg_location:
+            logger.info(f"使用本地 FFmpeg: {ffmpeg_location}")
 
         ydl_opts = {
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",

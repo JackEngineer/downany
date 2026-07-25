@@ -22,3 +22,8 @@ desktop/node_modules/
 desktop/dist/
 desktop/dist-electron/
 desktop/out/
+desktop/release/
+desktop/resources/bin/**
+!desktop/resources/bin/.gitkeep
+desktop/resources/sidecar/**
+!desktop/resources/sidecar/.gitkeep

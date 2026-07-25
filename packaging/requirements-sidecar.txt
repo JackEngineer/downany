@@ -1,0 +1,3 @@
+# Sidecar 运行时（无 Qt）
+yt-dlp==2026.2.4
+pyinstaller>=6.3.0
