@@ -5,7 +5,9 @@
   "scripts": {
     "start": "bash scripts/start_app.sh",
     "desktop": "npm --prefix desktop run dev",
-    "desktop:test": "npm --prefix desktop test"
+    "desktop:test": "npm --prefix desktop test",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:dist": "bash scripts/build_macos_dmg.sh"
   },
   "author": "Jack Lee",
   "license": "MIT"
