@@ -22,7 +22,13 @@ class JsonConfig:
         self._load_or_init()
 
     def _default_download_dir(self) -> str:
-        return os.path.join(os.path.expanduser("~"), "Downloads")
+        return os.path.join(os.path.expanduser("~"), "Downloads", "VideoDownloader")
+
+    def _sanitize_download_dir(self, path: str) -> str:
+        text = str(path or "").strip() or self._default_download_dir()
+        if "TraeDownloader" in text:
+            text = text.replace("TraeDownloader", "VideoDownloader")
+        return text
 
     def _defaults(self) -> Dict[str, Any]:
         return {
@@ -44,7 +50,13 @@ class JsonConfig:
                 loaded = {}
             merged = self._defaults()
             merged.update(loaded)
+            merged["download_dir"] = self._sanitize_download_dir(
+                str(merged.get("download_dir") or "")
+            )
             self._data = merged
+            # 若从旧 Trae 路径纠正过来，落盘一次
+            if loaded.get("download_dir") != self._data["download_dir"]:
+                self._save()
         else:
             self._data = self._defaults()
             self._save()

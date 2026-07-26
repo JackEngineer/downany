@@ -52,6 +52,10 @@ def _map_plist_to_config(plist: Dict[str, Any]) -> Dict[str, Any]:
     for old_key, new_key in key_map.items():
         if old_key in plist:
             mapped[new_key] = plist[old_key]
+    # 去掉旧品牌目录名
+    download_dir = mapped.get("download_dir")
+    if isinstance(download_dir, str) and "TraeDownloader" in download_dir:
+        mapped["download_dir"] = download_dir.replace("TraeDownloader", "VideoDownloader")
     return mapped
 
 

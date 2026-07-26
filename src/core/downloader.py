@@ -11,6 +11,24 @@ from src.utils.logger import setup_logger
 logger = setup_logger("CoreDownloader")
 
 
+class _YtDlpQuietLogger:
+    """把 yt-dlp 诊断输出转到 stderr logger，避免污染 Sidecar stdout。"""
+
+    def debug(self, msg: str) -> None:
+        if msg.startswith("[debug] "):
+            return
+        logger.debug("%s", msg)
+
+    def info(self, msg: str) -> None:
+        logger.info("%s", msg)
+
+    def warning(self, msg: str) -> None:
+        logger.warning("%s", msg)
+
+    def error(self, msg: str) -> None:
+        logger.error("%s", msg)
+
+
 class DownloadCancelled(Exception):
     """用户取消或暂停导致的下载中断。"""
 
@@ -81,6 +99,11 @@ class Downloader:
             "progress_hooks": [self._progress_hook],
             "noplaylist": True,
             "no_color": True,
+            # Sidecar 协议占用 stdout：禁止进度条与常规输出写到 stdout
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "logger": _YtDlpQuietLogger(),
             "http_headers": dict(DEFAULT_HTTP_HEADERS),
         }
 

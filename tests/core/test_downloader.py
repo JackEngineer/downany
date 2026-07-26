@@ -22,6 +22,11 @@ def test_download_success_returns_filename(tmp_path):
         path = downloader.download("https://example.com/v")
 
     assert path.endswith("video.mp4")
+    opts = mock_ydl_cls.call_args[0][0]
+    assert opts["quiet"] is True
+    assert opts["noprogress"] is True
+    assert opts["no_warnings"] is True
+    assert opts["logger"] is not None
 
 
 def test_download_error_is_reraised(tmp_path):
