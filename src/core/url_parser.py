@@ -9,6 +9,11 @@ from typing import List, Optional
 
 from src.core.download_task import VideoInfo
 from src.core.platform_detector import PlatformDetector
+from src.core.twitter_fallback import (
+    is_twitter_url,
+    normalize_twitter_url,
+    resolve_twitter_media,
+)
 from src.utils.logger import setup_logger
 
 logger = setup_logger("UrlParser")
@@ -53,7 +58,8 @@ class ParseSession:
         proxy: Optional[str] = None,
         timeout: float = DEFAULT_PARSE_TIMEOUT,
     ):
-        self.url = url
+        cleaned = (url or "").strip()
+        self.url = normalize_twitter_url(cleaned) if is_twitter_url(cleaned) else cleaned
         self.proxy = proxy
         self.timeout = timeout
         self._lock = threading.Lock()
@@ -68,6 +74,39 @@ class ParseSession:
 
     def run(self) -> VideoInfo:
         """阻塞执行解析。由调用方决定放在哪个线程。"""
+        try:
+            return self._run_ytdlp()
+        except ParseCancelled:
+            raise
+        except ParseTimeout:
+            raise
+        except ParseFailed as primary:
+            if not is_twitter_url(self.url):
+                raise
+            if self._cancelled:
+                raise ParseCancelled(self.url)
+            try:
+                info, _direct = resolve_twitter_media(self.url, proxy=self.proxy)
+                logger.info("Twitter 解析改用 FxTwitter 回退: %s", self.url)
+                return info
+            except Exception as fallback_exc:
+                logger.warning(
+                    "Twitter FxTwitter 回退失败: %s (%s)",
+                    fallback_exc,
+                    primary,
+                )
+                raise ParseFailed(
+                    self._friendly_twitter_error(primary, fallback_exc)
+                ) from fallback_exc
+
+    def _friendly_twitter_error(self, primary: Exception, fallback: Exception) -> str:
+        text = f"{primary}; 回退亦失败: {fallback}"
+        lower = text.lower()
+        if "unavailable" in lower or "no video" in lower or "没有可下载视频" in text:
+            return "该推文没有可下载视频（可能已删除、受限，或需登录可见）"
+        return text
+
+    def _run_ytdlp(self) -> VideoInfo:
         with self._lock:
             if self._cancelled:
                 raise ParseCancelled(self.url)
@@ -96,6 +135,8 @@ class ParseSession:
             info = json.loads(stdout)
         except json.JSONDecodeError as exc:
             raise ParseFailed(f"解析输出无法读取: {exc}") from exc
+        if not isinstance(info, dict):
+            raise ParseFailed("解析结果为空")
         return self._to_video_info(info)
 
     def _to_video_info(self, info: dict) -> VideoInfo:

@@ -109,3 +109,39 @@ def test_nonzero_exit_raises_parse_failed(monkeypatch):
     with pytest.raises(ParseFailed) as exc_info:
         session.run()
     assert "Unsupported URL" in str(exc_info.value)
+
+
+def test_twitter_parse_falls_back_to_fxtwitter(monkeypatch):
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None: [
+            sys.executable,
+            "-c",
+            "import sys; sys.stderr.write('ERROR: [twitter] Video #1 is unavailable'); sys.exit(1)",
+        ],
+    )
+
+    from src.core.download_task import VideoInfo
+
+    def fake_resolve(url, proxy=None):
+        return (
+            VideoInfo(
+                url=url,
+                title="回退标题",
+                duration=12,
+                thumbnail_url="https://example.com/t.jpg",
+                uploader="u",
+                platform=Platform.TWITTER,
+            ),
+            "https://video.twimg.com/x.mp4",
+        )
+
+    monkeypatch.setattr(url_parser, "resolve_twitter_media", fake_resolve)
+    session = ParseSession(
+        "https://x.com/LillianB47947/status/2057757739775033790/video/1",
+        timeout=10,
+    )
+    info = session.run()
+    assert info.title == "回退标题"
+    assert info.platform == Platform.TWITTER

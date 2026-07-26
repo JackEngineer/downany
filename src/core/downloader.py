@@ -5,6 +5,7 @@ from typing import Callable, Optional, Dict, Any
 import yt_dlp
 
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
+from src.core.twitter_fallback import is_twitter_url, resolve_twitter_media
 from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.utils.logger import setup_logger
 
@@ -117,26 +118,43 @@ class Downloader:
         self.last_filename = ""
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-
+            self._download_with_ydl(url, ydl_opts)
             if self.finished_callback:
                 self.finished_callback()
-
             return self.last_filename
         except DownloadCancelled:
             raise
         except Exception as e:
+            if is_twitter_url(url):
+                try:
+                    _info, direct = resolve_twitter_media(url)
+                    logger.info("Twitter 下载改用 FxTwitter 直链")
+                    # 直链用简单格式，避免合并策略失败
+                    fallback_opts = dict(ydl_opts)
+                    fallback_opts["format"] = "best"
+                    self._download_with_ydl(direct, fallback_opts)
+                    if self.finished_callback:
+                        self.finished_callback()
+                    return self.last_filename
+                except DownloadCancelled:
+                    raise
+                except Exception as fallback_exc:
+                    logger.error("Twitter FxTwitter 下载回退失败: %s", fallback_exc)
+                    e = fallback_exc
+
             error_msg = f"下载出错: {str(e)}"
             logger.error(error_msg)
             if self.error_callback:
                 self.error_callback(str(e))
             if isinstance(e, DownloadCancelled):
                 raise
-            # yt-dlp 可能把 hook 里抛出的异常包一层
             cause = e.__cause__ or e.__context__
             if isinstance(e, DownloadCancelled) or isinstance(cause, DownloadCancelled):
                 raise DownloadCancelled(str(e)) from e
             if "任务已取消" in str(e) or "任务已暂停" in str(e):
                 raise DownloadCancelled(str(e)) from e
             raise DownloadError(str(e)) from e
+
+    def _download_with_ydl(self, url: str, ydl_opts: Dict[str, Any]) -> None:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
