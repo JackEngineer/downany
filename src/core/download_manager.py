@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import os
 import queue
 import re
 import threading
@@ -13,6 +14,7 @@ from typing import Dict, List, Optional, Set
 from src.core.download_task import DownloadTask, TaskSnapshot, TaskStatus
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
+from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.interfaces import DownloadConfig, HistoryWriter
 from src.core.quality import build_format_selector
 from src.core.video_info_extractor import VideoInfoExtractor
@@ -21,6 +23,20 @@ from src.data.queue_store import QueueStore
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadManager")
+
+_PLACEHOLDER_TITLES = {"正在获取信息...", "未命名视频", ""}
+
+_MEDIA_URL_RE = re.compile(
+    r"\.(m3u8|mpd|mp4|webm|mkv|mov|m4v|mp3|m4a|aac|flac|ogg|wav)(?:[?#]|$)",
+    re.IGNORECASE,
+)
+
+
+def sanitize_filename(name: str, fallback: str = "video") -> str:
+    """把任务标题转成安全文件名（去掉路径与保留字符，限长）。"""
+    cleaned = re.sub(r'[\\/:*?"<>|]', " ", name).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned[:80] or fallback
 
 
 class DownloadManager:
@@ -259,13 +275,13 @@ class DownloadManager:
             self.events.emit("task_started", {"task_id": task.id})
 
             # 补齐元数据（失败不阻断下载）
-            if not task.video_info.title or task.video_info.title in (
-                "正在获取信息...",
-                "未命名视频",
-                "",
-            ):
+            if task.video_info.title in _PLACEHOLDER_TITLES:
                 proxy = task.options.proxy or None
-                info = VideoInfoExtractor.extract(task.video_info.url, proxy=proxy)
+                info = VideoInfoExtractor.extract(
+                    task.video_info.url,
+                    proxy=proxy,
+                    http_headers=task.options.http_headers,
+                )
                 if info:
                     with self._lock:
                         task.video_info = info
@@ -332,6 +348,12 @@ class DownloadManager:
             if format_selector:
                 opts["format"] = format_selector
 
+            # 直链媒体：generic extractor 的 format 元数据不可靠
+            # （X 的 HLS 清单报 "Requested format is not available"），
+            # 改用宽松选择器；master 清单取最高码率，DASH 分离流合并
+            if _MEDIA_URL_RE.search(task.video_info.url) and not task.options.format_id:
+                opts["format"] = "bestvideo+bestaudio/best"
+
             if task.options.speed_limit and task.options.speed_limit > 0:
                 opts["ratelimit"] = task.options.speed_limit
 
@@ -342,6 +364,24 @@ class DownloadManager:
             if task.options.download_subtitles:
                 opts["writesubtitles"] = True
                 opts["writeautomaticsub"] = True
+
+            if task.options.http_headers:
+                opts["http_headers"] = {
+                    **DEFAULT_HTTP_HEADERS,
+                    **task.options.http_headers,
+                }
+
+            # 直链任务：yt-dlp generic extractor 的 title 是 URL 文件名（hash/
+            # manifest/index），输出文件无法分辨；用任务标题固定输出文件名。
+            # 页面链接任务不设，让 yt-dlp 用其解析到的真实标题。
+            if (
+                task.video_info.title not in _PLACEHOLDER_TITLES
+                and _MEDIA_URL_RE.search(task.video_info.url)
+            ):
+                opts["outtmpl"] = os.path.join(
+                    task.options.output_path,
+                    f"{sanitize_filename(task.video_info.title)}.%(ext)s",
+                )
 
             file_path = downloader.download(task.video_info.url, opts)
 

@@ -149,3 +149,76 @@ def test_two_managers_are_independent_instances():
     a = DownloadManager(config=MagicMock(), db=MagicMock())
     b = DownloadManager(config=MagicMock(), db=MagicMock())
     assert a is not b
+
+
+def test_http_headers_merged_into_ydl_opts(manager):
+    from src.core.http_headers import DEFAULT_HTTP_HEADERS
+
+    task = _make_task(title="with-headers")
+    task.options.http_headers = {
+        "Referer": "https://example.com/watch",
+        "Cookie": "sid=1",
+    }
+    captured = {}
+
+    def fake_download(url, opts=None):
+        captured["opts"] = opts
+        return "/tmp/done.mp4"
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.download.side_effect = fake_download
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    headers = captured["opts"]["http_headers"]
+    assert headers["Referer"] == "https://example.com/watch"
+    assert headers["Cookie"] == "sid=1"
+    assert headers["User-Agent"] == DEFAULT_HTTP_HEADERS["User-Agent"]
+
+
+def test_direct_media_url_uses_task_title_in_outtmpl(manager):
+    task = _make_task(url="https://cdn.example/4d0c6728-abcd.m3u8", title="我的视频")
+    task.options.http_headers = {"Referer": "https://example.com/"}
+    captured = {}
+
+    def fake_download(url, opts=None):
+        captured["opts"] = opts
+        return "/tmp/done.mp4"
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.download.side_effect = fake_download
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    outtmpl = captured["opts"]["outtmpl"]
+    assert "我的视频.%(ext)s" in outtmpl
+    assert "4d0c6728" not in outtmpl
+
+
+def test_page_url_task_keeps_ytdlp_title(manager):
+    """页面链接任务不固定 outtmpl，交给 yt-dlp 用解析到的真实标题。"""
+    task = _make_task(url="https://x.com/user/status/123", title="页面标题")
+    captured = {}
+
+    def fake_download(url, opts=None):
+        captured["opts"] = opts
+        return "/tmp/done.mp4"
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.download.side_effect = fake_download
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    assert "outtmpl" not in captured["opts"]
