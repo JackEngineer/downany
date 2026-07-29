@@ -25,6 +25,7 @@ protocols:
     schemes:
       - videodl
 mac:
+  icon: build/icon.png
   category: public.app-category.utilities
   target:
     - dmg

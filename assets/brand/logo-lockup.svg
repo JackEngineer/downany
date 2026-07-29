@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 360" role="img" aria-labelledby="title desc">
+  <title id="title">视频下载器横版 Logo</title>
+  <desc id="desc">视频下载器应用图标与中英文产品名称的横向组合。</desc>
+  <rect x="28" y="28" width="304" height="304" rx="72" fill="#101827"/>
+  <path
+    fill="#397BFF"
+    fill-rule="evenodd"
+    d="M150 72c-8.8 0-16 7.2-16 16v86h-34c-14.2 0-21.4 17.2-11.3 27.3l76 76.9a16 16 0 0 0 22.6 0l76-76.9c10.1-10.1 2.9-27.3-11.3-27.3h-34V88c0-8.8-7.2-16-16-16h-52Zm25 39c-5.5 0-10 4.5-10 10v40.5c0 7.8 8.5 12.6 15.1 8.6l35.3-21.1a10 10 0 0 0 0-17.2l-35.3-21.1a10 10 0 0 0-5.1-1.4Z"
+  />
+  <path
+    fill="#42E6C6"
+    d="M103 234c7.2 0 13 5.8 13 13v12c0 16 13 29 29 29h70c16 0 29-13 29-29v-12c0-7.2 5.8-13 13-13s13 5.8 13 13v12c0 30.4-24.6 55-55 55h-70c-30.4 0-55-24.6-55-55v-12c0-7.2 5.8-13 13-13Z"
+  />
+  <text
+    x="398"
+    y="180"
+    fill="#101827"
+    font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    font-size="92"
+    font-weight="700"
+    letter-spacing="2"
+  >视频下载器</text>
+  <text
+    x="404"
+    y="246"
+    fill="#397BFF"
+    font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+    font-size="32"
+    font-weight="650"
+    letter-spacing="7"
+  >VIDEODOWNLOADER</text>
+</svg>
