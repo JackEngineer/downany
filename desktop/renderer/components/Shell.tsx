@@ -49,6 +49,28 @@ export function Shell() {
   }, [setRoute]);
 
   useEffect(() => {
+    const pushToast = useAppStore.getState().pushToast;
+    return window.api.onExternalEnqueue((payload) => {
+      if (payload.error) {
+        pushToast({
+          kind: "error",
+          title: "外部入队失败",
+          detail: payload.error,
+        });
+        return;
+      }
+      const n = payload.count;
+      pushToast({
+        kind: "success",
+        title: n === 1 ? "已从浏览器加入 1 个任务" : `已从浏览器加入 ${n} 个任务`,
+      });
+      void window.api.request("app.getSnapshot").then((snap) => {
+        useAppStore.getState().hydrateSnapshot(snap as never);
+      });
+    });
+  }, []);
+
+  useEffect(() => {
     const applySystem = async (mode?: "light" | "dark") => {
       const themeMode = useAppStore.getState().settings?.theme_mode || "system";
       if (themeMode !== "system") return;

@@ -20,6 +20,10 @@ extraResources:
     filter:
       - "**/*"
       - "!**/.gitkeep"
+protocols:
+  - name: VideoDownloader
+    schemes:
+      - videodl
 mac:
   category: public.app-category.utilities
   target:

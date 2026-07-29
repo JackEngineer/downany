@@ -10,6 +10,7 @@ macOS 视频下载应用。当前主线为 **Electron + Python Sidecar**（`desk
 - **历史记录**：SQLite 存储，可检索与重新下载
 - **设置**：下载目录、并发、限速、代理、画质、字幕、主题、yt-dlp 更新
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
+- **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
 
 > 站内搜索 / 预览等能力仍在 PyQt 线；Electron 首版聚焦下载命令中心。
 
@@ -42,6 +43,16 @@ python -m src.sidecar
 ```
 
 产物默认在 `desktop/release/`。
+
+## Chrome 扩展（一键入队）
+
+最快：
+
+```bash
+./scripts/setup_chrome_extension.sh
+```
+
+会打开已预装扩展的独立 Chrome 窗口，或重启主 Chrome 加载扩展；点工具栏图标可查看嗅探到的媒体并勾选下载。细节见 [browser-extension/README.md](browser-extension/README.md)。
 
 ## PyQt 线（仍可运行）
 

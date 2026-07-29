@@ -25,6 +25,7 @@ def _make_task(status=TaskStatus.PENDING):
             output_path="/tmp/dl",
             speed_limit=1024,
             proxy="http://127.0.0.1:7890",
+            http_headers={"Referer": "https://example.com/", "Cookie": "a=1"},
         ),
         status=status,
         progress=33.0,
@@ -50,6 +51,10 @@ def test_upsert_and_load_roundtrip(tmp_path):
     assert got.options.output_path == "/tmp/dl"
     assert got.options.speed_limit == 1024
     assert got.options.proxy == "http://127.0.0.1:7890"
+    assert got.options.http_headers == {
+        "Referer": "https://example.com/",
+        "Cookie": "a=1",
+    }
     assert got.status == TaskStatus.PENDING
     assert got.progress == 33.0
     assert got.downloaded_bytes == 100

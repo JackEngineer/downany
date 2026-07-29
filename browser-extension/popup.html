@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>视频下载器</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <span class="brand">视频下载器</span>
+      <span class="count" id="count"></span>
+    </header>
+
+    <section class="page-meta" id="pageMeta">
+      <div class="thumb" id="thumb" aria-hidden="true"></div>
+      <div class="meta">
+        <h1 class="title" id="title">加载中…</h1>
+        <p class="url" id="url"></p>
+      </div>
+    </section>
+
+    <div class="toolbar" id="toolbar" hidden>
+      <button type="button" class="linkish" id="selectAll">全选</button>
+      <button type="button" class="linkish" id="selectNone">清空</button>
+    </div>
+
+    <ul class="media-list" id="mediaList" hidden></ul>
+
+    <p class="empty" id="empty" hidden>
+      未检测到媒体。请先在页面中播放视频，再打开本弹窗。
+    </p>
+
+    <p class="status" id="status" hidden></p>
+
+    <div class="actions">
+      <button type="button" class="primary" id="enqueue" disabled>下载选中</button>
+      <button type="button" class="secondary" id="enqueuePage" disabled>
+        仅发送页面链接
+      </button>
+    </div>
+
+    <p class="hint">也可右键页面 / 链接 / 媒体直接发送</p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

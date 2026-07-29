@@ -53,6 +53,7 @@ class DownloadOptions:
     output_path: str = "downloads"  # 输出路径
     speed_limit: Optional[int] = None  # 速度限制 (bytes/s)
     proxy: Optional[str] = None  # 代理地址
+    http_headers: Optional[Dict[str, str]] = None  # 额外 HTTP 头（Referer/Cookie 等）
 
 
 @dataclass(frozen=True)

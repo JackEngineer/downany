@@ -1,0 +1,306 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --surface: #1a2332;
+  --border: #243044;
+  --text: #e7e9ea;
+  --muted: #8b98a5;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --danger: #f87171;
+  --ok: #4ade80;
+  --badge-hls: #f59e0b;
+  --badge-dash: #a78bfa;
+  --badge-file: #38bdf8;
+  --badge-audio: #34d399;
+  --badge-media: #94a3b8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 360px;
+  min-height: 220px;
+  max-height: 520px;
+  padding: 14px;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.brand {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.page-meta {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.thumb {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 40px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #243044, #334155);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border);
+}
+
+.thumb.has-icon {
+  background-color: var(--surface);
+  background-size: 24px 24px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.url {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.linkish {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.linkish:hover {
+  text-decoration: underline;
+}
+
+.media-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.media-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.media-item:last-child {
+  border-bottom: 0;
+}
+
+.media-item:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.media-item input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.media-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.media-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0f1419;
+  text-transform: uppercase;
+}
+
+.badge.hls {
+  background: var(--badge-hls);
+}
+
+.badge.dash {
+  background: var(--badge-dash);
+}
+
+.badge.file {
+  background: var(--badge-file);
+}
+
+.badge.audio {
+  background: var(--badge-audio);
+}
+
+.badge.media {
+  background: var(--badge-media);
+}
+
+.badge.page {
+  background: var(--ok);
+}
+
+.badge.playing {
+  background: #22d3ee;
+  color: #0f1419;
+}
+
+.secondary.recommended {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.media-size {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.media-name {
+  margin: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-host {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0 0 10px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  white-space: pre-line;
+}
+
+.status {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+.status.ok {
+  color: var(--ok);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}

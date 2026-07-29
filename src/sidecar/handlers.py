@@ -7,7 +7,7 @@ from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
 from src.core.download_manager import DownloadManager
-from src.core.download_task import DownloadTask, TaskStatus, VideoInfo
+from src.core.download_task import DownloadOptions, DownloadTask, TaskStatus, VideoInfo
 from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, ParseTimeout
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
@@ -175,22 +175,45 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         raise HandlerError(ErrorCode.INVALID_PARAMS, "urls 必须是非空数组")
     options = ctx.config.build_download_options()
     task_ids: List[str] = []
+    items = payload.get("items")
     for raw in urls:
         url = str(raw or "").strip()
         if not url:
             continue
         title = "未命名视频"
-        items = payload.get("items")
-        # optional richer items: [{url, title, ...}]
-        task = DownloadTask(
-            video_info=VideoInfo(url=url, title=title),
-            options=options,
-        )
+        http_headers = None
+        # optional richer items: [{url, title, headers, ...}]
+        task_options = options
         if isinstance(items, list):
             for item in items:
-                if isinstance(item, dict) and item.get("url") == url and item.get("title"):
-                    task.video_info.title = str(item["title"])
-                    break
+                if not isinstance(item, dict) or item.get("url") != url:
+                    continue
+                if item.get("title"):
+                    title = str(item["title"])
+                raw_headers = item.get("headers")
+                if isinstance(raw_headers, dict) and raw_headers:
+                    http_headers = {
+                        str(k): str(v)
+                        for k, v in raw_headers.items()
+                        if k and v is not None and str(v)
+                    }
+                    if http_headers:
+                        task_options = DownloadOptions(
+                            format_id=options.format_id,
+                            quality=options.quality,
+                            download_subtitles=options.download_subtitles,
+                            output_path=options.output_path,
+                            speed_limit=options.speed_limit,
+                            proxy=options.proxy,
+                            http_headers=http_headers,
+                        )
+                    else:
+                        http_headers = None
+                break
+        task = DownloadTask(
+            video_info=VideoInfo(url=url, title=title),
+            options=task_options,
+        )
         ctx.manager.add_task(task)
         task_ids.append(task.id)
     if not task_ids:

@@ -73,6 +73,7 @@ class QueueStore:
             "output_path": task.options.output_path,
             "speed_limit": task.options.speed_limit,
             "proxy": task.options.proxy,
+            "http_headers": task.options.http_headers,
         }
         with self._get_connection() as conn:
             conn.execute(
@@ -156,6 +157,9 @@ class QueueStore:
                 output_path=opts.get("output_path", "downloads"),
                 speed_limit=opts.get("speed_limit"),
                 proxy=opts.get("proxy"),
+                http_headers=opts.get("http_headers")
+                if isinstance(opts.get("http_headers"), dict)
+                else None,
             ),
             status=TaskStatus(row["status"]),
             progress=row["progress"],

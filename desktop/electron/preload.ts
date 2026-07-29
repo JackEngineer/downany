@@ -11,6 +11,12 @@ export type MigrationResult = {
   details?: Record<string, unknown>;
 };
 
+export type ExternalEnqueuePayload = {
+  count: number;
+  urls: string[];
+  error?: string;
+};
+
 const api = {
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
@@ -61,6 +67,12 @@ const api = {
       handler(result);
     ipcRenderer.on("app:migration", listener);
     return () => ipcRenderer.removeListener("app:migration", listener);
+  },
+  onExternalEnqueue(handler: (payload: ExternalEnqueuePayload) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, payload: ExternalEnqueuePayload) =>
+      handler(payload);
+    ipcRenderer.on("app:externalEnqueue", listener);
+    return () => ipcRenderer.removeListener("app:externalEnqueue", listener);
   },
 };
 

@@ -59,6 +59,34 @@ def test_get_snapshot_and_create_tasks(tmp_path):
     assert "settings" in snap
 
 
+def test_create_tasks_with_headers(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {
+            "urls": ["https://cdn.example/v.m3u8"],
+            "items": [
+                {
+                    "url": "https://cdn.example/v.m3u8",
+                    "title": "带请求头的视频",
+                    "headers": {
+                        "Referer": "https://example.com/watch",
+                        "Cookie": "sid=abc",
+                    },
+                }
+            ],
+        },
+    )
+    assert len(result["taskIds"]) == 1
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task is not None
+    assert task.video_info.title == "带请求头的视频"
+    assert task.options.http_headers == {
+        "Referer": "https://example.com/watch",
+        "Cookie": "sid=abc",
+    }
+
 def test_shutdown_sets_flag(tmp_path):
     ctx, _ = _ctx(tmp_path)
     assert dispatch(ctx, Method.APP_SHUTDOWN.value, {}) == {"ok": True}

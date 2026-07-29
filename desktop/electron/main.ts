@@ -10,6 +10,20 @@ import {
 } from "electron";
 import * as path from "node:path";
 
+import type * as http from "node:http";
+
+import {
+  BRIDGE_HOST,
+  BRIDGE_PORT,
+  startBridgeServer,
+  type BridgeEnqueueItem,
+  type BridgeEnqueueResult,
+} from "./bridgeServer";
+import {
+  PROTOCOL_SCHEME,
+  extractUrlsFromArgv,
+  parseDeepLinkCandidate,
+} from "./deepLink";
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
@@ -22,18 +36,171 @@ import {
 let mainWindow: BrowserWindow | null = null;
 let sidecar: SidecarProcess | null = null;
 let saveStateTimer: NodeJS.Timeout | null = null;
+let sidecarReady = false;
+let bridgeServer: http.Server | null = null;
+const pendingEnqueueItems: BridgeEnqueueItem[] = [];
+
+function focusMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+}
+
+function registerProtocolClient(): void {
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
+        path.resolve(process.argv[1]),
+      ]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
+  }
+}
+
+function dedupeItems(items: BridgeEnqueueItem[]): BridgeEnqueueItem[] {
+  const unique: BridgeEnqueueItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const url = (item.url || "").trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    unique.push({
+      url,
+      ...(item.title ? { title: item.title } : {}),
+      ...(item.headers ? { headers: item.headers } : {}),
+    });
+  }
+  return unique;
+}
+
+function urlsFromItems(items: BridgeEnqueueItem[]): string[] {
+  return items.map((item) => item.url);
+}
+
+function enqueueFromExternal(urls: string[]): void {
+  const items = dedupeItems(urls.map((url) => ({ url })));
+  if (items.length === 0) return;
+
+  if (!sidecarReady || !sidecar) {
+    for (const item of items) {
+      if (!pendingEnqueueItems.some((p) => p.url === item.url)) {
+        pendingEnqueueItems.push(item);
+      }
+    }
+    return;
+  }
+
+  void flushEnqueueItems(items);
+}
+
+async function flushEnqueueItems(
+  items: BridgeEnqueueItem[],
+): Promise<BridgeEnqueueResult> {
+  if (!sidecar || items.length === 0) {
+    return { ok: false, error: "下载服务未就绪" };
+  }
+  focusMainWindow();
+  const urls = urlsFromItems(items);
+  try {
+    await sidecar.request("download.createTasks", {
+      urls,
+      items: items.map((item) => ({
+        url: item.url,
+        title: item.title || undefined,
+        headers: item.headers || undefined,
+      })),
+    });
+    mainWindow?.webContents.send("app:navigate", "queue");
+    mainWindow?.webContents.send("app:externalEnqueue", {
+      count: items.length,
+      urls,
+    });
+    void refreshDockFromSnapshot();
+    return { ok: true, count: items.length };
+  } catch (err) {
+    process.stderr.write(`外部入队失败: ${String(err)}\n`);
+    mainWindow?.webContents.send("app:externalEnqueue", {
+      count: 0,
+      urls,
+      error: String(err),
+    });
+    return { ok: false, error: String(err), count: 0 };
+  }
+}
+
+async function enqueueFromBridge(
+  items: BridgeEnqueueItem[],
+): Promise<BridgeEnqueueResult> {
+  const unique = dedupeItems(items);
+  if (unique.length === 0) {
+    return { ok: false, error: "没有有效的 URL" };
+  }
+  if (!sidecarReady || !sidecar) {
+    for (const item of unique) {
+      if (!pendingEnqueueItems.some((p) => p.url === item.url)) {
+        pendingEnqueueItems.push(item);
+      }
+    }
+    focusMainWindow();
+    return { ok: true, count: unique.length };
+  }
+  return flushEnqueueItems(unique);
+}
+
+async function flushPendingEnqueue(): Promise<void> {
+  if (pendingEnqueueItems.length === 0) return;
+  const items = pendingEnqueueItems.splice(0, pendingEnqueueItems.length);
+  await flushEnqueueItems(items);
+}
+
+function startBridge(): void {
+  if (bridgeServer) return;
+  try {
+    bridgeServer = startBridgeServer({ enqueue: enqueueFromBridge });
+    process.stderr.write(
+      `扩展桥已监听 http://${BRIDGE_HOST}:${BRIDGE_PORT}/enqueue\n`,
+    );
+  } catch (err) {
+    process.stderr.write(`扩展桥启动失败: ${String(err)}\n`);
+  }
+}
+
+function stopBridge(): void {
+  if (!bridgeServer) return;
+  bridgeServer.close();
+  bridgeServer = null;
+}
+
+function handleDeepLinkRaw(raw: string): void {
+  const url = parseDeepLinkCandidate(raw);
+  if (url) enqueueFromExternal([url]);
+}
+
+function handleArgv(argv: readonly string[]): void {
+  const urls = extractUrlsFromArgv(argv);
+  if (urls.length > 0) enqueueFromExternal(urls);
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+  app.on("second-instance", (_event, commandLine) => {
+    focusMainWindow();
+    handleArgv(commandLine);
   });
 }
+
+// macOS：协议打开（可早于 ready）
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  handleDeepLinkRaw(url);
+});
+
+registerProtocolClient();
+// 冷启动：部分平台把协议 URL 放在 argv
+handleArgv(process.argv);
 
 function scheduleSaveWindowState(): void {
   if (!mainWindow) return;
@@ -175,7 +342,9 @@ async function startSidecar(): Promise<void> {
     });
   });
   await sidecar.start();
+  sidecarReady = true;
   void refreshDockFromSnapshot();
+  await flushPendingEnqueue();
 
   // 显式再拉一次迁移状态，供设置页展示（服务端启动时已跑过，通常为 skipped）
   try {
@@ -232,6 +401,7 @@ app.whenReady().then(async () => {
   registerIpc();
   installMenu();
   createWindow();
+  startBridge();
 
   nativeTheme.on("updated", () => {
     mainWindow?.webContents.send(
@@ -244,6 +414,7 @@ app.whenReady().then(async () => {
     await startSidecar();
   } catch (err) {
     process.stderr.write(`Sidecar 启动失败: ${String(err)}\n`);
+    sidecarReady = false;
     broadcastState("failed");
   }
 });
@@ -262,5 +433,7 @@ app.on("activate", () => {
 
 app.on("before-quit", () => {
   if (mainWindow) saveWindowState(mainWindow);
+  sidecarReady = false;
+  stopBridge();
   void sidecar?.stop();
 });

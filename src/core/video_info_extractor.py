@@ -17,13 +17,20 @@ class VideoInfoExtractor:
     """视频信息提取器类"""
 
     @staticmethod
-    def extract(url: str, proxy: Optional[str] = None) -> Optional[VideoInfo]:
+    def extract(
+        url: str,
+        proxy: Optional[str] = None,
+        http_headers: Optional[Dict[str, str]] = None,
+    ) -> Optional[VideoInfo]:
+        headers = dict(DEFAULT_HTTP_HEADERS)
+        if http_headers:
+            headers.update(http_headers)
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
             "no_color": True,
-            "http_headers": dict(DEFAULT_HTTP_HEADERS),
+            "http_headers": headers,
         }
 
         if proxy:

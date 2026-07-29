@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>正在打开下载器…</title>
+  </head>
+  <body>
+    <p>正在发送到视频下载器…</p>
+    <script>
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var pageUrl = params.get("url") || "";
+        if (!/^https?:\/\//i.test(pageUrl)) {
+          document.body.textContent = "无效链接";
+          return;
+        }
+        location.href = "videodl://add?url=" + encodeURIComponent(pageUrl);
+      })();
+    </script>
+  </body>
+</html>
