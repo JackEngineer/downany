@@ -1,5 +1,9 @@
 /** Chrome MV3：媒体嗅探 + 有效性验证 + HTTP 桥入队，失败再回退 videodl://。 */
 
+importScripts("shared.js");
+
+const { classifyUrl, isYtdlpPreferredPage } = globalThis.VideoDlShared;
+
 const BRIDGE_BASE = "http://127.0.0.1:17888";
 const MENU_PAGE = "videodl-download-page";
 const MENU_LINK = "videodl-download-link";
@@ -52,10 +56,22 @@ const tabMedia = new Map();
 const STORAGE_KEY_PREFIX = "tabMedia:";
 const persistTimers = new Map();
 
-/** 正在进行有效性验证的 URL key，防止并发重复验证 */
+/** 正在进行有效性验证的条目（键 tabId:urlKey），防止同 tab 并发重复验证 */
 const pendingVerify = new Set();
 /** 同组（同一视频的多码率清单）验证中去重，键为 tabId:groupKey */
 const pendingGroups = new Set();
+
+/**
+ * 每 tab 代际号：导航/关闭时 +1。
+ * 异步验证（最长数秒）期间页面可能已跳转，完成后对照代际，过期结果直接丢弃，
+ * 避免上一个页面的媒体"复活"在新页面列表里。
+ * @type {Map<number, number>}
+ */
+const tabGeneration = new Map();
+
+function bumpTabGeneration(tabId) {
+  tabGeneration.set(tabId, (tabGeneration.get(tabId) || 0) + 1);
+}
 
 /**
  * 页面级"正在播放的视频所属卡片"（content script 通过 playing 事件上报）。
@@ -107,6 +123,7 @@ function backfillTabMediaContext(tabId) {
  *   pageUrl: string,
  *   pageTitle: string,
  *   blob?: boolean,
+ *   contentType?: string,
  *   duration?: number|null,
  *   variants?: number,
  *   resolution?: string|null,
@@ -157,15 +174,6 @@ function normalizeMediaKey(url) {
   } catch {
     return url.split("#")[0];
   }
-}
-
-function classifyUrl(url) {
-  const lower = url.toLowerCase().split("?")[0];
-  if (lower.includes(".m3u8")) return "hls";
-  if (lower.includes(".mpd")) return "dash";
-  if (/\.(mp3|m4a|aac|flac|ogg|wav)(\b|$)/i.test(lower)) return "audio";
-  if (/\.(mp4|webm|mkv|mov|m4v)(\b|$)/i.test(lower)) return "file";
-  return "media";
 }
 
 function classifyByContentType(contentType) {
@@ -426,19 +434,37 @@ async function ingestCandidate(tabId, item) {
   if (!isHttpUrl(item.url) || isSegmentUrl(item.url)) return;
 
   const key = normalizeMediaKey(item.url);
+  const verifyLock = `${tabId}:${key}`;
   const bucket = getTabBucket(tabId);
-  if (bucket.has(key) || pendingVerify.has(key)) return;
+  if (bucket.has(key) || pendingVerify.has(verifyLock)) return;
   if (tabItemCount(tabId) >= MAX_ITEMS_PER_TAB) return;
+
+  // 记录代际：验证期间页面导航/关闭的话，结果直接丢弃（防旧条目复活）
+  const gen = tabGeneration.get(tabId) || 0;
+  const isStale = () => (tabGeneration.get(tabId) || 0) !== gen;
 
   const ctx = resolvePageContext(tabId, item.pageUrl || "");
   const pageUrl = ctx.url;
   const cardTitle = ctx.title || item.title || "";
 
   // 已关联到 yt-dlp 详情页的条目：同详情页只保留一条
-  // （实际发送的是页面链接，多条直链毫无区别）
+  // （实际发送的是页面链接，多条直链毫无区别）；
+  // 例外：新候选可能是 master 清单，放行验证替换（拿多码率/时长信息）
+  let pageDupKey = null;
   if (isYtdlpPreferredPage(pageUrl)) {
-    for (const v of bucket.values()) {
-      if (v.pageUrl === pageUrl) return;
+    for (const [k, v] of bucket) {
+      if (v.pageUrl === pageUrl) {
+        pageDupKey = k;
+        break;
+      }
+    }
+    if (pageDupKey != null) {
+      const fileName = item.url.split("/").pop()?.split("?")[0] || "";
+      const upgradeable =
+        isPlaylistCandidate(item.url, item.type) &&
+        /^(index|master|playlist)\.m3u8/i.test(fileName) &&
+        bucket.get(pageDupKey)?.enrichKind !== "master";
+      if (!upgradeable) return;
     }
   }
 
@@ -454,12 +480,12 @@ async function ingestCandidate(tabId, item) {
       if (!maybeMaster || existing.item.enrichKind === "master") return;
     }
 
-    pendingVerify.add(key);
+    pendingVerify.add(verifyLock);
     pendingGroups.add(groupLock);
     const info = await enrichPlaylist(item.url, pageUrl);
-    pendingVerify.delete(key);
+    pendingVerify.delete(verifyLock);
     pendingGroups.delete(groupLock);
-    if (!info) return; // 无效清单（过期/404/非清单内容）不入列
+    if (!info || isStale()) return; // 无效清单不入列；代际过期丢弃
 
     // 验证期间可能有同组条目抢先入库：只保留 master
     const late = findGroupEntry(bucket, groupKey);
@@ -467,6 +493,10 @@ async function ingestCandidate(tabId, item) {
       const newIsMaster = info.kind === "master";
       if (late.item.enrichKind === "master" || !newIsMaster) return;
       bucket.delete(late.key);
+    }
+    // master 升级：替换同详情页的旧条目
+    if (pageDupKey != null && info.kind === "master") {
+      bucket.delete(pageDupKey);
     }
     upsertMedia(tabId, {
       ...item,
@@ -481,15 +511,18 @@ async function ingestCandidate(tabId, item) {
     return;
   }
 
+  // 防盗链可能返回大体积 HTML 错误页：声明的非媒体类型直接丢弃
+  if (item.contentType && !contentTypeLooksMedia(item.contentType)) return;
+
   // 文件类：已知太小直接丢弃（装饰性内容）
   if (item.size != null && item.size < MIN_FILE_SIZE) return;
 
   if (item.size == null) {
     // 无大小信息（DOM 来源 / 响应无 Content-Length）：主动验证有效性
-    pendingVerify.add(key);
+    pendingVerify.add(verifyLock);
     const verified = await verifyFileUrl(item.url, pageUrl);
-    pendingVerify.delete(key);
-    if (!verified) return;
+    pendingVerify.delete(verifyLock);
+    if (!verified || isStale()) return;
     if (verified.size != null && verified.size < MIN_FILE_SIZE) return;
     upsertMedia(tabId, { ...item, title: cardTitle, size: verified.size });
     return;
@@ -499,6 +532,7 @@ async function ingestCandidate(tabId, item) {
 }
 
 function clearTabMedia(tabId) {
+  bumpTabGeneration(tabId);
   tabMedia.delete(tabId);
   tabActiveVideoPage.delete(tabId);
   chrome.storage.session.remove(storageKey(tabId)).catch(() => {});
@@ -553,12 +587,15 @@ async function updateBadge(tabId) {
   }
 }
 
-async function flashBadge(text, color = "#2563eb") {
+async function flashBadge(text, color = "#2563eb", tabId = -1) {
   try {
-    await chrome.action.setBadgeBackgroundColor({ color });
-    await chrome.action.setBadgeText({ text });
+    const target = tabId >= 0 ? { tabId } : {};
+    await chrome.action.setBadgeBackgroundColor({ color, ...target });
+    await chrome.action.setBadgeText({ text, ...target });
     setTimeout(() => {
-      void chrome.action.setBadgeText({ text: "" });
+      void chrome.action
+        .setBadgeText({ text: "", ...target })
+        .catch(() => {});
     }, 2000);
   } catch {
     // ignore
@@ -661,31 +698,6 @@ async function enqueueViaProtocol(pageUrl) {
 // ---- 入队策略 ----
 
 /**
- * yt-dlp 原生支持的单视频页面：发页面链接让 yt-dlp 实时解析，
- * 标题/清晰度/签名都是最新的，远比有时效的直链可靠。
- * 匹配 hostname + pathname。
- */
-const YTDLP_PAGE_RES = [
-  /(^|\.)(x\.com|twitter\.com)\/[^/]+\/status\/\d+/i,
-  /(^|\.)youtube\.com\/watch/i,
-  /(^|\.)youtu\.be\/[\w-]+/i,
-  /(^|\.)bilibili\.com\/video\//i,
-  /(^|\.)b23\.tv\/[\w-]+/i,
-  /(^|\.)douyin\.com\/video\//i,
-  /(^|\.)tiktok\.com\/@[^/]+\/video\//i,
-  /(^|\.)instagram\.com\/(p|reel|reels)\//i,
-];
-
-function isYtdlpPreferredPage(pageUrl) {
-  try {
-    const u = new URL(pageUrl);
-    return YTDLP_PAGE_RES.some((re) => re.test(u.hostname + u.pathname));
-  } catch {
-    return false;
-  }
-}
-
-/**
  * @param {{url: string, title?: string, pageUrl?: string, type?: string}[]} rawItems
  * @param skipVerify 用户主动发送的页面/链接（非嗅探结果）跳过媒体有效性验证
  * @returns {{ ok: true, via?: string, count?: number, expired?: number } | { ok: false, error: string }}
@@ -701,7 +713,7 @@ async function sendItemsToDownloader(
     let pageUrl = raw.pageUrl || "";
     // 发送时兜底关联：条目展示层没挂上详情页的，用最近播放记录再试一次
     // （带时间窗，防止把别的视频错挂到当前播放上）
-    if (pageUrl && !isYtdlpPreferredPage(pageUrl) && tabId >= 0) {
+    if ((!pageUrl || !isYtdlpPreferredPage(pageUrl)) && tabId >= 0) {
       const rec = tabActiveVideoPage.get(tabId);
       const detectedAt = raw.detectedAt || 0;
       if (
@@ -712,13 +724,20 @@ async function sendItemsToDownloader(
         pageUrl = rec.url;
       }
     }
-    // yt-dlp 擅长的单视频页：改发页面链接，规避直链签名过期
+    // yt-dlp 擅长的单视频页：一律发页面链接（含 url 本身就是 watch 页的情况）。
+    // 旧逻辑要求 pageUrl !== url，导致「下载选中」把 watch 页当媒体做 Range
+    // 校验 → HTML 被判无效 →「链接已过期」；CDN 直链也会因签名失效失败。
+    const preferredPage =
+      (pageUrl && isYtdlpPreferredPage(pageUrl) && pageUrl) ||
+      (isYtdlpPreferredPage(url) && url) ||
+      "";
     const viaPage =
-      !skipVerify &&
-      (raw.forcePage ||
-        (pageUrl && pageUrl !== url && isYtdlpPreferredPage(pageUrl)));
-    const finalUrl = viaPage && raw.forcePage ? pageUrl || url : viaPage ? pageUrl : url;
-    const headers = await buildHeadersForUrl(finalUrl, pageUrl);
+      !skipVerify && (!!preferredPage || !!raw.forcePage);
+    let finalUrl = url;
+    if (viaPage) {
+      finalUrl = preferredPage || pageUrl || url;
+    }
+    const headers = await buildHeadersForUrl(finalUrl, pageUrl || finalUrl);
     prepared.push({
       url: finalUrl,
       title: raw.title || "",
@@ -732,7 +751,7 @@ async function sendItemsToDownloader(
   if (prepared.length === 0) {
     const error = "没有有效的 http(s) 媒体链接";
     if (!silent) {
-      await flashBadge("!", "#dc2626");
+      await flashBadge("!", "#dc2626", tabId);
       notify("无法发送", error);
     }
     return { ok: false, error };
@@ -746,8 +765,24 @@ async function sendItemsToDownloader(
     const direct = prepared.filter((p) => !p.viaPage);
     const viaPageItems = prepared.filter((p) => p.viaPage);
     const checks = await revalidateItems(direct);
-    valid = [...viaPageItems, ...checks.filter((c) => c.ok).map((c) => c.item)];
-    expired = checks.length - checks.filter((c) => c.ok).length;
+    const okItems = [];
+    for (const c of checks) {
+      if (c.ok) {
+        okItems.push(c.item);
+        continue;
+      }
+      expired++;
+      // 顺手移除死链接，避免重开弹窗再见到
+      if (tabId >= 0) {
+        const bucket = tabMedia.get(tabId);
+        if (bucket) bucket.delete(normalizeMediaKey(c.item.url));
+      }
+    }
+    if (tabId >= 0 && expired > 0) {
+      schedulePersist(tabId);
+      void updateBadge(tabId);
+    }
+    valid = [...viaPageItems, ...okItems];
   }
 
   if (valid.length === 0) {
@@ -755,7 +790,7 @@ async function sendItemsToDownloader(
       "所选链接已过期（媒体地址有时效）。请重新播放视频，" +
       "或直接发送顶部「正在播放」条目。";
     if (!silent) {
-      await flashBadge("!", "#dc2626");
+      await flashBadge("!", "#dc2626", tabId);
       notify("无法发送", error);
     }
     return { ok: false, error, expired };
@@ -764,7 +799,7 @@ async function sendItemsToDownloader(
   const bridge = await enqueueViaBridge(valid);
   if (bridge.ok) {
     if (!silent) {
-      await flashBadge("✓", "#16a34a");
+      await flashBadge("✓", "#16a34a", tabId);
       notify(
         "已加入下载器",
         expired > 0
@@ -781,7 +816,7 @@ async function sendItemsToDownloader(
       await enqueueViaProtocol(item.url);
     }
     if (!silent) {
-      await flashBadge("✓", "#16a34a");
+      await flashBadge("✓", "#16a34a", tabId);
       notify(
         "已发送到下载器",
         bridge.bridgeDown
@@ -796,7 +831,7 @@ async function sendItemsToDownloader(
         ? "下载器未运行或桥未启动（请先打开 Electron 下载器）。"
         : "") + String(err?.message || err || bridge.error || "发送失败");
     if (!silent) {
-      await flashBadge("!", "#dc2626");
+      await flashBadge("!", "#dc2626", tabId);
       notify("无法发送", error);
     }
     return { ok: false, error };
@@ -880,6 +915,7 @@ chrome.webRequest.onHeadersReceived.addListener(
           type,
           source: "network",
           size: contentLength,
+          contentType,
           pageUrl: tab.url || details.initiator || "",
           pageTitle: tab.title || "",
         });
@@ -890,6 +926,7 @@ chrome.webRequest.onHeadersReceived.addListener(
           type,
           source: "network",
           size: contentLength,
+          contentType,
           pageUrl: details.initiator || "",
           pageTitle: "",
         });

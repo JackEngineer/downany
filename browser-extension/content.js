@@ -3,89 +3,14 @@
 (function () {
   "use strict";
 
-  const HTTP_RE = /^https?:\/\//i;
-  const BLOB_RE = /^blob:/i;
-  const META_PROPS = [
-    "og:video",
-    "og:video:url",
-    "og:video:secure_url",
-    "og:audio",
-    "twitter:player:stream",
-  ];
+  // shared.js 由 manifest content_scripts 先行注入
+  const { scanDom } = globalThis.VideoDlShared;
 
   let debounceTimer = null;
   let observer = null;
 
-  function classifyUrl(url) {
-    const lower = url.toLowerCase().split("?")[0];
-    if (lower.includes(".m3u8")) return "hls";
-    if (lower.includes(".mpd")) return "dash";
-    if (/\.(mp3|m4a|aac|flac|ogg|wav)(\b|$)/i.test(lower)) return "audio";
-    if (/\.(mp4|webm|mkv|mov|m4v)(\b|$)/i.test(lower)) return "file";
-    return "media";
-  }
-
-  function pushCandidate(out, seen, url, source) {
-    if (!url || typeof url !== "string") return;
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    if (BLOB_RE.test(trimmed)) {
-      const key = `blob:${source}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push({
-        url: trimmed,
-        type: "stream",
-        source,
-        blob: true,
-      });
-      return;
-    }
-    if (!HTTP_RE.test(trimmed)) return;
-    if (seen.has(trimmed)) return;
-    seen.add(trimmed);
-    out.push({
-      url: trimmed,
-      type: classifyUrl(trimmed),
-      source,
-      blob: false,
-    });
-  }
-
-  function scanDom() {
-    const out = [];
-    const seen = new Set();
-
-    document.querySelectorAll("video, audio").forEach((el) => {
-      const current = el.currentSrc || el.src || "";
-      pushCandidate(out, seen, current, "dom");
-      el.querySelectorAll("source").forEach((src) => {
-        pushCandidate(out, seen, src.src || src.getAttribute("src") || "", "dom");
-      });
-    });
-
-    document.querySelectorAll("source[src]").forEach((src) => {
-      const parent = src.parentElement;
-      if (parent && (parent.tagName === "VIDEO" || parent.tagName === "AUDIO")) {
-        return;
-      }
-      pushCandidate(out, seen, src.src || src.getAttribute("src") || "", "dom");
-    });
-
-    for (const prop of META_PROPS) {
-      const meta = document.querySelector(
-        `meta[property="${prop}"], meta[name="${prop}"]`,
-      );
-      if (meta) {
-        pushCandidate(out, seen, meta.getAttribute("content") || "", "meta");
-      }
-    }
-
-    return out;
-  }
-
   function report() {
-    const items = scanDom();
+    const items = scanDom(document);
     try {
       chrome.runtime.sendMessage({
         type: "domMedia",
@@ -137,10 +62,15 @@
       }
     }
     if (!container) {
-      // 全屏 gallery 模式：X 点开视频后 URL 即变为 /status/{id}/photo/n
+      // 全屏 gallery 模式：X 点开视频后 URL 即变为 /status/{id}/photo/n，
+      // 去掉媒体序号尾巴，还原成可解析的详情页地址
       if (/\/status\/\d+/.test(location.pathname)) {
+        const cleanPath = location.pathname.replace(
+          /\/(photo|video)\/\d+$/,
+          "",
+        );
         return {
-          pageUrl: location.origin + location.pathname,
+          pageUrl: location.origin + cleanPath,
           title: document.title || "",
         };
       }
@@ -194,6 +124,10 @@
     return { pageUrl, title: title.slice(0, 120) };
   }
 
+  // 节流：同一详情页 1 秒内只上报一次（play/playing/seek 会频繁触发）
+  let lastReportUrl = "";
+  let lastReportAt = 0;
+
   const onPlay = (e) => {
     const v = e.target;
     if (
@@ -204,6 +138,10 @@
     }
     const card = findVideoCard(v);
     if (!card) return;
+    const now = Date.now();
+    if (card.pageUrl === lastReportUrl && now - lastReportAt < 1000) return;
+    lastReportUrl = card.pageUrl;
+    lastReportAt = now;
     try {
       chrome.runtime.sendMessage({
         type: "activeVideoPage",
@@ -234,11 +172,10 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== "rescan") return false;
-    const items = scanDom();
     sendResponse({
       pageUrl: location.href,
       pageTitle: document.title || "",
-      items,
+      items: scanDom(document),
     });
     return false;
   });

@@ -1,5 +1,9 @@
 /** Popup：展示嗅探到的媒体列表，勾选后发送到下载器。 */
 
+// shared.js 由 popup.html 先行引入
+const { isYtdlpPreferredPage, YTDLP_FRIENDLY_HOST_RE } =
+  globalThis.VideoDlShared;
+
 const HTTP_RE = /^https?:\/\/\S+/i;
 
 const titleEl = document.getElementById("title");
@@ -102,31 +106,6 @@ function typeLabel(type) {
       return "页面";
     default:
       return "媒体";
-  }
-}
-
-/** yt-dlp 可直接解析页面链接的站点，空态给更强提示 */
-const YTDLP_FRIENDLY_HOST_RE =
-  /(^|\.)(x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|b23\.tv|douyin\.com|tiktok\.com|weibo\.com|weibo\.cn|instagram\.com|weixin\.qq\.com)$/i;
-
-/** yt-dlp 原生支持的单视频页：发送时改为页面链接（与 background 保持一致） */
-const YTDLP_PAGE_RES = [
-  /(^|\.)(x\.com|twitter\.com)\/[^/]+\/status\/\d+/i,
-  /(^|\.)youtube\.com\/watch/i,
-  /(^|\.)youtu\.be\/[\w-]+/i,
-  /(^|\.)bilibili\.com\/video\//i,
-  /(^|\.)b23\.tv\/[\w-]+/i,
-  /(^|\.)douyin\.com\/video\//i,
-  /(^|\.)tiktok\.com\/@[^/]+\/video\//i,
-  /(^|\.)instagram\.com\/(p|reel|reels)\//i,
-];
-
-function isYtdlpPreferredPage(pageUrl) {
-  try {
-    const u = new URL(pageUrl);
-    return YTDLP_PAGE_RES.some((re) => re.test(u.hostname + u.pathname));
-  } catch {
-    return false;
   }
 }
 
@@ -249,61 +228,42 @@ function renderMediaList() {
   updateEnqueueButton();
 }
 
+/** 把扫描结果转发给 background 入库 */
+async function forwardScan(tabId, payload) {
+  if (payload && Array.isArray(payload.items) && payload.items.length > 0) {
+    await chrome.runtime.sendMessage({
+      type: "domMedia",
+      tabId,
+      pageUrl: payload.pageUrl,
+      pageTitle: payload.pageTitle,
+      items: payload.items,
+    });
+  }
+}
+
 async function rescanTab(tabId) {
+  // 优先走已注入的 content script；扩展重载前的旧页面没有它，再临时注入扫描
   try {
+    const payload = await chrome.tabs.sendMessage(tabId, { type: "rescan" });
+    await forwardScan(tabId, payload);
+    return;
+  } catch {
+    // content script 未注入，走临时注入兜底
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["shared.js"],
+    });
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
-        const HTTP_RE = /^https?:\/\//i;
-        const out = [];
-        const seen = new Set();
-        function push(url, source) {
-          if (!url || !HTTP_RE.test(url)) return;
-          if (seen.has(url)) return;
-          seen.add(url);
-          const lower = url.toLowerCase().split("?")[0];
-          let type = "media";
-          if (lower.includes(".m3u8")) type = "hls";
-          else if (lower.includes(".mpd")) type = "dash";
-          else if (/\.(mp3|m4a|aac|flac|ogg|wav)(\b|$)/i.test(lower)) type = "audio";
-          else if (/\.(mp4|webm|mkv|mov|m4v)(\b|$)/i.test(lower)) type = "file";
-          out.push({ url, type, source });
-        }
-        document.querySelectorAll("video, audio").forEach((el) => {
-          push(el.currentSrc || el.src || "", "dom");
-          el.querySelectorAll("source").forEach((s) =>
-            push(s.src || s.getAttribute("src") || "", "dom"),
-          );
-        });
-        [
-          "og:video",
-          "og:video:url",
-          "og:video:secure_url",
-          "og:audio",
-          "twitter:player:stream",
-        ].forEach((prop) => {
-          const meta = document.querySelector(
-            `meta[property="${prop}"], meta[name="${prop}"]`,
-          );
-          if (meta) push(meta.getAttribute("content") || "", "meta");
-        });
-        return {
-          pageUrl: location.href,
-          pageTitle: document.title || "",
-          items: out,
-        };
-      },
+      func: () => ({
+        pageUrl: location.href,
+        pageTitle: document.title || "",
+        items: globalThis.VideoDlShared.scanDom(document),
+      }),
     });
-    const payload = results && results[0] && results[0].result;
-    if (payload && Array.isArray(payload.items) && payload.items.length > 0) {
-      await chrome.runtime.sendMessage({
-        type: "domMedia",
-        tabId,
-        pageUrl: payload.pageUrl,
-        pageTitle: payload.pageTitle,
-        items: payload.items,
-      });
-    }
+    await forwardScan(tabId, results && results[0] && results[0].result);
   } catch {
     // 受限页无法注入
   }
@@ -448,15 +408,17 @@ selectNoneBtn.addEventListener("click", () => {
 });
 
 enqueueBtn.addEventListener("click", async () => {
+  // YouTube/B站等详情页：选中嗅探到的 CDN 直链也应改走页面解析（与「下载本页」一致）
+  const preferPage = isYtdlpPreferredPage(currentUrl);
   const items = mediaItems
     .filter((m) => selected.has(m.url))
     .map((m) => ({
       url: m.url,
       type: m.type || "",
       title: m.title || m.pageTitle || currentTitle,
-      pageUrl: m.pageUrl || currentUrl,
+      pageUrl: preferPage ? currentUrl : m.pageUrl || currentUrl,
       detectedAt: m.detectedAt || 0,
-      forcePage: !!m.nowPlaying,
+      forcePage: !!m.nowPlaying || preferPage,
     }));
   if (items.length === 0) return;
 
@@ -471,7 +433,11 @@ enqueueBtn.addEventListener("click", async () => {
       items,
     });
     if (result && result.ok) {
-      enqueueBtn.textContent = "已发送";
+      // 已发送的条目移出列表并恢复按钮，避免重复发送
+      const sentUrls = new Set(items.map((it) => it.url));
+      mediaItems = mediaItems.filter((m) => !sentUrls.has(m.url));
+      for (const u of sentUrls) selected.delete(u);
+      renderMediaList();
       const expiredNote =
         result.expired > 0 ? `，${result.expired} 条已过期被跳过` : "";
       setStatus(

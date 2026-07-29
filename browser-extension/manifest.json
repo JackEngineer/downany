@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "视频下载器",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "识别页面媒体后一键发送到本机视频下载器",
+  "minimum_chrome_version": "102",
   "permissions": [
     "activeTab",
     "tabs",
@@ -24,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "js": ["shared.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
