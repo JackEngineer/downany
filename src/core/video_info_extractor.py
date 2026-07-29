@@ -8,6 +8,7 @@ import yt_dlp
 from src.core.download_task import VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.platform_detector import PlatformDetector
+from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
 
 logger = setup_logger("VideoInfoExtractor")
@@ -31,6 +32,8 @@ class VideoInfoExtractor:
             "extract_flat": False,
             "no_color": True,
             "http_headers": headers,
+            # YouTube JS challenge 求解需要 EJS solver（见 ytdlp_opts）
+            "remote_components": REMOTE_COMPONENTS,
         }
 
         if proxy:

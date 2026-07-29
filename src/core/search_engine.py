@@ -7,6 +7,7 @@ import yt_dlp
 
 from src.core.download_task import Platform, VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
+from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SearchEngine")
@@ -70,6 +71,7 @@ class SearchEngine:
             "extract_flat": True,
             "no_color": True,
             "http_headers": headers,
+            "remote_components": REMOTE_COMPONENTS,
         }
 
         if proxy:

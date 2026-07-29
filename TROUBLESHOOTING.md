@@ -56,6 +56,24 @@ YouTube 的反爬虫机制检测到了自动化请求。
    - YouTube 的限制可能是临时的
    - 等待几小时或一天后再试
 
+## YouTube 下载失败 / 只有低画质（JS challenge）
+
+### 问题描述
+YouTube 下载报 `Requested format is not available`，或只能下到 360p 低画质；
+日志中有 `Signature solving failed` / `n challenge solving failed` 警告。
+
+### 原因
+YouTube 要求执行 JS challenge（nsig/signature）才放行完整格式。yt-dlp 通过
+EJS remote components 下载 solver 脚本，并调用本机 JS 运行时（deno）求解。
+应用已默认开启 `remote_components: ["ejs:github"]`（见 `src/core/ytdlp_opts.py`），
+缺少的是本机的 deno 运行时。
+
+### 解决方案
+1. 安装 deno：`brew install deno`（或参考 https://deno.land 官方安装方式）
+2. 确认 yt-dlp 为最新：`pip install --upgrade yt-dlp`
+3. 首次解析需联网下载 solver 脚本（自动完成，缓存在 yt-dlp 缓存目录）
+4. 未安装 deno 时不会报错中断，但会自动退化为免签名低画质格式
+
 ## 下载进度显示错误
 
 ### 问题描述

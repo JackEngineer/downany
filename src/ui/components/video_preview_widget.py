@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.ui.components.chrome import BodyLabel, StatusBadge, StrongBodyLabel
 from src.ui.fluent_support import get_fluent_widget
 from src.utils.logger import setup_logger
@@ -47,6 +48,7 @@ def _extract_direct_playback_url(url: str) -> tuple[str, str]:
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
+            "remote_components": REMOTE_COMPONENTS,
         }) as ydl:
             info = ydl.extract_info(url, download=False)
 

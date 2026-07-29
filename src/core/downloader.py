@@ -6,6 +6,7 @@ import yt_dlp
 
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.twitter_fallback import is_twitter_url, resolve_twitter_media
+from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.utils.logger import setup_logger
 
@@ -106,6 +107,8 @@ class Downloader:
             "noprogress": True,
             "logger": _YtDlpQuietLogger(),
             "http_headers": dict(DEFAULT_HTTP_HEADERS),
+            # YouTube JS challenge（nsig/signature）求解，缺了只剩低画质格式
+            "remote_components": REMOTE_COMPONENTS,
         }
 
         if ffmpeg_location:
