@@ -292,6 +292,8 @@ export function SettingsApp() {
   const [ytBusy, setYtBusy] = useState(false);
   const [ytError, setYtError] = useState("");
   const [migration, setMigration] = useState<MigrationResult | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
+  const [diagPath, setDiagPath] = useState("");
 
   useEffect(() => {
     setDraft(settings);
@@ -380,6 +382,25 @@ export function SettingsApp() {
       pushToast({ kind: "error", title: "yt-dlp 更新失败" });
     } finally {
       setYtBusy(false);
+    }
+  };
+
+  const exportDiagnosticsBundle = async () => {
+    setDiagBusy(true);
+    try {
+      const result = await request<{ ok: boolean; path: string }>(
+        "app.exportDiagnostics",
+        {},
+      );
+      setDiagPath(result.path);
+      pushToast({ kind: "success", title: "诊断包已导出" });
+      if (result.path) {
+        void window.api.showItemInFolder(result.path);
+      }
+    } catch (err) {
+      pushToast({ kind: "error", title: `导出失败：${String(err)}` });
+    } finally {
+      setDiagBusy(false);
     }
   };
 
@@ -491,6 +512,23 @@ export function SettingsApp() {
                 条
               </p>
             )}
+          </section>
+
+          <section className="settings-section">
+            <h2>诊断</h2>
+            <p className="muted">
+              导出日志、yt-dlp / ffmpeg 版本与失败任务摘要，便于排查下载问题。
+            </p>
+            {diagPath && <p className="muted small">{diagPath}</p>}
+            <div className="settings-control">
+              <button
+                type="button"
+                disabled={disabled || diagBusy}
+                onClick={() => void exportDiagnosticsBundle()}
+              >
+                {diagBusy ? "导出中…" : "导出诊断包"}
+              </button>
+            </div>
           </section>
         </>
       )}

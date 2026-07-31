@@ -20,6 +20,7 @@ class Method(str, Enum):
     APP_PING = "app.ping"
     APP_SHUTDOWN = "app.shutdown"
     APP_RUN_MIGRATION = "app.runMigration"
+    APP_EXPORT_DIAGNOSTICS = "app.exportDiagnostics"
     DOWNLOAD_PARSE_URLS = "download.parseUrls"
     DOWNLOAD_CANCEL_PARSE = "download.cancelParse"
     DOWNLOAD_CREATE_TASKS = "download.createTasks"

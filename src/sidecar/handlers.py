@@ -22,6 +22,7 @@ from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, Parse
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.sidecar import ytdlp_updater
+from src.sidecar.diagnostics import export_diagnostics
 from src.sidecar.migration import run_migration
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import ErrorCode, EventName, Method
@@ -129,6 +130,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.APP_GET_SNAPSHOT.value: _get_snapshot,
         Method.APP_SHUTDOWN.value: _shutdown,
         Method.APP_RUN_MIGRATION.value: _run_migration,
+        Method.APP_EXPORT_DIAGNOSTICS.value: _export_diagnostics,
         Method.SETTINGS_GET.value: _settings_get,
         Method.SETTINGS_UPDATE.value: _settings_update,
         Method.DOWNLOAD_CREATE_TASKS.value: _create_tasks,
@@ -178,6 +180,13 @@ def _run_migration(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, An
     result = run_migration(ctx.paths)
     ctx.last_migration = result
     return result
+
+
+def _export_diagnostics(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return export_diagnostics(ctx.paths, ctx.manager)
+    except Exception as exc:
+        raise HandlerError(ErrorCode.INTERNAL, f"导出诊断包失败: {exc}") from exc
 
 
 def _settings_get(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
