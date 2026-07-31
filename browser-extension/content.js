@@ -4,10 +4,20 @@
   "use strict";
 
   // shared.js 由 manifest content_scripts 先行注入
-  const { scanDom } = globalThis.VideoDlShared;
+  const {
+    scanDom,
+    extractDouyinVideoId,
+    normalizeYtdlpPageUrl,
+    extractVisibleTitle,
+  } = globalThis.VideoDlShared;
 
   let debounceTimer = null;
   let observer = null;
+  let lastHref = location.href;
+
+  function currentTitle() {
+    return extractVisibleTitle(document, location.href) || document.title || "";
+  }
 
   function report() {
     const items = scanDom(document);
@@ -15,7 +25,7 @@
       chrome.runtime.sendMessage({
         type: "domMedia",
         pageUrl: location.href,
-        pageTitle: document.title || "",
+        pageTitle: currentTitle(),
         items,
       });
     } catch {
@@ -27,6 +37,50 @@
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(report, 300);
   }
+
+  function notifyNavigation() {
+    const href = location.href;
+    if (href === lastHref) return;
+    lastHref = href;
+    const title = currentTitle();
+    try {
+      chrome.runtime.sendMessage({
+        type: "pageNavigated",
+        pageUrl: href,
+        pageTitle: title,
+      });
+    } catch {
+      return;
+    }
+    const douyinId = extractDouyinVideoId(href);
+    if (douyinId) {
+      try {
+        chrome.runtime.sendMessage({
+          type: "activeVideoPage",
+          pageUrl: normalizeYtdlpPageUrl(href),
+          title,
+        });
+      } catch {
+        // ignore
+      }
+    }
+    scheduleReport();
+  }
+
+  // SPA：抖音精选切 modal_id 不走完整刷新，需挂钩 history
+  const origPushState = history.pushState;
+  history.pushState = function (...args) {
+    origPushState.apply(this, args);
+    notifyNavigation();
+  };
+  const origReplaceState = history.replaceState;
+  history.replaceState = function (...args) {
+    origReplaceState.apply(this, args);
+    notifyNavigation();
+  };
+  window.addEventListener("popstate", notifyNavigation);
+  // 部分站点改 URL 不走 history API：短轮询兜底
+  setInterval(notifyNavigation, 800);
 
   // ---- 正在播放的视频 → 关联其所属帖子/视频页 ----
   // X 时间线/搜索页播放视频时页面 URL 不变，但真实下载应走 yt-dlp
@@ -45,6 +99,16 @@
   /** 找到 video 所属的卡片，返回详情页链接与卡片内可读标题 */
   function findVideoCard(video) {
     if (!VIDEO_PAGE_HOST_RE.test(location.hostname)) return null;
+
+    // 抖音精选/发现 modal：URL 上的 modal_id 即当前视频
+    const douyinId = extractDouyinVideoId(location.href);
+    if (douyinId) {
+      return {
+        pageUrl: normalizeYtdlpPageUrl(location.href),
+        title: currentTitle(),
+      };
+    }
+
     let container = video.closest("article");
     if (!container) {
       // 向上找包含详情链接的祖先（最多 6 层）
@@ -71,7 +135,7 @@
         );
         return {
           pageUrl: location.origin + cleanPath,
-          title: document.title || "",
+          title: currentTitle(),
         };
       }
       return null;
@@ -120,8 +184,9 @@
         title = titled.getAttribute("title").trim();
       }
     }
+    if (!title) title = currentTitle();
 
-    return { pageUrl, title: title.slice(0, 120) };
+    return { pageUrl, title: title.slice(0, 160) };
   }
 
   // 节流：同一详情页 1 秒内只上报一次（play/playing/seek 会频繁触发）
@@ -174,7 +239,7 @@
     if (!message || message.type !== "rescan") return false;
     sendResponse({
       pageUrl: location.href,
-      pageTitle: document.title || "",
+      pageTitle: currentTitle(),
       items: scanDom(document),
     });
     return false;
@@ -182,4 +247,22 @@
 
   report();
   startObserver();
+  // 首次也同步一次导航态（刷新后恢复 modal 场景）
+  try {
+    const douyinId = extractDouyinVideoId(location.href);
+    if (douyinId) {
+      chrome.runtime.sendMessage({
+        type: "pageNavigated",
+        pageUrl: location.href,
+        pageTitle: currentTitle(),
+      });
+      chrome.runtime.sendMessage({
+        type: "activeVideoPage",
+        pageUrl: normalizeYtdlpPageUrl(location.href),
+        title: currentTitle(),
+      });
+    }
+  } catch {
+    // ignore
+  }
 })();

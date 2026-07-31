@@ -1,3 +1,4 @@
 # Sidecar 运行时（无 Qt）
-yt-dlp==2026.7.4
+# curl-cffi：Pornhub 等站点需浏览器 TLS 指纹，否则网页拉取会 410 Gone
+yt-dlp[curl-cffi]==2026.7.4
 pyinstaller>=6.3.0

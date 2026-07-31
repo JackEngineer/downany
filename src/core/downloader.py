@@ -14,6 +14,54 @@ from src.utils.logger import setup_logger
 
 logger = setup_logger("CoreDownloader")
 
+# yt-dlp 分离流下载时的中间文件：title.f140.m4a / title.f137.mp4
+_FORMAT_FRAGMENT_RE = re.compile(
+    r"\.f\d+\.(mp4|m4a|webm|mkv|opus|ogg)$",
+    re.IGNORECASE,
+)
+_MERGED_EXTS = (".mp4", ".mkv", ".webm", ".m4a", ".opus")
+
+
+def resolve_output_path(
+    candidate: str,
+    info: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    解析最终输出路径。
+
+    progress_hooks 的最后一次 finished 常是合并前的音/视频分片
+    （如 .f140.m4a），而用户能打开的是合并后的 .mp4。
+    """
+    if info:
+        for key in ("filepath", "_filename"):
+            raw = info.get(key)
+            if isinstance(raw, str) and raw and os.path.isfile(raw):
+                return raw
+        requested = info.get("requested_downloads")
+        if isinstance(requested, list):
+            for entry in requested:
+                if not isinstance(entry, dict):
+                    continue
+                raw = entry.get("filepath")
+                if isinstance(raw, str) and raw and os.path.isfile(raw):
+                    return raw
+
+    text = (candidate or "").strip()
+    if text and os.path.isfile(text) and not _FORMAT_FRAGMENT_RE.search(text):
+        return text
+
+    # 分片路径 → 尝试同名前缀的合并文件
+    if text and _FORMAT_FRAGMENT_RE.search(text):
+        prefix = _FORMAT_FRAGMENT_RE.sub("", text)
+        for ext in _MERGED_EXTS:
+            sibling = prefix + ext
+            if os.path.isfile(sibling):
+                return sibling
+
+    if text and os.path.isfile(text):
+        return text
+    return text
+
 
 class _YtDlpQuietLogger:
     """把 yt-dlp 诊断输出转到 stderr logger，避免污染 Sidecar stdout。"""
@@ -57,6 +105,8 @@ class Downloader:
         self.last_filename: str = ""
         # Twitter FxTwitter 回退解析到的元数据（供 DownloadManager 回填标题）
         self.last_info: Optional[VideoInfo] = None
+        # yt-dlp extract_info 原始字典（供回填标题/封面）
+        self.last_ydl_info: Optional[Dict[str, Any]] = None
 
     def set_callbacks(
         self,
@@ -124,6 +174,7 @@ class Downloader:
         logger.info(f"开始下载: {url}")
         self.last_filename = ""
         self.last_info = None
+        self.last_ydl_info = None
 
         try:
             self._download_with_ydl(url, ydl_opts)
@@ -171,4 +222,19 @@ class Downloader:
 
     def _download_with_ydl(self, url: str, ydl_opts: Dict[str, Any]) -> None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            if isinstance(info, dict):
+                self.last_ydl_info = info
+                prepared = ""
+                try:
+                    prepared = ydl.prepare_filename(info)
+                except Exception:
+                    prepared = ""
+                final_path = resolve_output_path(
+                    self.last_filename or prepared,
+                    info,
+                )
+                if final_path:
+                    self.last_filename = final_path
+            elif self.last_filename:
+                self.last_filename = resolve_output_path(self.last_filename)

@@ -62,7 +62,30 @@ def test_get_snapshot_and_create_tasks(tmp_path):
     assert "settings" in snap
 
 
-def test_create_tasks_with_headers(tmp_path):
+def test_create_tasks_normalizes_douyin_modal_id(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    jingxuan = "https://www.douyin.com/jingxuan?modal_id=7661234567890123456"
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {
+            "urls": [jingxuan],
+            "items": [
+                {
+                    "url": jingxuan,
+                    "title": "抖音精选视频",
+                    "headers": {"Referer": jingxuan, "Cookie": "ttwid=1"},
+                }
+            ],
+        },
+    )
+    assert len(result["taskIds"]) == 1
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task is not None
+    assert task.video_info.url == "https://www.douyin.com/video/7661234567890123456"
+    assert task.video_info.title == "抖音精选视频"
+    assert task.options.http_headers["Cookie"] == "ttwid=1"
+
     ctx, _ = _ctx(tmp_path)
     result = dispatch(
         ctx,

@@ -135,16 +135,22 @@ export class SidecarProcess extends EventEmitter {
       }
     });
 
-    const hello = await this.waitForHello();
-    if (hello.protocolVersion !== PROTOCOL_VERSION) {
-      throw new Error(`协议版本不兼容: ${hello.protocolVersion}`);
+    try {
+      const hello = await this.waitForHello();
+      if (hello.protocolVersion !== PROTOCOL_VERSION) {
+        throw new Error(`协议版本不兼容: ${hello.protocolVersion}`);
+      }
+      this.write({
+        protocolVersion: PROTOCOL_VERSION,
+        type: "hello",
+        payload: { app: "electron", appVersion: "0.1.0-phase4" },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      // handshake 失败时杀掉孤儿进程，避免占着资源却无法通信
+      this.killProcess();
+      throw err;
     }
-    this.write({
-      protocolVersion: PROTOCOL_VERSION,
-      type: "hello",
-      payload: { app: "electron", appVersion: "0.1.0-phase4" },
-      timestamp: new Date().toISOString(),
-    });
   }
 
   private waitForHello(): Promise<{ protocolVersion: number }> {

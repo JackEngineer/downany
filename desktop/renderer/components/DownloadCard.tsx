@@ -22,6 +22,7 @@ function Thumbnail({ task }: { task: TaskSnapshot }) {
         src={task.thumbnail_url}
         alt=""
         loading="lazy"
+        referrerPolicy="no-referrer"
         onError={() => setBroken(true)}
       />
     );
@@ -64,6 +65,24 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
       editRef.current?.select();
     }
   }, [editing]);
+
+  // 同一时间只允许一个「⋯」菜单打开
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const onToggle = () => {
+      if (!el.open) return;
+      document
+        .querySelectorAll<HTMLDetailsElement>(
+          "details.card-menu[open], details.topbar-menu[open]",
+        )
+        .forEach((other) => {
+          if (other !== el) other.open = false;
+        });
+    };
+    el.addEventListener("toggle", onToggle);
+    return () => el.removeEventListener("toggle", onToggle);
+  }, []);
 
   const refresh = async () => {
     const snap = await request<{ tasks: TaskSnapshot[]; settings: never }>("app.getSnapshot");

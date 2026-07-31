@@ -8,6 +8,7 @@ import threading
 from typing import List, Optional
 
 from src.core.download_task import VideoInfo
+from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.formats import summarize_formats
 from src.core.platform_detector import PlatformDetector
 from src.core.twitter_fallback import (
@@ -60,7 +61,11 @@ class ParseSession:
         timeout: float = DEFAULT_PARSE_TIMEOUT,
     ):
         cleaned = (url or "").strip()
-        self.url = normalize_twitter_url(cleaned) if is_twitter_url(cleaned) else cleaned
+        if is_twitter_url(cleaned):
+            cleaned = normalize_twitter_url(cleaned)
+        elif is_douyin_url(cleaned):
+            cleaned = normalize_douyin_url(cleaned)
+        self.url = cleaned
         self.proxy = proxy
         self.timeout = timeout
         self._lock = threading.Lock()

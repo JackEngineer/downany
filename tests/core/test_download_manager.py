@@ -385,8 +385,77 @@ def test_placeholder_title_backfilled_from_twitter_last_info(manager):
     ):
         instance = MagicMock()
         instance.last_info = info
+        instance.last_ydl_info = None
         instance.download.return_value = "/tmp/hash.mp4"
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
     assert task.video_info.title == "推文正文标题"
+
+
+def test_page_download_backfills_title_and_platform_from_ydl_info(manager):
+    """扩展传入的临时标题不应挡住 yt-dlp 解析到的真实标题/平台。"""
+    from src.core.download_task import Platform
+
+    task = _make_task(
+        url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        title="bridge-probe-fixed",
+    )
+    assert task.video_info.platform == Platform.UNKNOWN
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = {
+            "title": "Rick Astley - Never Gonna Give You Up",
+            "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+            "uploader": "Rick Astley",
+            "duration": 213,
+        }
+        instance.download.return_value = (
+            "/tmp/Rick Astley - Never Gonna Give You Up.mp4"
+        )
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    assert task.video_info.title == "Rick Astley - Never Gonna Give You Up"
+    assert task.video_info.platform == Platform.YOUTUBE
+    assert task.video_info.uploader == "Rick Astley"
+    assert task.video_info.duration == 213
+    assert "dQw4w9WgXcQ" in task.video_info.thumbnail_url
+
+
+def test_page_task_with_title_still_prefills_missing_thumbnail(manager):
+    """扩展已带标题但无封面时，仍应预拉 thumbnail（不覆盖标题）。"""
+    from src.core.download_task import Platform
+
+    task = _make_task(
+        url="https://www.pornhub.com/view_video.php?viewkey=abc",
+        title="页面标题已有",
+    )
+    task.video_info.platform = Platform.PORNHUB
+    extracted = VideoInfo(
+        url=task.video_info.url,
+        title="yt-dlp 标题不应覆盖",
+        thumbnail_url="https://pix-cdn77.phncdn.com/a.jpg",
+        uploader="uploader",
+        duration=12,
+        platform=Platform.PORNHUB,
+    )
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract",
+        return_value=extracted,
+    ) as mock_extract:
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = None
+        instance.download.return_value = "/tmp/out.mp4"
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    mock_extract.assert_called()
+    assert task.video_info.title == "页面标题已有"
+    assert task.video_info.thumbnail_url.endswith("a.jpg")

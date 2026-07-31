@@ -1,8 +1,11 @@
 /** Popup：展示嗅探到的媒体列表，勾选后发送到下载器。 */
 
 // shared.js 由 popup.html 先行引入
-const { isYtdlpPreferredPage, YTDLP_FRIENDLY_HOST_RE } =
-  globalThis.VideoDlShared;
+const {
+  isYtdlpPreferredPage,
+  normalizeYtdlpPageUrl,
+  YTDLP_FRIENDLY_HOST_RE,
+} = globalThis.VideoDlShared;
 
 const HTTP_RE = /^https?:\/\/\S+/i;
 
@@ -119,10 +122,10 @@ function emptyHintFor(url) {
   if (YTDLP_FRIENDLY_HOST_RE.test(host)) {
     return (
       "未检测到媒体流：该站视频只有播放后才会发出流请求。\n" +
-      "请先播放页面中的视频再打开本弹窗；或直接点下方「仅发送页面链接」，交给 yt-dlp 解析（会带上登录态）。"
+      "请先播放页面中的视频再打开本弹窗；或直接点下方「下载本页视频 / 仅发送页面链接」，交给 yt-dlp 解析（会带上登录态）。"
     );
   }
-  return "未检测到媒体流。请先在页面中播放视频再打开本弹窗；或尝试「仅发送页面链接」。";
+  return "未检测到媒体流。请先在页面中播放视频再打开本弹窗；或尝试「下载本页视频 / 仅发送页面链接」。";
 }
 
 function updateEnqueueButton() {
@@ -171,7 +174,8 @@ function renderMediaList() {
     if (item.duration) bits.push(formatDuration(item.duration));
     if (item.variants > 1) bits.push(`${item.variants} 个清晰度`);
     if (item.enrichKind === "master") bits.push("多码率");
-    if (item.size) bits.push(formatSize(item.size));
+    // 页面解析条目的 CDN 嗅探体积不能代表最终下载大小，避免显示 700KB 误导
+    if (item.type !== "page" && item.size) bits.push(formatSize(item.size));
     meta.textContent = bits.join(" · ");
 
     row.appendChild(badge);
@@ -182,12 +186,7 @@ function renderMediaList() {
       npBadge.className = "badge playing";
       npBadge.textContent = "正在播放";
       row.appendChild(npBadge);
-    } else if (
-      pageUrl &&
-      pageUrl !== item.url &&
-      isYtdlpPreferredPage(pageUrl)
-    ) {
-      // yt-dlp 原生支持的页面：发送时会改为页面链接实时解析，标注来源
+    } else if (item.type === "page" || (pageUrl && isYtdlpPreferredPage(pageUrl))) {
       const pageBadge = document.createElement("span");
       pageBadge.className = "badge page";
       pageBadge.textContent = "页面解析";
@@ -198,15 +197,19 @@ function renderMediaList() {
 
     const name = document.createElement("p");
     name.className = "media-name";
-    // 优先显示卡片提取的可读标题（推文文本等），否则退回 URL 文件名
-    name.textContent = item.title || displayName(item.url);
-    name.title = item.url;
+    name.textContent =
+      item.title || item.pageTitle || currentTitle || displayName(item.url);
+    name.title = item.pageUrl || item.url;
 
     const host = document.createElement("p");
     host.className = "media-host";
-    host.textContent = item.title
-      ? `${hostOf(item.url)} · ${displayName(item.url)}`
-      : hostOf(item.url);
+    if (item.type === "page") {
+      host.textContent = "将由下载器解析完整视频";
+    } else if (item.title) {
+      host.textContent = `${hostOf(item.url)} · ${displayName(item.url)}`;
+    } else {
+      host.textContent = hostOf(item.url);
+    }
 
     body.appendChild(row);
     body.appendChild(name);
@@ -228,7 +231,7 @@ function renderMediaList() {
   updateEnqueueButton();
 }
 
-/** 把扫描结果转发给 background 入库 */
+/** 把扫描结果转发给 background 入库；并返回页面元数据供弹窗刷新标题 */
 async function forwardScan(tabId, payload) {
   if (payload && Array.isArray(payload.items) && payload.items.length > 0) {
     await chrome.runtime.sendMessage({
@@ -239,14 +242,14 @@ async function forwardScan(tabId, payload) {
       items: payload.items,
     });
   }
+  return payload || null;
 }
 
 async function rescanTab(tabId) {
   // 优先走已注入的 content script；扩展重载前的旧页面没有它，再临时注入扫描
   try {
     const payload = await chrome.tabs.sendMessage(tabId, { type: "rescan" });
-    await forwardScan(tabId, payload);
-    return;
+    return await forwardScan(tabId, payload);
   } catch {
     // content script 未注入，走临时注入兜底
   }
@@ -259,41 +262,69 @@ async function rescanTab(tabId) {
       target: { tabId },
       func: () => ({
         pageUrl: location.href,
-        pageTitle: document.title || "",
+        pageTitle: globalThis.VideoDlShared.extractVisibleTitle(
+          document,
+          location.href,
+        ),
         items: globalThis.VideoDlShared.scanDom(document),
       }),
     });
-    await forwardScan(tabId, results && results[0] && results[0].result);
+    return await forwardScan(tabId, results && results[0] && results[0].result);
   } catch {
-    // 受限页无法注入
+    return null;
   }
 }
 
 /**
  * 展示层合并：同一详情页（yt-dlp 页面解析）的多条直链只显示一条，
- * 信息取最全的（时长/清晰度优先保留有值的）。
+ * 并改写成「页面」条目（避免显示 CDN 哈希名 / 预览片体积）。
  */
 function collapseItems(items) {
   const byPage = new Map();
   const out = [];
   for (const item of items) {
     if (item.pageUrl && isYtdlpPreferredPage(item.pageUrl)) {
-      const prev = byPage.get(item.pageUrl);
+      const pageKey = normalizeYtdlpPageUrl(item.pageUrl);
+      const prev = byPage.get(pageKey);
       if (prev) {
         if (!prev.duration && item.duration) prev.duration = item.duration;
         if ((!prev.variants || prev.variants <= 1) && item.variants > 1) {
           prev.variants = item.variants;
         }
         if (!prev.title && item.title) prev.title = item.title;
+        if (!prev.title && item.pageTitle) prev.title = item.pageTitle;
         continue;
       }
-      byPage.set(item.pageUrl, item);
-      out.push(item);
+      const pageItem = {
+        ...item,
+        url: pageKey,
+        type: "page",
+        pageUrl: pageKey,
+        title: item.title || item.pageTitle || "",
+        size: null,
+      };
+      byPage.set(pageKey, pageItem);
+      out.push(pageItem);
       continue;
     }
     out.push(item);
   }
   return out;
+}
+
+/** 选体积最大的候选；无 size 时退回第一条。 */
+function pickLargestItem(items) {
+  if (!items || items.length === 0) return null;
+  let best = items[0];
+  let bestSize = typeof best.size === "number" ? best.size : -1;
+  for (let i = 1; i < items.length; i++) {
+    const s = typeof items[i].size === "number" ? items[i].size : -1;
+    if (s > bestSize) {
+      best = items[i];
+      bestSize = s;
+    }
+  }
+  return best;
 }
 
 async function loadMedia(tabId, { preserveSelection = false } = {}) {
@@ -306,23 +337,25 @@ async function loadMedia(tabId, { preserveSelection = false } = {}) {
 
   // 「正在播放」快捷条目：由 play 事件直供，永远新鲜可下，置顶展示
   if (nowPlaying && isHttpUrl(nowPlaying.url)) {
+    const playingKey = normalizeYtdlpPageUrl(nowPlaying.url);
     let merged = false;
     for (const m of mediaItems) {
-      if (m.pageUrl === nowPlaying.url || m.url === nowPlaying.url) {
+      const mKey = normalizeYtdlpPageUrl(m.pageUrl || m.url);
+      if (mKey === playingKey || m.url === nowPlaying.url) {
         m.nowPlaying = true;
-        if (nowPlaying.title && !m.title) m.title = nowPlaying.title;
+        if (nowPlaying.title) m.title = nowPlaying.title;
         merged = true;
       }
     }
     if (!merged) {
       mediaItems.unshift({
-        url: nowPlaying.url,
+        url: playingKey,
         type: "page",
         source: "playing",
         size: null,
-        pageUrl: nowPlaying.url,
+        pageUrl: playingKey,
         pageTitle: currentTitle,
-        title: nowPlaying.title || "正在播放的视频",
+        title: nowPlaying.title || currentTitle || "正在播放的视频",
         nowPlaying: true,
         detectedAt: nowPlaying.at || Date.now(),
       });
@@ -331,8 +364,9 @@ async function loadMedia(tabId, { preserveSelection = false } = {}) {
 
   if (!preserveSelection) {
     selected.clear();
-    // 默认选中「正在播放」，否则第一条
-    const first = mediaItems.find((m) => m.nowPlaying) || mediaItems[0];
+    // 默认选中「正在播放」，否则体积最大的（避开抖音 1MB 预览片）
+    const first =
+      mediaItems.find((m) => m.nowPlaying) || pickLargestItem(mediaItems);
     if (first) selected.add(first.url);
   } else {
     const urls = new Set(mediaItems.map((m) => m.url));
@@ -357,7 +391,7 @@ async function loadActiveTab() {
 
   currentTabId = tab.id;
   currentUrl = (tab.url || "").trim();
-  currentTitle = tab.title || "未命名页面";
+  currentTitle = (tab.title || "未命名页面").trim();
   titleEl.textContent = currentTitle;
   urlEl.textContent = currentUrl || "（无地址）";
   urlEl.title = currentUrl;
@@ -377,11 +411,28 @@ async function loadActiveTab() {
   if (isYtdlpPreferredPage(currentUrl)) {
     enqueuePageBtn.textContent = "下载本页视频（推荐）";
     enqueuePageBtn.classList.add("recommended");
+  } else {
+    enqueuePageBtn.textContent = "仅发送页面链接";
+    enqueuePageBtn.classList.remove("recommended");
   }
   setStatus("", "");
 
   if (typeof currentTabId === "number") {
-    await rescanTab(currentTabId);
+    const live = await rescanTab(currentTabId);
+    // 优先用页面实时标题 / URL（抖音 SPA 的 tab.title 常常滞后）
+    if (live && live.pageUrl) {
+      currentUrl = live.pageUrl;
+      urlEl.textContent = currentUrl;
+      urlEl.title = currentUrl;
+    }
+    if (live && live.pageTitle && live.pageTitle.trim()) {
+      currentTitle = live.pageTitle.trim();
+      titleEl.textContent = currentTitle;
+    }
+    if (isYtdlpPreferredPage(currentUrl)) {
+      enqueuePageBtn.textContent = "下载本页视频（推荐）";
+      enqueuePageBtn.classList.add("recommended");
+    }
     await loadMedia(currentTabId);
     // 候选需经有效性验证后才入列，延迟补拉两次（保留勾选）
     setTimeout(() => {
@@ -408,15 +459,18 @@ selectNoneBtn.addEventListener("click", () => {
 });
 
 enqueueBtn.addEventListener("click", async () => {
-  // YouTube/B站等详情页：选中嗅探到的 CDN 直链也应改走页面解析（与「下载本页」一致）
+  // YouTube/B站/抖音等详情页：选中嗅探到的 CDN 直链也应改走页面解析（与「下载本页」一致）
   const preferPage = isYtdlpPreferredPage(currentUrl);
+  const pageCanonical = preferPage
+    ? normalizeYtdlpPageUrl(currentUrl)
+    : currentUrl;
   const items = mediaItems
     .filter((m) => selected.has(m.url))
     .map((m) => ({
       url: m.url,
       type: m.type || "",
       title: m.title || m.pageTitle || currentTitle,
-      pageUrl: preferPage ? currentUrl : m.pageUrl || currentUrl,
+      pageUrl: preferPage ? pageCanonical : m.pageUrl || currentUrl,
       detectedAt: m.detectedAt || 0,
       forcePage: !!m.nowPlaying || preferPage,
     }));
@@ -455,9 +509,16 @@ enqueueBtn.addEventListener("click", async () => {
   }
 });
 
+function pageEnqueueLabel() {
+  return isYtdlpPreferredPage(currentUrl)
+    ? "下载本页视频（推荐）"
+    : "仅发送页面链接";
+}
+
 enqueuePageBtn.addEventListener("click", async () => {
   if (!isHttpUrl(currentUrl)) return;
 
+  const pageUrl = normalizeYtdlpPageUrl(currentUrl);
   enqueuePageBtn.disabled = true;
   enqueuePageBtn.textContent = "发送中…";
   setStatus("", "");
@@ -465,10 +526,10 @@ enqueuePageBtn.addEventListener("click", async () => {
   try {
     const result = await chrome.runtime.sendMessage({
       type: "enqueue",
-      url: currentUrl,
-      pageUrl: currentUrl,
+      url: pageUrl,
+      pageUrl,
       skipVerify: true,
-      items: [{ url: currentUrl, title: currentTitle, pageUrl: currentUrl }],
+      items: [{ url: pageUrl, title: currentTitle, pageUrl }],
     });
     if (result && result.ok) {
       enqueuePageBtn.textContent = "已发送";
@@ -477,11 +538,11 @@ enqueuePageBtn.addEventListener("click", async () => {
     }
     const error = (result && result.error) || "发送失败";
     enqueuePageBtn.disabled = false;
-    enqueuePageBtn.textContent = "仅发送页面链接";
+    enqueuePageBtn.textContent = pageEnqueueLabel();
     setStatus("error", error);
   } catch (err) {
     enqueuePageBtn.disabled = false;
-    enqueuePageBtn.textContent = "仅发送页面链接";
+    enqueuePageBtn.textContent = pageEnqueueLabel();
     setStatus("error", String(err?.message || err));
   }
 });

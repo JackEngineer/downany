@@ -7,7 +7,7 @@
   /**
    * yt-dlp 原生支持的单视频页面：发页面链接让 yt-dlp 实时解析，
    * 标题/清晰度/签名都是最新的，远比有时效的直链可靠。
-   * 匹配 hostname + pathname。
+   * 匹配 hostname + pathname（抖音 modal_id 另见 extractDouyinVideoId）。
    */
   const YTDLP_PAGE_RES = [
     /(^|\.)(x\.com|twitter\.com)\/[^/]+\/status\/\d+/i,
@@ -18,11 +18,12 @@
     /(^|\.)douyin\.com\/video\//i,
     /(^|\.)tiktok\.com\/@[^/]+\/video\//i,
     /(^|\.)instagram\.com\/(p|reel|reels)\//i,
+    /(^|\.)pornhub\.com\/view_video\.php/i,
   ];
 
   /** yt-dlp 有 extractor 的站点（空态提示用，范围比页面规则宽） */
   const YTDLP_FRIENDLY_HOST_RE =
-    /(^|\.)(x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|b23\.tv|douyin\.com|tiktok\.com|weibo\.com|weibo\.cn|instagram\.com|weixin\.qq\.com)$/i;
+    /(^|\.)(x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|b23\.tv|douyin\.com|tiktok\.com|weibo\.com|weibo\.cn|instagram\.com|weixin\.qq\.com|pornhub\.com)$/i;
 
   const HTTP_RE = /^https?:\/\//i;
 
@@ -34,8 +35,106 @@
     "twitter:player:stream",
   ];
 
+  /** 从抖音页提取 aweme id：/video/{id} 或 ?modal_id= */
+  function extractDouyinVideoId(pageUrl) {
+    try {
+      const u = new URL(pageUrl);
+      const host = u.hostname.toLowerCase();
+      if (host !== "douyin.com" && !host.endsWith(".douyin.com")) return null;
+      if (host === "v.douyin.com") return null;
+      const pathMatch = u.pathname.match(/\/video\/(\d+)/i);
+      if (pathMatch) return pathMatch[1];
+      const modal = u.searchParams.get("modal_id");
+      if (modal && /^\d+$/.test(modal)) return modal;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 把可归一的页面改写成 yt-dlp 最稳妥的规范 URL。
+   * 目前：抖音 jingxuan/discover/?modal_id= → /video/{id}
+   */
+  function normalizeYtdlpPageUrl(pageUrl) {
+    const douyinId = extractDouyinVideoId(pageUrl);
+    if (douyinId) return `https://www.douyin.com/video/${douyinId}`;
+    return pageUrl;
+  }
+
+  /** 同一「可下载视频」标识：抖音用 aweme id，其它用归一化 URL。 */
+  function videoIdentityKey(pageUrl) {
+    const douyinId = extractDouyinVideoId(pageUrl);
+    if (douyinId) return `douyin:${douyinId}`;
+    try {
+      if (isYtdlpPreferredPage(pageUrl)) {
+        return `page:${normalizeYtdlpPageUrl(pageUrl)}`;
+      }
+      const u = new URL(pageUrl);
+      return `path:${u.origin}${u.pathname}`;
+    } catch {
+      return `raw:${pageUrl || ""}`;
+    }
+  }
+
+  /**
+   * 与弹窗 collapse 一致的展示条数：同一页面解析视频只算 1。
+   * @param {{pageUrl?: string, url?: string}[]} items
+   */
+  function countDisplayMedia(items) {
+    if (!items || items.length === 0) return 0;
+    const seen = new Set();
+    let n = 0;
+    for (const item of items) {
+      const page = (item && (item.pageUrl || item.url)) || "";
+      if (page && isYtdlpPreferredPage(page)) {
+        const key = videoIdentityKey(page);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        n += 1;
+        continue;
+      }
+      n += 1;
+    }
+    return n;
+  }
+
+  /**
+   * 从当前文档提取更靠谱的展示标题（抖音 modal 描述优先于过期的 document.title）。
+   * @param {Document} doc
+   * @param {string} [pageUrl]
+   */
+  function extractVisibleTitle(doc, pageUrl) {
+    const href = pageUrl || (typeof location !== "undefined" ? location.href : "");
+    if (extractDouyinVideoId(href) && doc) {
+      const selectors = [
+        '[data-e2e="browse-video-desc"]',
+        '[data-e2e="video-desc"]',
+        '[data-e2e="video-desc-content"]',
+        '[data-e2e="aweme-title"]',
+        '[data-e2e="detail-video-desc"]',
+        ".video-info-detail .title",
+        ".video-info-detail h1",
+      ];
+      for (const sel of selectors) {
+        const el = doc.querySelector(sel);
+        const text = el && el.textContent ? el.textContent.trim() : "";
+        if (text.length >= 2 && !/^抖音/.test(text)) {
+          return text.slice(0, 160);
+        }
+      }
+      const og = doc.querySelector('meta[property="og:title"]');
+      const ogTitle = og && og.getAttribute("content");
+      if (ogTitle && ogTitle.trim() && !/^抖音/.test(ogTitle.trim())) {
+        return ogTitle.trim().slice(0, 160);
+      }
+    }
+    return (doc && doc.title) || "";
+  }
+
   function isYtdlpPreferredPage(pageUrl) {
     try {
+      if (extractDouyinVideoId(pageUrl)) return true;
       const u = new URL(pageUrl);
       return YTDLP_PAGE_RES.some((re) => re.test(u.hostname + u.pathname));
     } catch {
@@ -98,6 +197,11 @@
   globalThis.VideoDlShared = {
     YTDLP_PAGE_RES,
     YTDLP_FRIENDLY_HOST_RE,
+    extractDouyinVideoId,
+    normalizeYtdlpPageUrl,
+    videoIdentityKey,
+    countDisplayMedia,
+    extractVisibleTitle,
     isYtdlpPreferredPage,
     classifyUrl,
     scanDom,

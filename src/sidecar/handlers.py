@@ -14,7 +14,10 @@ from src.core.download_task import (
     TaskStatus,
     VideoInfo,
 )
+from src.core.douyin_url import is_douyin_url, normalize_douyin_url
+from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
+from src.core.twitter_fallback import is_twitter_url, normalize_twitter_url
 from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, ParseTimeout
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
@@ -27,6 +30,18 @@ from src.utils.logger import setup_logger
 logger = setup_logger("SidecarHandlers")
 
 EmitEvent = Callable[[str, Dict[str, Any]], None]
+
+
+def _normalize_inbound_url(url: str) -> str:
+    """入队前归一化：抖音 modal_id → /video/{id}，Twitter 去跟踪参数。"""
+    text = (url or "").strip()
+    if not text:
+        return text
+    if is_douyin_url(text):
+        return normalize_douyin_url(text)
+    if is_twitter_url(text):
+        return normalize_twitter_url(text)
+    return text
 
 
 class HandlerError(Exception):
@@ -223,25 +238,58 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     task_ids: List[str] = []
     items = payload.get("items")
     for raw in urls:
-        url = str(raw or "").strip()
+        original = str(raw or "").strip()
+        url = _normalize_inbound_url(original)
         if not url:
             continue
         title = "未命名视频"
         thumbnail_url = ""
+        page_url = ""
         # optional richer items: [{url, title, headers, thumbnail_url, format_id, ...}]
         task_options = options
         if isinstance(items, list):
             for item in items:
-                if not isinstance(item, dict) or item.get("url") != url:
+                if not isinstance(item, dict):
+                    continue
+                item_raw = str(item.get("url") or "").strip()
+                item_norm = _normalize_inbound_url(item_raw)
+                if (
+                    item_raw != original
+                    and item_raw != url
+                    and item_norm != url
+                ):
                     continue
                 if item.get("title"):
                     title = str(item["title"])
                 if item.get("thumbnail_url"):
-                    thumbnail_url = str(item["thumbnail_url"])
+                    thumbnail_url = normalize_thumbnail_url(str(item["thumbnail_url"]))
+                if item.get("pageUrl"):
+                    page_url = str(item["pageUrl"]).strip()
+                elif item.get("page_url"):
+                    page_url = str(item["page_url"]).strip()
                 task_options = _build_item_options(options, item)
                 break
+
+        referer = ""
+        if task_options.http_headers and isinstance(task_options.http_headers, dict):
+            referer = str(
+                task_options.http_headers.get("Referer")
+                or task_options.http_headers.get("referer")
+                or ""
+            ).strip()
+        platform = PlatformDetector.detect_with_context(
+            url,
+            referer=referer or None,
+            page_url=page_url or None,
+            title=title,
+        )
         task = DownloadTask(
-            video_info=VideoInfo(url=url, title=title, thumbnail_url=thumbnail_url),
+            video_info=VideoInfo(
+                url=url,
+                title=title,
+                thumbnail_url=thumbnail_url,
+                platform=platform,
+            ),
             options=task_options,
         )
         ctx.manager.add_task(task)

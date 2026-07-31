@@ -73,7 +73,7 @@ export function NetSearchPanel() {
         {netResults.map((item) => (
           <li key={item.url} className="net-result-row">
             {item.thumbnail_url ? (
-              <img className="net-thumb" src={item.thumbnail_url} alt="" loading="lazy" />
+              <img className="net-thumb" src={item.thumbnail_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
             ) : (
               <div className="net-thumb net-thumb-placeholder" aria-hidden="true">
                 ▶

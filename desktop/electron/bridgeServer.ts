@@ -19,6 +19,8 @@ export type BridgeEnqueueItem = {
 
 export type BridgeHandlers = {
   enqueue: (items: BridgeEnqueueItem[]) => Promise<BridgeEnqueueResult>;
+  /** 可选：健康检查附带 Sidecar 是否可入队 */
+  getStatus?: () => { sidecarReady: boolean };
 };
 
 function sendJson(
@@ -138,7 +140,12 @@ export function startBridgeServer(handlers: BridgeHandlers): http.Server {
       }
 
       if (method === "GET" && url.pathname === "/health") {
-        sendJson(res, 200, { ok: true, service: "videodl-bridge" });
+        const status = handlers.getStatus?.();
+        sendJson(res, 200, {
+          ok: true,
+          service: "videodl-bridge",
+          sidecarReady: status ? status.sidecarReady : true,
+        });
         return;
       }
 

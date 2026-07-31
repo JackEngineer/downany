@@ -206,6 +206,10 @@ class ThumbnailLoader(QObject):
             return
 
         request = QNetworkRequest(QUrl(thumbnail_url))
+        # Pornhub CDN 无 Referer 会 403
+        host = (QUrl(thumbnail_url).host() or "").lower()
+        if host == "phncdn.com" or host.endswith(".phncdn.com"):
+            request.setRawHeader(b"Referer", b"https://www.pornhub.com/")
         reply = self._network_manager.get(request)
         self._in_flight_waiters[thumbnail_url] = [item_key]
         self._reply_context[reply] = thumbnail_url

@@ -146,7 +146,7 @@ export function AddConfirmDialog() {
                   }
                 />
                 {row.thumbnailUrl ? (
-                  <img className="card-thumb" src={row.thumbnailUrl} alt="" />
+                  <img className="card-thumb" src={row.thumbnailUrl} alt="" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="card-thumb card-thumb-placeholder" aria-hidden>
                     {(row.platform || "视").slice(0, 1)}

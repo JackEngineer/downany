@@ -47,6 +47,23 @@ export function TopBar() {
   }, [addFocusSignal]);
 
   useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const onToggle = () => {
+      if (!el.open) return;
+      document
+        .querySelectorAll<HTMLDetailsElement>(
+          "details.card-menu[open], details.topbar-menu[open]",
+        )
+        .forEach((other) => {
+          if (other !== el) other.open = false;
+        });
+    };
+    el.addEventListener("toggle", onToggle);
+    return () => el.removeEventListener("toggle", onToggle);
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;

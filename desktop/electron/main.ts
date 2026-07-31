@@ -7,6 +7,7 @@ import {
   Menu,
   Notification,
   nativeTheme,
+  session,
   shell,
 } from "electron";
 import * as fs from "node:fs";
@@ -27,6 +28,10 @@ import {
   extractUrlsFromArgv,
   parseDeepLinkCandidate,
 } from "./deepLink";
+import {
+  decideBridgeEnqueue,
+  isSidecarAcceptingEnqueue,
+} from "./enqueueGate";
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
@@ -34,11 +39,27 @@ import { openSettingsWindow } from "./settingsWindow";
 import { TaskTracker } from "./taskTracker";
 import { TrayController } from "./tray";
 import { parseWeblocUrl } from "./webloc";
+import { resolveOpenablePath } from "./resolveOpenablePath";
+import { patchThumbnailRequestHeaders } from "./thumbnailReferrer";
 import {
   loadWindowState,
   sanitizeBounds,
   saveWindowState,
 } from "./windowState";
+
+function installThumbnailReferrerFix(): void {
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["*://*.phncdn.com/*", "*://phncdn.com/*"] },
+    (details, callback) => {
+      callback({
+        requestHeaders: patchThumbnailRequestHeaders(
+          details.url,
+          details.requestHeaders as Record<string, string>,
+        ),
+      });
+    },
+  );
+}
 
 let mainWindow: BrowserWindow | null = null;
 let sidecar: SidecarProcess | null = null;
@@ -115,16 +136,27 @@ function urlsFromItems(items: BridgeEnqueueItem[]): string[] {
   return items.map((item) => item.url);
 }
 
+function queuePendingItems(items: BridgeEnqueueItem[]): void {
+  for (const item of items) {
+    if (!pendingEnqueueItems.some((p) => p.url === item.url)) {
+      pendingEnqueueItems.push(item);
+    }
+  }
+}
+
+function markSidecarReady(ready: boolean): void {
+  sidecarReady = ready;
+  if (ready) {
+    void flushPendingEnqueue();
+  }
+}
+
 function enqueueFromExternal(urls: string[]): void {
   const items = dedupeItems(urls.map((url) => ({ url })));
   if (items.length === 0) return;
 
   if (!sidecarReady || !sidecar) {
-    for (const item of items) {
-      if (!pendingEnqueueItems.some((p) => p.url === item.url)) {
-        pendingEnqueueItems.push(item);
-      }
-    }
+    queuePendingItems(items);
     return;
   }
 
@@ -173,20 +205,22 @@ async function enqueueFromBridge(
   if (unique.length === 0) {
     return { ok: false, error: "没有有效的 URL" };
   }
-  if (!sidecarReady || !sidecar) {
-    for (const item of unique) {
-      if (!pendingEnqueueItems.some((p) => p.url === item.url)) {
-        pendingEnqueueItems.push(item);
-      }
-    }
+  const connected =
+    Boolean(sidecar) &&
+    isSidecarAcceptingEnqueue(sidecar!.getConnectionState());
+  const decision = decideBridgeEnqueue(sidecarReady && connected);
+  if (decision.kind === "defer") {
+    // 暂存，待 Sidecar 就绪后自动入队；但对扩展返回失败，避免「已发送」假象
+    queuePendingItems(unique);
     focusMainWindow();
-    return { ok: true, count: unique.length };
+    return { ok: false, error: decision.error, count: 0 };
   }
   return flushEnqueueItems(unique);
 }
 
 async function flushPendingEnqueue(): Promise<void> {
   if (pendingEnqueueItems.length === 0) return;
+  if (!sidecarReady || !sidecar) return;
   const items = pendingEnqueueItems.splice(0, pendingEnqueueItems.length);
   await flushEnqueueItems(items);
 }
@@ -194,7 +228,15 @@ async function flushPendingEnqueue(): Promise<void> {
 function startBridge(): void {
   if (bridgeServer) return;
   try {
-    bridgeServer = startBridgeServer({ enqueue: enqueueFromBridge });
+    bridgeServer = startBridgeServer({
+      enqueue: enqueueFromBridge,
+      getStatus: () => ({
+        sidecarReady:
+          sidecarReady &&
+          Boolean(sidecar) &&
+          isSidecarAcceptingEnqueue(sidecar!.getConnectionState()),
+      }),
+    });
     process.stderr.write(
       `扩展桥已监听 http://${BRIDGE_HOST}:${BRIDGE_PORT}/enqueue\n`,
     );
@@ -418,7 +460,15 @@ function syncClipboardWatcher(enabled: boolean): void {
 async function startSidecar(): Promise<void> {
   const repoRoot = resolveRepoRoot(__dirname);
   sidecar = new SidecarProcess({ repoRoot });
-  sidecar.on("state", (state: ConnectionState) => broadcastState(state));
+  sidecar.on("state", (state: ConnectionState) => {
+    broadcastState(state);
+    // 与真实连接态同步：重连成功后自动冲刷 pending；失联后拒收假成功
+    if (isSidecarAcceptingEnqueue(state)) {
+      markSidecarReady(true);
+    } else if (!isQuitting) {
+      sidecarReady = false;
+    }
+  });
   sidecar.on("event", (event: { event: string; payload: Record<string, unknown> }) => {
     broadcastAll("sidecar:event", event);
     const name = event.event;
@@ -458,6 +508,7 @@ async function startSidecar(): Promise<void> {
     process.stderr.write(chunk);
   });
   sidecar.on("reconnected", () => {
+    markSidecarReady(true);
     void sidecar?.request("app.getSnapshot", {}).then((snap) => {
       broadcastAll("sidecar:event", {
         event: "sidecar.health",
@@ -467,9 +518,8 @@ async function startSidecar(): Promise<void> {
     });
   });
   await sidecar.start();
-  sidecarReady = true;
+  markSidecarReady(true);
   void refreshDockFromSnapshot();
-  await flushPendingEnqueue();
 
   try {
     const snap = (await sidecar.request("app.getSnapshot", {})) as {
@@ -512,11 +562,11 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("app:openPath", async (_evt, target: string) => {
-    return shell.openPath(target);
+    return shell.openPath(resolveOpenablePath(String(target || "")));
   });
 
   ipcMain.handle("app:showItemInFolder", async (_evt, target: string) => {
-    shell.showItemInFolder(target);
+    shell.showItemInFolder(resolveOpenablePath(String(target || "")));
   });
 
   ipcMain.handle("app:selectDirectory", async () => {
@@ -551,6 +601,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  installThumbnailReferrerFix();
   registerIpc();
   installMenu();
   createWindow();

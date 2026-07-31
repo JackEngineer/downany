@@ -6,8 +6,9 @@ from typing import Any, Dict, List, Optional
 import yt_dlp
 
 from src.core.download_task import VideoInfo
+from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
-from src.core.platform_detector import PlatformDetector
+from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url, pick_thumbnail_from_ydl_info
 from src.core.twitter_fallback import is_twitter_url
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
@@ -24,6 +25,8 @@ class VideoInfoExtractor:
         proxy: Optional[str] = None,
         http_headers: Optional[Dict[str, str]] = None,
     ) -> Optional[VideoInfo]:
+        if is_douyin_url(url):
+            url = normalize_douyin_url(url)
         headers = dict(DEFAULT_HTTP_HEADERS)
         if http_headers:
             headers.update(http_headers)
@@ -71,7 +74,8 @@ class VideoInfoExtractor:
                 url=url,
                 title=info.get("title") or "未命名视频",
                 duration=int(duration) if duration else 0,
-                thumbnail_url=info.get("thumbnail") or "",
+                thumbnail_url=pick_thumbnail_from_ydl_info(info)
+                or normalize_thumbnail_url(info.get("thumbnail") or ""),
                 uploader=info.get("uploader") or "未知",
                 platform=platform,
                 file_size=info.get("filesize", 0) or info.get("filesize_approx", 0) or 0,

@@ -2,7 +2,14 @@
 
 importScripts("shared.js");
 
-const { classifyUrl, isYtdlpPreferredPage } = globalThis.VideoDlShared;
+const {
+  classifyUrl,
+  isYtdlpPreferredPage,
+  normalizeYtdlpPageUrl,
+  videoIdentityKey,
+  extractDouyinVideoId,
+  countDisplayMedia,
+} = globalThis.VideoDlShared;
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
 const MENU_PAGE = "videodl-download-page";
@@ -80,12 +87,101 @@ function bumpTabGeneration(tabId) {
  */
 const tabActiveVideoPage = new Map();
 const ACTIVE_VIDEO_PAGE_TTL = 300_000;
+/** 每个 tab 当前「视频身份」，切视频时用于清空旧嗅探结果 */
+const tabVideoKey = new Map();
+
+function rememberVideoKey(tabId, pageUrl) {
+  const key = videoIdentityKey(pageUrl || "");
+  const prev = tabVideoKey.get(tabId);
+  if (prev && prev !== key) {
+    clearTabMedia(tabId);
+  }
+  tabVideoKey.set(tabId, key);
+  pruneTabMediaToCurrentVideo(tabId);
+  void updateBadge(tabId);
+  return key;
+}
+
+function setActiveVideoPage(tabId, pageUrl, title) {
+  const canonical = normalizeYtdlpPageUrl(pageUrl) || pageUrl;
+  rememberVideoKey(tabId, canonical);
+  tabActiveVideoPage.set(tabId, {
+    url: canonical,
+    title: title || "",
+    at: Date.now(),
+  });
+  backfillTabMediaContext(tabId);
+  pruneTabMediaToCurrentVideo(tabId);
+  void updateBadge(tabId);
+}
+
+/** 抖音等页面解析场景：只保留当前视频相关条目，去掉上一条残留。 */
+function pruneTabMediaToCurrentVideo(tabId) {
+  const currentKey = tabVideoKey.get(tabId);
+  if (!currentKey || !currentKey.startsWith("douyin:")) return;
+  const bucket = tabMedia.get(tabId);
+  if (!bucket || bucket.size === 0) return;
+
+  let changed = false;
+  let keepKey = null;
+  for (const [k, v] of bucket) {
+    const page = v.pageUrl || "";
+    const idFromPage = page ? extractDouyinVideoId(page) : null;
+    if (idFromPage || (page && isYtdlpPreferredPage(page))) {
+      if (videoIdentityKey(page) !== currentKey) {
+        bucket.delete(k);
+        changed = true;
+        continue;
+      }
+      // 同一视频的多条 CDN：只留一条（体积更大 / master 优先）
+      if (keepKey == null) {
+        keepKey = k;
+      } else {
+        const prev = bucket.get(keepKey);
+        const preferNew =
+          (v.enrichKind === "master" && prev.enrichKind !== "master") ||
+          (v.enrichKind === prev.enrichKind &&
+            (v.size || 0) > (prev.size || 0));
+        if (preferNew) {
+          bucket.delete(keepKey);
+          keepKey = k;
+        } else {
+          bucket.delete(k);
+        }
+        changed = true;
+      }
+      continue;
+    }
+    // 无 pageUrl 的孤儿 CDN：若不是最近跟着当前播放出现的，丢掉
+    const rec = tabActiveVideoPage.get(tabId);
+    if (
+      !rec ||
+      !v.detectedAt ||
+      Math.abs(rec.at - v.detectedAt) > BACKFILL_WINDOW_MS
+    ) {
+      bucket.delete(k);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    schedulePersist(tabId);
+  }
+}
 
 function resolvePageContext(tabId, fallbackUrl) {
-  if (fallbackUrl && isYtdlpPreferredPage(fallbackUrl)) {
-    return { url: fallbackUrl, title: "" };
-  }
   const rec = tabActiveVideoPage.get(tabId);
+  if (fallbackUrl && isYtdlpPreferredPage(fallbackUrl)) {
+    const canonical = normalizeYtdlpPageUrl(fallbackUrl);
+    if (
+      rec &&
+      Date.now() - rec.at < ACTIVE_VIDEO_PAGE_TTL &&
+      videoIdentityKey(rec.url) === videoIdentityKey(canonical)
+    ) {
+      return { url: canonical, title: rec.title || "" };
+    }
+    return { url: canonical, title: "" };
+  }
   if (rec && Date.now() - rec.at < ACTIVE_VIDEO_PAGE_TTL) {
     return { url: rec.url, title: rec.title || "" };
   }
@@ -447,13 +543,14 @@ async function ingestCandidate(tabId, item) {
   const pageUrl = ctx.url;
   const cardTitle = ctx.title || item.title || "";
 
-  // 已关联到 yt-dlp 详情页的条目：同详情页只保留一条
+  // 已关联到 yt-dlp 详情页的条目：同一视频只保留一条
   // （实际发送的是页面链接，多条直链毫无区别）；
   // 例外：新候选可能是 master 清单，放行验证替换（拿多码率/时长信息）
   let pageDupKey = null;
   if (isYtdlpPreferredPage(pageUrl)) {
+    const wantKey = videoIdentityKey(pageUrl);
     for (const [k, v] of bucket) {
-      if (v.pageUrl === pageUrl) {
+      if (v.pageUrl && videoIdentityKey(v.pageUrl) === wantKey) {
         pageDupKey = k;
         break;
       }
@@ -535,6 +632,7 @@ function clearTabMedia(tabId) {
   bumpTabGeneration(tabId);
   tabMedia.delete(tabId);
   tabActiveVideoPage.delete(tabId);
+  tabVideoKey.delete(tabId);
   chrome.storage.session.remove(storageKey(tabId)).catch(() => {});
   void chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
 }
@@ -561,8 +659,31 @@ async function listTabMedia(tabId) {
     }
   }
   if (!bucket || bucket.size === 0) return [];
-  return Array.from(bucket.values()).sort((a, b) => {
-    const rank = { hls: 0, dash: 1, file: 2, audio: 3, media: 4 };
+
+  // 恢复后按当前视频再剪枝一次，避免 session 里旧条目把角标撑大
+  pruneTabMediaToCurrentVideo(tabId);
+  bucket = tabMedia.get(tabId);
+  if (!bucket || bucket.size === 0) return [];
+
+  let items = Array.from(bucket.values());
+  const currentKey = tabVideoKey.get(tabId);
+  if (currentKey && currentKey.startsWith("douyin:")) {
+    items = items.filter((v) => {
+      const page = v.pageUrl || "";
+      if (page && (extractDouyinVideoId(page) || isYtdlpPreferredPage(page))) {
+        return videoIdentityKey(page) === currentKey;
+      }
+      const rec = tabActiveVideoPage.get(tabId);
+      return Boolean(
+        rec &&
+          v.detectedAt &&
+          Math.abs(rec.at - v.detectedAt) <= BACKFILL_WINDOW_MS,
+      );
+    });
+  }
+
+  return items.sort((a, b) => {
+    const rank = { hls: 0, dash: 1, file: 2, audio: 3, media: 4, page: 0 };
     const byType = (rank[a.type] ?? 9) - (rank[b.type] ?? 9);
     if (byType !== 0) return byType;
     // 同类型：master 清单优先，其次按发现时间倒序
@@ -575,7 +696,7 @@ async function listTabMedia(tabId) {
 
 async function updateBadge(tabId) {
   const items = await listTabMedia(tabId);
-  const count = items.length;
+  const count = countDisplayMedia(items);
   try {
     await chrome.action.setBadgeBackgroundColor({ color: "#2563eb", tabId });
     await chrome.action.setBadgeText({
@@ -625,11 +746,47 @@ async function getCookieHeader(url) {
   }
 }
 
-/** Referer 用页面地址；Cookie 取媒体资源所在域（跨域 CDN 才拿得到对应会话）。 */
+/** 合并 Cookie 头：靠前的源优先（同名不覆盖）。 */
+function mergeCookieHeaders(...parts) {
+  const map = new Map();
+  for (const part of parts) {
+    if (!part || typeof part !== "string") continue;
+    for (const pair of part.split(";")) {
+      const idx = pair.indexOf("=");
+      if (idx <= 0) continue;
+      const name = pair.slice(0, idx).trim();
+      const value = pair.slice(idx + 1).trim();
+      if (!name || map.has(name)) continue;
+      map.set(name, value);
+    }
+  }
+  if (map.size === 0) return "";
+  return Array.from(map.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
+}
+
+/**
+ * Referer 用页面地址；Cookie 优先页面域（抖音 extractor 需要 douyin.com），
+ * 再合并媒体 CDN 域 Cookie。
+ */
 async function buildHeadersForUrl(mediaUrl, pageUrl) {
   const headers = {};
   if (pageUrl || mediaUrl) headers.Referer = pageUrl || mediaUrl;
-  const cookie = await getCookieHeader(mediaUrl);
+  const pageCookie = pageUrl ? await getCookieHeader(pageUrl) : "";
+  const mediaCookie =
+    mediaUrl && mediaUrl !== pageUrl ? await getCookieHeader(mediaUrl) : "";
+  // 页面域无 Cookie 时，对抖音再试 www.douyin.com（精选页可能是子路径同域）
+  let douyinFallback = "";
+  if (
+    !pageCookie &&
+    pageUrl &&
+    /douyin\.com/i.test(pageUrl) &&
+    !/^https?:\/\/www\.douyin\.com\/?$/i.test(pageUrl)
+  ) {
+    douyinFallback = await getCookieHeader("https://www.douyin.com/");
+  }
+  const cookie = mergeCookieHeaders(pageCookie, douyinFallback, mediaCookie);
   if (cookie) headers.Cookie = cookie;
   return headers;
 }
@@ -735,9 +892,15 @@ async function sendItemsToDownloader(
       !skipVerify && (!!preferredPage || !!raw.forcePage);
     let finalUrl = url;
     if (viaPage) {
-      finalUrl = preferredPage || pageUrl || url;
+      finalUrl = normalizeYtdlpPageUrl(preferredPage || pageUrl || url);
+    } else if (isYtdlpPreferredPage(url) || skipVerify) {
+      // 「仅发送页面链接」等：入队前把 modal_id 改写成 /video/{id}
+      finalUrl = normalizeYtdlpPageUrl(url);
     }
-    const headers = await buildHeadersForUrl(finalUrl, pageUrl || finalUrl);
+    const headers = await buildHeadersForUrl(
+      finalUrl,
+      normalizeYtdlpPageUrl(pageUrl || finalUrl),
+    );
     prepared.push({
       url: finalUrl,
       title: raw.title || "",
@@ -994,16 +1157,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === "pageNavigated") {
+    const tabId =
+      typeof message.tabId === "number" ? message.tabId : sender.tab?.id;
+    if (typeof tabId === "number" && message.pageUrl) {
+      rememberVideoKey(tabId, message.pageUrl);
+      if (
+        isYtdlpPreferredPage(message.pageUrl) ||
+        videoIdentityKey(message.pageUrl).startsWith("douyin:")
+      ) {
+        setActiveVideoPage(
+          tabId,
+          message.pageUrl,
+          message.pageTitle || "",
+        );
+      }
+    }
+    return false;
+  }
+
   if (message.type === "activeVideoPage") {
     const tabId =
       typeof message.tabId === "number" ? message.tabId : sender.tab?.id;
     if (typeof tabId === "number" && message.pageUrl) {
-      tabActiveVideoPage.set(tabId, {
-        url: message.pageUrl,
-        title: message.title || "",
-        at: Date.now(),
-      });
-      backfillTabMediaContext(tabId);
+      setActiveVideoPage(tabId, message.pageUrl, message.title || "");
     }
     return false;
   }
