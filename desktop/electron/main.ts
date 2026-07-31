@@ -46,6 +46,7 @@ import {
   sanitizeBounds,
   saveWindowState,
 } from "./windowState";
+import { checkForAppUpdates } from "./appUpdater";
 
 function installThumbnailReferrerFix(): void {
   session.defaultSession.webRequest.onBeforeSendHeaders(
@@ -597,6 +598,10 @@ function registerIpc(): void {
 
   ipcMain.handle("app:quit", async () => {
     app.quit();
+  });
+
+  ipcMain.handle("app:checkUpdate", async () => {
+    return checkForAppUpdates(app.getVersion());
   });
 }
 

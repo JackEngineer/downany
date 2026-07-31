@@ -515,6 +515,29 @@ export function SettingsApp() {
           </section>
 
           <section className="settings-section">
+            <h2>应用更新</h2>
+            <p className="muted">
+              需签名公证与更新 feed 后启用，详见 docs/RELEASE.md。
+            </p>
+            <div className="settings-control">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  void window.api.checkAppUpdate().then((info) => {
+                    pushToast({
+                      kind: info.status === "disabled" ? "info" : "success",
+                      title: info.message,
+                    });
+                  });
+                }}
+              >
+                检查应用更新
+              </button>
+            </div>
+          </section>
+
+          <section className="settings-section">
             <h2>诊断</h2>
             <p className="muted">
               导出日志、yt-dlp / ffmpeg 版本与失败任务摘要，便于排查下载问题。
