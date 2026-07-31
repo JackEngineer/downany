@@ -8,6 +8,7 @@ import yt_dlp
 from src.core.download_task import VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.twitter_fallback import is_twitter_url, resolve_twitter_media
+from src.core.ytdlp_cookies import apply_cookiefile_from_headers, cleanup_cookiefile
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.utils.logger import setup_logger
@@ -176,6 +177,7 @@ class Downloader:
         self.last_info = None
         self.last_ydl_info = None
 
+        cookie_path = apply_cookiefile_from_headers(ydl_opts, url)
         try:
             self._download_with_ydl(url, ydl_opts)
             if self.finished_callback:
@@ -219,6 +221,8 @@ class Downloader:
             if "任务已取消" in str(e) or "任务已暂停" in str(e):
                 raise DownloadCancelled(str(e)) from e
             raise DownloadError(str(e)) from e
+        finally:
+            cleanup_cookiefile(cookie_path)
 
     def _download_with_ydl(self, url: str, ydl_opts: Dict[str, Any]) -> None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

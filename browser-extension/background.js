@@ -9,6 +9,7 @@ const {
   videoIdentityKey,
   extractDouyinVideoId,
   countDisplayMedia,
+  isOrphanTwitterCdn,
 } = globalThis.VideoDlShared;
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
@@ -115,10 +116,15 @@ function setActiveVideoPage(tabId, pageUrl, title) {
   void updateBadge(tabId);
 }
 
-/** 抖音等页面解析场景：只保留当前视频相关条目，去掉上一条残留。 */
+/** 抖音 / Instagram 等页面解析：只保留当前视频相关条目，去掉上一条残留。 */
 function pruneTabMediaToCurrentVideo(tabId) {
   const currentKey = tabVideoKey.get(tabId);
-  if (!currentKey || !currentKey.startsWith("douyin:")) return;
+  if (
+    !currentKey ||
+    !(currentKey.startsWith("douyin:") || currentKey.startsWith("page:"))
+  ) {
+    return;
+  }
   const bucket = tabMedia.get(tabId);
   if (!bucket || bucket.size === 0) return;
 
@@ -543,6 +549,11 @@ async function ingestCandidate(tabId, item) {
   const pageUrl = ctx.url;
   const cardTitle = ctx.title || item.title || "";
 
+  // X 主页/时间线：未挂到 /status/{id} 的 twimg HLS 不入库（否则全是无标题 m3u8）
+  if (isOrphanTwitterCdn(item.url, pageUrl)) {
+    return;
+  }
+
   // 已关联到 yt-dlp 详情页的条目：同一视频只保留一条
   // （实际发送的是页面链接，多条直链毫无区别）；
   // 例外：新候选可能是 master 清单，放行验证替换（拿多码率/时长信息）
@@ -665,7 +676,9 @@ async function listTabMedia(tabId) {
   bucket = tabMedia.get(tabId);
   if (!bucket || bucket.size === 0) return [];
 
-  let items = Array.from(bucket.values());
+  let items = Array.from(bucket.values()).filter(
+    (v) => !isOrphanTwitterCdn(v.url, v.pageUrl || ""),
+  );
   const currentKey = tabVideoKey.get(tabId);
   if (currentKey && currentKey.startsWith("douyin:")) {
     items = items.filter((v) => {
@@ -777,16 +790,21 @@ async function buildHeadersForUrl(mediaUrl, pageUrl) {
   const mediaCookie =
     mediaUrl && mediaUrl !== pageUrl ? await getCookieHeader(mediaUrl) : "";
   // 页面域无 Cookie 时，对抖音再试 www.douyin.com（精选页可能是子路径同域）
-  let douyinFallback = "";
+  let siteFallback = "";
   if (
     !pageCookie &&
     pageUrl &&
     /douyin\.com/i.test(pageUrl) &&
     !/^https?:\/\/www\.douyin\.com\/?$/i.test(pageUrl)
   ) {
-    douyinFallback = await getCookieHeader("https://www.douyin.com/");
+    siteFallback = await getCookieHeader("https://www.douyin.com/");
   }
-  const cookie = mergeCookieHeaders(pageCookie, douyinFallback, mediaCookie);
+  // Instagram：reel/p 页 Cookie 可能不全，补 www.instagram.com 会话
+  if (/instagram\.com/i.test(pageUrl || mediaUrl || "")) {
+    const igRoot = await getCookieHeader("https://www.instagram.com/");
+    siteFallback = mergeCookieHeaders(siteFallback, igRoot);
+  }
+  const cookie = mergeCookieHeaders(pageCookie, siteFallback, mediaCookie);
   if (cookie) headers.Cookie = cookie;
   return headers;
 }

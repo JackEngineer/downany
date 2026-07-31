@@ -82,4 +82,113 @@ assert.strictEqual(
   "新视频标题ABC",
 );
 
-console.log("shared.js douyin tests passed");
+// Instagram：document.title 常为站点名；og 必须与当前 shortcode 一致才可用
+const igDocOg = {
+  title: "Instagram",
+  querySelector(sel) {
+    if (sel.includes("og:url")) {
+      return {
+        getAttribute: () => "https://www.instagram.com/reels/DbC-8YmTgQt/",
+      };
+    }
+    if (sel === 'meta[property="og:title"]' || sel.includes("og:title")) {
+      return {
+        getAttribute: () =>
+          'goutouluoli_ on Instagram: "今日份小狗 #cute"',
+      };
+    }
+    return null;
+  },
+};
+assert.strictEqual(
+  extractVisibleTitle(
+    igDocOg,
+    "https://www.instagram.com/reels/DbC-8YmTgQt/",
+  ),
+  "今日份小狗 #cute",
+);
+
+const igDocDesc = {
+  title: "Instagram",
+  querySelector(sel) {
+    if (sel.includes("og:url")) {
+      return {
+        getAttribute: () => "https://www.instagram.com/p/AbCdEf123/",
+      };
+    }
+    if (sel.includes("og:title")) {
+      return { getAttribute: () => "Instagram" };
+    }
+    if (sel.includes("og:description")) {
+      return { getAttribute: () => "海边日落，一起看吗？ #reels" };
+    }
+    return null;
+  },
+};
+assert.strictEqual(
+  extractVisibleTitle(
+    igDocDesc,
+    "https://www.instagram.com/p/AbCdEf123/",
+  ),
+  "海边日落，一起看吗？ #reels",
+);
+
+// SPA 切到下一条时 og 常滞后：不得沿用上一条文案
+const igDocStaleOg = {
+  title: "Instagram",
+  querySelector(sel) {
+    if (sel.includes("og:url")) {
+      return {
+        getAttribute: () => "https://www.instagram.com/reels/OLDCODE123/",
+      };
+    }
+    if (sel.includes("og:title")) {
+      return {
+        getAttribute: () => 'user on Instagram: "上一条标题"',
+      };
+    }
+    if (sel.includes("og:description")) {
+      return { getAttribute: () => "上一条描述" };
+    }
+    return null;
+  },
+};
+assert.strictEqual(
+  extractVisibleTitle(
+    igDocStaleOg,
+    "https://www.instagram.com/reels/NEWCODE456/",
+  ),
+  "",
+);
+
+const { isWeakPageTitle, extractInstagramShortcode } = globalThis.VideoDlShared;
+assert.strictEqual(
+  extractInstagramShortcode("https://www.instagram.com/reels/DbC-8YmTgQt/"),
+  "DbC-8YmTgQt",
+);
+assert.ok(isWeakPageTitle("Instagram"));
+assert.ok(isWeakPageTitle("Video by goutouluoli_"));
+assert.ok(!isWeakPageTitle("今日份小狗 #cute"));
+
+const { isTwitterMediaCdn, isOrphanTwitterCdn } = globalThis.VideoDlShared;
+assert.ok(
+  isTwitterMediaCdn(
+    "https://video.twimg.com/amplify_video/123/pl/YU84xiUy8KeKcvp3.m3u8",
+  ),
+);
+assert.ok(
+  isOrphanTwitterCdn(
+    "https://video.twimg.com/amplify_video/123/pl/YU84xiUy8KeKcvp3.m3u8",
+    "https://x.com/nisobudaow0",
+  ),
+  "profile page must not keep orphan HLS",
+);
+assert.ok(
+  !isOrphanTwitterCdn(
+    "https://video.twimg.com/amplify_video/123/pl/YU84xiUy8KeKcvp3.m3u8",
+    "https://x.com/nisobudaow0/status/2082131456168747008",
+  ),
+  "status page may keep CDN (will collapse to 页面解析)",
+);
+
+console.log("shared.js title tests passed");

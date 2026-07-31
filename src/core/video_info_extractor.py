@@ -9,7 +9,9 @@ from src.core.download_task import VideoInfo
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url, pick_thumbnail_from_ydl_info
+from src.core.title_utils import pick_title_from_ydl_info
 from src.core.twitter_fallback import is_twitter_url
+from src.core.ytdlp_cookies import apply_cookiefile_from_headers, cleanup_cookiefile
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
 
@@ -43,6 +45,7 @@ class VideoInfoExtractor:
         if proxy:
             ydl_opts["proxy"] = proxy
 
+        cookie_path = apply_cookiefile_from_headers(ydl_opts, url)
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -72,7 +75,7 @@ class VideoInfoExtractor:
 
             video_info = VideoInfo(
                 url=url,
-                title=info.get("title") or "未命名视频",
+                title=pick_title_from_ydl_info(info),
                 duration=int(duration) if duration else 0,
                 thumbnail_url=pick_thumbnail_from_ydl_info(info)
                 or normalize_thumbnail_url(info.get("thumbnail") or ""),
@@ -98,6 +101,8 @@ class VideoInfoExtractor:
                 except Exception as fallback_exc:
                     logger.error("Twitter 元数据回退失败: %s", fallback_exc)
             return None
+        finally:
+            cleanup_cookiefile(cookie_path)
 
     @staticmethod
     def get_format_description(fmt: Dict[str, Any]) -> str:

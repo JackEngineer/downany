@@ -100,7 +100,155 @@
   }
 
   /**
-   * 从当前文档提取更靠谱的展示标题（抖音 modal 描述优先于过期的 document.title）。
+   * 站点名 / yt-dlp 占位标题，不适合直接展示。
+   * @param {string} title
+   */
+  function isWeakPageTitle(title) {
+    const text = (title || "").trim();
+    if (!text) return true;
+    const lower = text.toLowerCase();
+    if (
+      lower === "instagram" ||
+      lower === "instagram reels" ||
+      lower === "reels" ||
+      lower === "pornhub" ||
+      lower === "youtube" ||
+      lower === "bilibili" ||
+      lower === "抖音" ||
+      lower === "tiktok" ||
+      lower === "x" ||
+      lower === "twitter" ||
+      lower === "home / x" ||
+      /\/ x$/i.test(text)
+    ) {
+      return true;
+    }
+    if (/^video by\s+\S+$/i.test(text)) return true;
+    return false;
+  }
+
+  /**
+   * Instagram og:title 常为 `user on Instagram: "caption"`。
+   * @param {string} text
+   */
+  function unwrapInstagramOgTitle(text) {
+    const raw = (text || "").trim();
+    if (!raw) return "";
+    const m = raw.match(/^.+?\s+on\s+Instagram:\s*(.+)$/i);
+    if (!m || !m[1]) return raw;
+    let cap = m[1].trim();
+    const q = cap[0];
+    if (
+      (q === '"' || q === "'" || q === "\u201c") &&
+      cap.length >= 2 &&
+      (cap.endsWith('"') || cap.endsWith("'") || cap.endsWith("\u201d"))
+    ) {
+      cap = cap.slice(1, -1).trim();
+    }
+    return cap || raw;
+  }
+
+  function isInstagramPostUrl(pageUrl) {
+    try {
+      const u = new URL(pageUrl);
+      const host = u.hostname.toLowerCase();
+      if (host !== "instagram.com" && !host.endsWith(".instagram.com")) {
+        return false;
+      }
+      return /\/(p|reel|reels)\/[\w-]+/i.test(u.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Instagram /p|reel|reels/{shortcode}/ */
+  function extractInstagramShortcode(pageUrl) {
+    try {
+      const u = new URL(pageUrl);
+      const host = u.hostname.toLowerCase();
+      if (host !== "instagram.com" && !host.endsWith(".instagram.com")) {
+        return null;
+      }
+      const m = u.pathname.match(/\/(?:p|reel|reels)\/([\w-]+)/i);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function metaContent(doc, selector) {
+    if (!doc || !doc.querySelector) return "";
+    const el = doc.querySelector(selector);
+    if (!el || typeof el.getAttribute !== "function") return "";
+    const v = el.getAttribute("content");
+    return (v || "").trim();
+  }
+
+  /**
+   * Instagram SPA 切 Reel 时 og:* 常滞后；仅当 og:url 含当前 shortcode 才采信。
+   */
+  function instagramOgMatchesPage(doc, pageUrl) {
+    const shortcode = extractInstagramShortcode(pageUrl);
+    if (!shortcode) return false;
+    const ogUrl = metaContent(doc, 'meta[property="og:url"]');
+    if (!ogUrl) return false;
+    try {
+      return extractInstagramShortcode(ogUrl) === shortcode;
+    } catch {
+      return ogUrl.includes(shortcode);
+    }
+  }
+
+  /** 优先从含当前 shortcode 的卡片/链接附近取可见文案。 */
+  function extractInstagramDomCaption(doc, pageUrl) {
+    const shortcode = extractInstagramShortcode(pageUrl);
+    if (!shortcode || !doc || !doc.querySelector) return "";
+
+    const link =
+      doc.querySelector(
+        `a[href*="/reel/${shortcode}"], a[href*="/reels/${shortcode}"], a[href*="/p/${shortcode}"]`,
+      ) || null;
+    const root =
+      (link && (link.closest("article") || link.closest("section") || link.parentElement)) ||
+      null;
+
+    const scopes = root ? [root, doc] : [doc];
+    const capSelectors = [
+      'h1[dir="auto"]',
+      'span[dir="auto"]',
+      "h1",
+      'div[role="menuitem"] span',
+    ];
+    for (const scope of scopes) {
+      if (!scope || !scope.querySelector) continue;
+      for (const sel of capSelectors) {
+        const nodes = scope.querySelectorAll
+          ? scope.querySelectorAll(sel)
+          : [];
+        for (const el of nodes) {
+          const text = el && el.textContent ? el.textContent.trim() : "";
+          if (text.length >= 2 && !isWeakPageTitle(text) && text.length <= 300) {
+            // 用户名一行往往很短且无空格 hashtag；文案优先更长的
+            if (text.length >= 4) return text.slice(0, 160);
+          }
+        }
+      }
+      // 单节点 querySelector 兜底（简易 Document mock）
+      if (!scope.querySelectorAll) {
+        for (const sel of capSelectors) {
+          const el = scope.querySelector(sel);
+          const text = el && el.textContent ? el.textContent.trim() : "";
+          if (text.length >= 2 && !isWeakPageTitle(text)) {
+            return text.slice(0, 160);
+          }
+        }
+      }
+    }
+    return "";
+  }
+
+  /**
+   * 从当前文档提取更靠谱的展示标题（抖音 / Instagram 文案优先于站点 document.title）。
    * @param {Document} doc
    * @param {string} [pageUrl]
    */
@@ -123,13 +271,39 @@
           return text.slice(0, 160);
         }
       }
-      const og = doc.querySelector('meta[property="og:title"]');
-      const ogTitle = og && og.getAttribute("content");
-      if (ogTitle && ogTitle.trim() && !/^抖音/.test(ogTitle.trim())) {
-        return ogTitle.trim().slice(0, 160);
+      const ogTitle = metaContent(doc, 'meta[property="og:title"]');
+      if (ogTitle && !/^抖音/.test(ogTitle) && !isWeakPageTitle(ogTitle)) {
+        return ogTitle.slice(0, 160);
       }
     }
-    return (doc && doc.title) || "";
+
+    if (isInstagramPostUrl(href) && doc) {
+      // 1) 当前 shortcode 相关 DOM（SPA 切页后比 og 新）
+      const domCap = extractInstagramDomCaption(doc, href);
+      if (domCap) return domCap;
+
+      // 2) 仅当 og:url 已切到当前 shortcode 才用 meta（避免上一条残留）
+      if (instagramOgMatchesPage(doc, href)) {
+        const ogTitle = unwrapInstagramOgTitle(
+          metaContent(doc, 'meta[property="og:title"]'),
+        );
+        if (ogTitle && !isWeakPageTitle(ogTitle)) {
+          return ogTitle.slice(0, 160);
+        }
+        const ogDesc = metaContent(doc, 'meta[property="og:description"]');
+        if (ogDesc && !isWeakPageTitle(ogDesc)) {
+          return ogDesc.slice(0, 160);
+        }
+        const nameDesc = metaContent(doc, 'meta[name="description"]');
+        if (nameDesc && !isWeakPageTitle(nameDesc)) {
+          return nameDesc.slice(0, 160);
+        }
+      }
+      return "";
+    }
+
+    const pageTitle = (doc && doc.title) || "";
+    return isWeakPageTitle(pageTitle) ? "" : pageTitle;
   }
 
   function isYtdlpPreferredPage(pageUrl) {
@@ -140,6 +314,33 @@
     } catch {
       return false;
     }
+  }
+
+  /** X/Twitter 视频 CDN（时间线嗅探到的多为 HLS m3u8） */
+  function isTwitterMediaCdn(url) {
+    try {
+      const h = new URL(url).hostname.toLowerCase();
+      if (h === "video.twimg.com" || h.endsWith(".video.twimg.com")) return true;
+      if (h === "ton.twimg.com") return true;
+      if (
+        h.endsWith(".twimg.com") &&
+        /\/(amplify_video|ext_tw_video|tweet_video|pu\/vid)\//i.test(url)
+      ) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 主页/时间线上的 twimg 直链若未挂到 /status/{id}，不要当独立下载项展示：
+   * 会变成无文案的 HLS 文件名列表；应等播放关联详情页后再以「页面解析」收录。
+   */
+  function isOrphanTwitterCdn(mediaUrl, pageUrl) {
+    if (!isTwitterMediaCdn(mediaUrl)) return false;
+    return !isYtdlpPreferredPage(pageUrl || "");
   }
 
   function classifyUrl(url) {
@@ -202,7 +403,13 @@
     videoIdentityKey,
     countDisplayMedia,
     extractVisibleTitle,
+    isWeakPageTitle,
+    unwrapInstagramOgTitle,
+    extractInstagramShortcode,
+    isInstagramPostUrl,
     isYtdlpPreferredPage,
+    isTwitterMediaCdn,
+    isOrphanTwitterCdn,
     classifyUrl,
     scanDom,
   };

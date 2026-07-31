@@ -459,3 +459,31 @@ def test_page_task_with_title_still_prefills_missing_thumbnail(manager):
     mock_extract.assert_called()
     assert task.video_info.title == "页面标题已有"
     assert task.video_info.thumbnail_url.endswith("a.jpg")
+
+
+def test_instagram_weak_title_backfilled_from_description(manager):
+    """Instagram 的 Video by / 站点名标题应被 description 文案替换。"""
+    from src.core.download_task import Platform
+
+    task = _make_task(
+        url="https://www.instagram.com/reels/DbC-8YmTgQt/",
+        title="Instagram",
+    )
+    task.video_info.platform = Platform.INSTAGRAM
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = {
+            "title": "Video by goutouluoli_",
+            "description": "今日份小狗 #cute\n第二行",
+            "uploader": "goutouluoli_",
+            "thumbnail": "https://example.com/t.jpg",
+        }
+        instance.download.return_value = "/tmp/ig.mp4"
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    assert task.video_info.title == "今日份小狗 #cute"

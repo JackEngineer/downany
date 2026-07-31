@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "视频下载器",
-  "version": "0.5.4",
+  "version": "0.5.10",
   "description": "识别页面媒体后一键发送到本机视频下载器",
   "minimum_chrome_version": "102",
   "permissions": [

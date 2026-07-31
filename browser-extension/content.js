@@ -9,14 +9,52 @@
     extractDouyinVideoId,
     normalizeYtdlpPageUrl,
     extractVisibleTitle,
+    isWeakPageTitle,
+    isInstagramPostUrl,
   } = globalThis.VideoDlShared;
 
   let debounceTimer = null;
   let observer = null;
   let lastHref = location.href;
+  /** @type {ReturnType<typeof setTimeout>[]} */
+  let igTitleRetryTimers = [];
 
   function currentTitle() {
-    return extractVisibleTitle(document, location.href) || document.title || "";
+    const extracted = extractVisibleTitle(document, location.href);
+    if (extracted) return extracted;
+    const docTitle = (document.title || "").trim();
+    if (isWeakPageTitle(docTitle)) return "";
+    return docTitle;
+  }
+
+  function clearIgTitleRetries() {
+    for (const t of igTitleRetryTimers) clearTimeout(t);
+    igTitleRetryTimers = [];
+  }
+
+  function reportActiveVideoPage(pageUrl, title) {
+    try {
+      chrome.runtime.sendMessage({
+        type: "activeVideoPage",
+        pageUrl,
+        title: title || "",
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  function scheduleInstagramTitleRefresh(href) {
+    clearIgTitleRetries();
+    // SPA 切 Reel：DOM/og 常滞后，延迟补报标题
+    for (const ms of [400, 1000, 2000]) {
+      const timer = setTimeout(() => {
+        if (location.href !== href) return;
+        reportActiveVideoPage(normalizeYtdlpPageUrl(href), currentTitle());
+        scheduleReport();
+      }, ms);
+      igTitleRetryTimers.push(timer);
+    }
   }
 
   function report() {
@@ -54,15 +92,10 @@
     }
     const douyinId = extractDouyinVideoId(href);
     if (douyinId) {
-      try {
-        chrome.runtime.sendMessage({
-          type: "activeVideoPage",
-          pageUrl: normalizeYtdlpPageUrl(href),
-          title,
-        });
-      } catch {
-        // ignore
-      }
+      reportActiveVideoPage(normalizeYtdlpPageUrl(href), title);
+    } else if (isInstagramPostUrl(href)) {
+      reportActiveVideoPage(normalizeYtdlpPageUrl(href), title);
+      scheduleInstagramTitleRefresh(href);
     }
     scheduleReport();
   }
@@ -247,20 +280,20 @@
 
   report();
   startObserver();
-  // 首次也同步一次导航态（刷新后恢复 modal 场景）
+  // 首次也同步一次导航态（刷新后恢复 modal / Reel 场景）
   try {
-    const douyinId = extractDouyinVideoId(location.href);
-    if (douyinId) {
+    const href = location.href;
+    const douyinId = extractDouyinVideoId(href);
+    if (douyinId || isInstagramPostUrl(href)) {
       chrome.runtime.sendMessage({
         type: "pageNavigated",
-        pageUrl: location.href,
+        pageUrl: href,
         pageTitle: currentTitle(),
       });
-      chrome.runtime.sendMessage({
-        type: "activeVideoPage",
-        pageUrl: normalizeYtdlpPageUrl(location.href),
-        title: currentTitle(),
-      });
+      reportActiveVideoPage(normalizeYtdlpPageUrl(href), currentTitle());
+      if (isInstagramPostUrl(href)) {
+        scheduleInstagramTitleRefresh(href);
+      }
     }
   } catch {
     // ignore

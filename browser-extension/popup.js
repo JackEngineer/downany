@@ -5,6 +5,7 @@ const {
   isYtdlpPreferredPage,
   normalizeYtdlpPageUrl,
   YTDLP_FRIENDLY_HOST_RE,
+  isWeakPageTitle,
 } = globalThis.VideoDlShared;
 
 const HTTP_RE = /^https?:\/\/\S+/i;
@@ -197,8 +198,15 @@ function renderMediaList() {
 
     const name = document.createElement("p");
     name.className = "media-name";
-    name.textContent =
-      item.title || item.pageTitle || currentTitle || displayName(item.url);
+    const candidates = [item.title, item.pageTitle, currentTitle];
+    let shown = "";
+    for (const c of candidates) {
+      if (c && !isWeakPageTitle(c)) {
+        shown = c;
+        break;
+      }
+    }
+    name.textContent = shown || displayName(item.url);
     name.title = item.pageUrl || item.url;
 
     const host = document.createElement("p");
@@ -291,8 +299,18 @@ function collapseItems(items) {
         if ((!prev.variants || prev.variants <= 1) && item.variants > 1) {
           prev.variants = item.variants;
         }
-        if (!prev.title && item.title) prev.title = item.title;
-        if (!prev.title && item.pageTitle) prev.title = item.pageTitle;
+        // 同页多条候选：只在还没有靠谱标题时补齐，避免后到的弱/短标题盖掉推文正文
+        if (!prev.title || isWeakPageTitle(prev.title)) {
+          if (item.title && !isWeakPageTitle(item.title)) {
+            prev.title = item.title;
+          } else if (!prev.title && item.title) {
+            prev.title = item.title;
+          } else if (item.pageTitle && !isWeakPageTitle(item.pageTitle)) {
+            prev.title = item.pageTitle;
+          } else if (!prev.title && item.pageTitle) {
+            prev.title = item.pageTitle;
+          }
+        }
         continue;
       }
       const pageItem = {
@@ -343,7 +361,11 @@ async function loadMedia(tabId, { preserveSelection = false } = {}) {
       const mKey = normalizeYtdlpPageUrl(m.pageUrl || m.url);
       if (mKey === playingKey || m.url === nowPlaying.url) {
         m.nowPlaying = true;
-        if (nowPlaying.title) m.title = nowPlaying.title;
+        if (nowPlaying.title && !isWeakPageTitle(nowPlaying.title)) {
+          m.title = nowPlaying.title;
+        } else if (!m.title && nowPlaying.title) {
+          m.title = nowPlaying.title;
+        }
         merged = true;
       }
     }
@@ -391,8 +413,9 @@ async function loadActiveTab() {
 
   currentTabId = tab.id;
   currentUrl = (tab.url || "").trim();
-  currentTitle = (tab.title || "未命名页面").trim();
-  titleEl.textContent = currentTitle;
+  currentTitle = (tab.title || "").trim();
+  if (isWeakPageTitle(currentTitle)) currentTitle = "";
+  titleEl.textContent = currentTitle || hostOf(currentUrl) || "未命名页面";
   urlEl.textContent = currentUrl || "（无地址）";
   urlEl.title = currentUrl;
   renderThumb(tab.favIconUrl || "");
@@ -425,7 +448,7 @@ async function loadActiveTab() {
       urlEl.textContent = currentUrl;
       urlEl.title = currentUrl;
     }
-    if (live && live.pageTitle && live.pageTitle.trim()) {
+    if (live && live.pageTitle && live.pageTitle.trim() && !isWeakPageTitle(live.pageTitle)) {
       currentTitle = live.pageTitle.trim();
       titleEl.textContent = currentTitle;
     }

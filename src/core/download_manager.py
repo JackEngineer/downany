@@ -30,6 +30,7 @@ from src.core.platform_detector import (
     pick_thumbnail_from_ydl_info,
 )
 from src.core.quality import build_format_selector
+from src.core.title_utils import is_weak_title, pick_title_from_ydl_info
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.models import DownloadRecord
 from src.data.queue_store import QueueStore
@@ -381,7 +382,7 @@ class DownloadManager:
 
             # 补齐元数据（失败不阻断下载；X 失败时 VideoInfoExtractor 内会走 FxTwitter）
             # 扩展常带真实标题但无封面：页面链接仍需预拉 thumbnail
-            needs_full_meta = task.video_info.title in _PLACEHOLDER_TITLES
+            needs_full_meta = is_weak_title(task.video_info.title)
             needs_thumb = not (task.video_info.thumbnail_url or "").strip()
             is_direct_media = bool(_MEDIA_URL_RE.search(task.video_info.url))
             if needs_full_meta or (needs_thumb and not is_direct_media):
@@ -394,6 +395,8 @@ class DownloadManager:
                 if info:
                     with self._lock:
                         if needs_full_meta:
+                            if task.video_info.thumbnail_url and not info.thumbnail_url:
+                                info.thumbnail_url = task.video_info.thumbnail_url
                             task.video_info = info
                         else:
                             if info.thumbnail_url:
@@ -404,6 +407,10 @@ class DownloadManager:
                                 task.video_info.duration = info.duration
                             if info.formats and not task.video_info.formats:
                                 task.video_info.formats = info.formats
+                            if is_weak_title(task.video_info.title) and not is_weak_title(
+                                info.title
+                            ):
+                                task.video_info.title = info.title
                     self._persist(task)
                     self.events.emit("task_updated", {"task_id": task.id})
 
@@ -595,11 +602,9 @@ class DownloadManager:
         ydl_info = getattr(downloader, "last_ydl_info", None)
         is_direct = bool(_MEDIA_URL_RE.search(task.video_info.url))
         if isinstance(ydl_info, dict):
-            title = str(ydl_info.get("title") or ydl_info.get("fulltitle") or "").strip()
-            # 页面链接：扩展可能塞了临时标题；直链：保留用户指定标题
-            if title and (
-                not is_direct or task.video_info.title in _PLACEHOLDER_TITLES
-            ):
+            title = pick_title_from_ydl_info(ydl_info, task.video_info.title)
+            # 页面链接：用挑选后的标题；直链：仅在当前标题很弱时覆盖
+            if title and (not is_direct or is_weak_title(task.video_info.title)):
                 task.video_info.title = title
             uploader = str(ydl_info.get("uploader") or ydl_info.get("channel") or "").strip()
             if uploader and (not is_direct or not task.video_info.uploader):
