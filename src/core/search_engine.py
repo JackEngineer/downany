@@ -93,8 +93,15 @@ class SearchEngine:
                 if duration is None:
                     duration = 0
 
+                url = entry.get("webpage_url") or entry.get("url") or ""
+                if url and not url.startswith("http"):
+                    # 扁平提取（extract_flat）常只返回平台内 ID，补全为完整 URL 以便直接入队
+                    if platform == Platform.YOUTUBE:
+                        url = f"https://www.youtube.com/watch?v={url}"
+                    elif platform == Platform.BILIBILI:
+                        url = f"https://www.bilibili.com/video/{url}"
                 video_info = VideoInfo(
-                    url=entry.get("url", "") or entry.get("webpage_url", "") or "",
+                    url=url,
                     title=entry.get("title") or "未命名视频",
                     duration=int(duration) if duration else 0,
                     thumbnail_url=SearchEngine._build_fallback_thumbnail(platform, entry),

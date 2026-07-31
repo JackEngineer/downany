@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -8,6 +9,7 @@ import {
   nativeTheme,
   shell,
 } from "electron";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type * as http from "node:http";
@@ -19,6 +21,7 @@ import {
   type BridgeEnqueueItem,
   type BridgeEnqueueResult,
 } from "./bridgeServer";
+import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
 import {
   PROTOCOL_SCHEME,
   extractUrlsFromArgv,
@@ -27,6 +30,10 @@ import {
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
+import { openSettingsWindow } from "./settingsWindow";
+import { TaskTracker } from "./taskTracker";
+import { TrayController } from "./tray";
+import { parseWeblocUrl } from "./webloc";
 import {
   loadWindowState,
   sanitizeBounds,
@@ -38,7 +45,37 @@ let sidecar: SidecarProcess | null = null;
 let saveStateTimer: NodeJS.Timeout | null = null;
 let sidecarReady = false;
 let bridgeServer: http.Server | null = null;
+let menuBarMode = false;
+let isQuitting = false;
 const pendingEnqueueItems: BridgeEnqueueItem[] = [];
+
+const taskTracker = new TaskTracker();
+const clipboardWatcher = new ClipboardWatcher((urls) => {
+  enqueueFromExternal(urls);
+});
+
+const tray = new TrayController({
+  onShowWindow: () => {
+    if (!mainWindow) {
+      createWindow();
+    }
+    focusMainWindow();
+  },
+  onAddFromClipboard: () => {
+    const urls = extractUrlsFromText(clipboard.readText());
+    if (urls.length > 0) enqueueFromExternal(urls);
+  },
+  onPauseAll: () => void sidecar?.request("download.pauseAll", {}),
+  onResumeAll: () => void sidecar?.request("download.resumeAll", {}),
+  onFocusTask: (taskId) => {
+    if (!mainWindow) {
+      createWindow();
+    }
+    focusMainWindow();
+    mainWindow?.webContents.send("app:highlightTask", taskId);
+  },
+  onQuit: () => app.quit(),
+});
 
 function focusMainWindow(): void {
   if (!mainWindow) return;
@@ -198,6 +235,25 @@ app.on("open-url", (event, url) => {
   handleDeepLinkRaw(url);
 });
 
+// macOS：拖到 Dock 图标的 .webloc / URL 文件
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  try {
+    if (filePath.toLowerCase().endsWith(".webloc")) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const url = parseWeblocUrl(content);
+      if (url) {
+        focusMainWindow();
+        enqueueFromExternal([url]);
+      }
+    } else {
+      process.stderr.write(`open-file 收到未支持的文件: ${filePath}\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`open-file 处理失败: ${String(err)}\n`);
+  }
+});
+
 registerProtocolClient();
 // 冷启动：部分平台把协议 URL 放在 argv
 handleArgv(process.argv);
@@ -219,10 +275,13 @@ function createWindow(): void {
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 800,
-    minHeight: 560,
+    minWidth: 720,
+    minHeight: 480,
     title: "视频下载器",
     show: false,
+    titleBarStyle: "hiddenInset",
+    vibrancy: "under-window",
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -247,7 +306,13 @@ function createWindow(): void {
 
   mainWindow.on("resize", scheduleSaveWindowState);
   mainWindow.on("move", scheduleSaveWindowState);
-  mainWindow.on("close", () => {
+  mainWindow.on("close", (event) => {
+    // 菜单栏模式：关闭主窗口只隐藏，应用继续驻留
+    if (menuBarMode && !isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+      return;
+    }
     if (mainWindow) saveWindowState(mainWindow);
   });
   mainWindow.on("closed", () => {
@@ -256,33 +321,71 @@ function createWindow(): void {
 }
 
 function broadcastState(state: ConnectionState): void {
-  mainWindow?.webContents.send("sidecar:state", state);
+  broadcastAll("sidecar:state", state);
+}
+
+function broadcastAll(channel: string, ...args: unknown[]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, ...args);
+  }
+}
+
+function showSettingsWindow(): void {
+  openSettingsWindow(path.join(__dirname, "preload.js"));
 }
 
 function isWindowFocused(): boolean {
   return Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused());
 }
 
-function notifyTaskResult(kind: "completed" | "failed", title: string): void {
+function notifyTaskResult(kind: "completed" | "failed", title: string, taskId: string): void {
   if (isWindowFocused()) return;
   if (!Notification.isSupported()) return;
   const n = new Notification({
     title: kind === "completed" ? "下载完成" : "下载失败",
     body: title || "任务已更新",
+    ...(kind === "failed" ? { actions: [{ type: "button" as const, text: "重试" }] } : {}),
   });
   n.on("click", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      mainWindow.webContents.send("app:navigate", "queue");
-    }
+    focusMainWindow();
+    mainWindow?.webContents.send("app:highlightTask", taskId);
   });
+  if (kind === "failed") {
+    n.on("action", () => {
+      void sidecar?.request("download.retry", { taskId });
+      focusMainWindow();
+      mainWindow?.webContents.send("app:highlightTask", taskId);
+    });
+  }
   n.show();
 }
 
-function updateDockBadge(count: number): void {
+let dockProgressEnabled = true;
+
+/** 由 TaskTracker 驱动 Dock 角标 + 进度条 + 托盘菜单（进度事件频繁时跳过菜单重建）。 */
+function updateDockUi(rebuildMenu = true): void {
+  const active = taskTracker.activeCount();
   if (process.platform === "darwin" && app.dock) {
-    app.dock.setBadge(count > 0 ? String(count) : "");
+    app.dock.setBadge(active > 0 ? String(active) : "");
+  }
+  mainWindow?.setProgressBar(
+    dockProgressEnabled ? taskTracker.aggregateProgress() : -1,
+  );
+  if (rebuildMenu && tray.enabled) {
+    tray.update(active, taskTracker.recent());
+  }
+}
+
+function syncMenuBarMode(enabled: boolean): void {
+  menuBarMode = enabled;
+  if (process.platform !== "darwin") return;
+  if (enabled) {
+    tray.enable();
+    tray.update(taskTracker.activeCount(), taskTracker.recent());
+    app.dock.hide();
+  } else {
+    tray.disable();
+    app.dock.show();
   }
 }
 
@@ -290,20 +393,26 @@ async function refreshDockFromSnapshot(): Promise<void> {
   if (!sidecar) return;
   try {
     const snap = (await sidecar.request("app.getSnapshot", {})) as {
-      tasks?: Array<{ status?: string }>;
+      tasks?: Array<{ id?: string; title?: string; status?: string; progress?: number }>;
     };
-    const active = (snap.tasks || []).filter(
-      (t) => t.status === "downloading" || t.status === "pending",
-    ).length;
-    updateDockBadge(active);
+    taskTracker.hydrate(snap.tasks || []);
+    updateDockUi();
   } catch {
     // ignore
   }
 }
 
 function installMenu(): void {
-  const menu = buildAppMenu(() => mainWindow);
+  const menu = buildAppMenu(() => mainWindow, showSettingsWindow);
   Menu.setApplicationMenu(menu);
+}
+
+function syncClipboardWatcher(enabled: boolean): void {
+  if (enabled) {
+    clipboardWatcher.start();
+  } else {
+    clipboardWatcher.stop();
+  }
 }
 
 async function startSidecar(): Promise<void> {
@@ -311,22 +420,38 @@ async function startSidecar(): Promise<void> {
   sidecar = new SidecarProcess({ repoRoot });
   sidecar.on("state", (state: ConnectionState) => broadcastState(state));
   sidecar.on("event", (event: { event: string; payload: Record<string, unknown> }) => {
-    mainWindow?.webContents.send("sidecar:event", event);
+    broadcastAll("sidecar:event", event);
     const name = event.event;
-    if (name === "task.completed" || name === "task.failed") {
-      const task = event.payload.task as { title?: string } | undefined;
-      const title = task?.title || String(event.payload.taskId || "");
-      notifyTaskResult(name === "task.completed" ? "completed" : "failed", title);
+    if (name === "settings.changed") {
+      const settings = event.payload.settings as
+        | { clipboard_monitor?: boolean; menu_bar_mode?: boolean; dock_progress?: boolean }
+        | undefined;
+      syncClipboardWatcher(Boolean(settings?.clipboard_monitor));
+      syncMenuBarMode(Boolean(settings?.menu_bar_mode));
+      dockProgressEnabled = settings?.dock_progress !== false;
+      updateDockUi(false);
     }
     if (
       name === "task.added" ||
       name === "task.updated" ||
       name === "task.completed" ||
       name === "task.failed" ||
-      name === "task.removed" ||
-      name === "task.progress"
+      name === "task.removed"
     ) {
-      void refreshDockFromSnapshot();
+      taskTracker.applyEvent(event);
+      updateDockUi();
+    } else if (name === "task.progress") {
+      taskTracker.applyEvent(event);
+      updateDockUi(false);
+    }
+    if (name === "task.completed" || name === "task.failed") {
+      const task = event.payload.task as { title?: string } | undefined;
+      const title = task?.title || String(event.payload.taskId || "");
+      notifyTaskResult(
+        name === "task.completed" ? "completed" : "failed",
+        title,
+        String(event.payload.taskId || ""),
+      );
     }
   });
   sidecar.on("log", (chunk: string) => {
@@ -334,7 +459,7 @@ async function startSidecar(): Promise<void> {
   });
   sidecar.on("reconnected", () => {
     void sidecar?.request("app.getSnapshot", {}).then((snap) => {
-      mainWindow?.webContents.send("sidecar:event", {
+      broadcastAll("sidecar:event", {
         event: "sidecar.health",
         payload: { snapshot: snap },
       });
@@ -346,10 +471,24 @@ async function startSidecar(): Promise<void> {
   void refreshDockFromSnapshot();
   await flushPendingEnqueue();
 
-  // 显式再拉一次迁移状态，供设置页展示（服务端启动时已跑过，通常为 skipped）
+  try {
+    const snap = (await sidecar.request("app.getSnapshot", {})) as {
+      settings?: { clipboard_monitor?: boolean; menu_bar_mode?: boolean; dock_progress?: boolean };
+      tasks?: Array<{ id?: string; title?: string; status?: string; progress?: number }>;
+    };
+    taskTracker.hydrate(snap.tasks || []);
+    dockProgressEnabled = snap.settings?.dock_progress !== false;
+    updateDockUi();
+    syncClipboardWatcher(Boolean(snap.settings?.clipboard_monitor));
+    syncMenuBarMode(Boolean(snap.settings?.menu_bar_mode));
+  } catch {
+    // ignore
+  }
+
+  // 显式再拉一次迁移状态，供设置窗口展示（服务端启动时已跑过，通常为 skipped）
   try {
     const migration = await sidecar.request("app.runMigration", {});
-    mainWindow?.webContents.send("app:migration", migration);
+    broadcastAll("app:migration", migration);
   } catch (err) {
     process.stderr.write(`迁移查询失败: ${String(err)}\n`);
   }
@@ -392,6 +531,20 @@ function registerIpc(): void {
     return nativeTheme.shouldUseDarkColors ? "dark" : "light";
   });
 
+  ipcMain.handle("app:setThemeSource", async (_evt, mode: string) => {
+    if (mode === "system" || mode === "light" || mode === "dark") {
+      nativeTheme.themeSource = mode;
+    }
+  });
+
+  ipcMain.handle("app:openSettings", async () => {
+    showSettingsWindow();
+  });
+
+  ipcMain.handle("app:readClipboard", async () => {
+    return clipboard.readText();
+  });
+
   ipcMain.handle("app:quit", async () => {
     app.quit();
   });
@@ -404,7 +557,7 @@ app.whenReady().then(async () => {
   startBridge();
 
   nativeTheme.on("updated", () => {
-    mainWindow?.webContents.send(
+    broadcastAll(
       "app:nativeTheme",
       nativeTheme.shouldUseDarkColors ? "dark" : "light",
     );
@@ -432,8 +585,11 @@ app.on("activate", () => {
 });
 
 app.on("before-quit", () => {
+  isQuitting = true;
   if (mainWindow) saveWindowState(mainWindow);
   sidecarReady = false;
+  clipboardWatcher.stop();
+  tray.disable();
   stopBridge();
   void sidecar?.stop();
 });

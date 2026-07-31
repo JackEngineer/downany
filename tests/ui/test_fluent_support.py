@@ -58,12 +58,15 @@ def test_setup_fluent_app_uses_dark_theme_when_requested(monkeypatch):
 
 
 def test_get_fluent_widget_returns_none_when_unavailable(monkeypatch):
+    fluent_support.reset_fluent_cache()
     monkeypatch.setattr(fluent_support, "import_qfluentwidgets", lambda: None)
 
     assert fluent_support.get_fluent_widget("PushButton") is None
 
 
 def test_get_fluent_widget_returns_class_when_available(monkeypatch):
+    fluent_support.reset_fluent_cache()
+
     class DummyPushButton:
         pass
 

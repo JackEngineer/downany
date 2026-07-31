@@ -8,6 +8,7 @@ import threading
 from typing import List, Optional
 
 from src.core.download_task import VideoInfo
+from src.core.formats import summarize_formats
 from src.core.platform_detector import PlatformDetector
 from src.core.twitter_fallback import (
     is_twitter_url,
@@ -149,4 +150,5 @@ class ParseSession:
             uploader=info.get("uploader") or "未知",
             platform=PlatformDetector.detect(self.url),
             file_size=info.get("filesize", 0) or info.get("filesize_approx", 0) or 0,
+            formats=summarize_formats(info.get("formats")),
         )

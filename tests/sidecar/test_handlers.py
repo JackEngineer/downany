@@ -1,7 +1,10 @@
 """Sidecar method handlers 行为测试。"""
+import types
+
 import pytest
 
 from src.core.download_manager import DownloadManager
+from src.core.download_task import Platform, VideoInfo
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
@@ -122,3 +125,82 @@ def test_unknown_method(tmp_path):
     with pytest.raises(HandlerError) as exc_info:
         dispatch(ctx, "no.such", {})
     assert exc_info.value.code == ErrorCode.METHOD_NOT_FOUND
+
+
+class _InlineThread:
+    """同步执行 target 的 Thread 替身，让异步 worker 在测试内可断言。"""
+
+    def __init__(self, target=None, daemon=None, **_kwargs):
+        self._target = target
+
+    def start(self):
+        if self._target is not None:
+            self._target()
+
+
+def _inline_threads(monkeypatch):
+    monkeypatch.setattr(
+        "src.sidecar.handlers.threading", types.SimpleNamespace(Thread=_InlineThread)
+    )
+
+
+def test_search_query_emits_result(tmp_path, monkeypatch):
+    ctx, events = _ctx(tmp_path)
+    _inline_threads(monkeypatch)
+    monkeypatch.setattr(
+        "src.sidecar.handlers.SearchEngine.search",
+        lambda platform, query, max_results=10, proxy=None: [
+            VideoInfo(
+                url="https://www.youtube.com/watch?v=abc",
+                title="lofi mix",
+                duration=61,
+                uploader="someone",
+                platform=platform,
+            )
+        ],
+    )
+    result = dispatch(
+        ctx,
+        Method.SEARCH_QUERY.value,
+        {"query": "lofi", "platform": "youtube", "maxResults": 5},
+    )
+    assert result["searchId"]
+    name, payload = events[-1]
+    assert name == "search.result"
+    assert payload["ok"] is True
+    assert payload["searchId"] == result["searchId"]
+    assert payload["items"][0]["url"] == "https://www.youtube.com/watch?v=abc"
+    assert payload["items"][0]["platform"] == "youtube"
+
+
+def test_search_query_failure_emits_error(tmp_path, monkeypatch):
+    ctx, events = _ctx(tmp_path)
+    _inline_threads(monkeypatch)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("网络不可达")
+
+    monkeypatch.setattr("src.sidecar.handlers.SearchEngine.search", _boom)
+    result = dispatch(ctx, Method.SEARCH_QUERY.value, {"query": "x"})
+    name, payload = events[-1]
+    assert name == "search.result"
+    assert payload["ok"] is False
+    assert payload["searchId"] == result["searchId"]
+    assert "网络不可达" in payload["error"]
+
+
+def test_search_query_validation(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(ctx, Method.SEARCH_QUERY.value, {})
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMS
+
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(ctx, Method.SEARCH_QUERY.value, {"query": "x", "platform": "myspace"})
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMS
+
+    # 平台存在但不支持搜索
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(ctx, Method.SEARCH_QUERY.value, {"query": "x", "platform": "twitter"})
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMS
+    assert Platform.TWITTER.value == "twitter"

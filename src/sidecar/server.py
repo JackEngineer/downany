@@ -128,6 +128,7 @@ class SidecarServer:
             "task_started": EventName.TASK_UPDATED.value,
             "task_paused": EventName.TASK_UPDATED.value,
             "task_cancelled": EventName.TASK_UPDATED.value,
+            "task_updated": EventName.TASK_UPDATED.value,
             "task_completed": EventName.TASK_COMPLETED.value,
             "task_failed": EventName.TASK_FAILED.value,
             "task_progress": EventName.TASK_PROGRESS.value,

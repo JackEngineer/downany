@@ -1,8 +1,5 @@
 """
 搜索结果项组件。
-
-用于在搜索列表中展示更像商用桌面产品的内容卡片，
-包含缩略图、平台徽标、时长与摘要信息。
 """
 from __future__ import annotations
 
@@ -36,7 +33,9 @@ class SearchResultItemWidget(QWidget):
         self._selected = False
 
         self._init_ui()
-        self._bind_loader()
+        if self.thumbnail_loader:
+            self.thumbnail_loader.add_loaded_callback(self._on_thumbnail_loaded)
+            self.thumbnail_loader.thumbnail_failed.connect(self._on_thumbnail_failed)
 
     @property
     def item_key(self) -> str:
@@ -127,8 +126,6 @@ class SearchResultItemWidget(QWidget):
         return "neutral"
 
     def set_selected(self, selected: bool) -> None:
-        """根据列表选中态调整整体视觉状态。"""
-
         self._selected = bool(selected)
         self.setProperty("selected", self._selected)
         self.platform_badge.setTone(self._platform_tone())
@@ -139,23 +136,20 @@ class SearchResultItemWidget(QWidget):
             style.polish(self)
             self.update()
 
-    def _bind_loader(self) -> None:
-        if not self.thumbnail_loader:
-            return
-
-        self.thumbnail_loader.thumbnail_loaded.connect(self._on_thumbnail_loaded)
-        self.thumbnail_loader.thumbnail_failed.connect(self._on_thumbnail_failed)
+    def shutdown(self) -> None:
+        if self.thumbnail_loader:
+            self.thumbnail_loader.remove_loaded_callback(self._on_thumbnail_loaded)
+            try:
+                self.thumbnail_loader.thumbnail_failed.disconnect(self._on_thumbnail_failed)
+            except TypeError:
+                pass
 
     def set_placeholder(self, text: str = "封面待加载") -> None:
-        """显示占位封面文本。"""
-
         self.thumbnail_label.clear()
         self.thumbnail_label.setText("封面")
         self.thumbnail_status_label.setText(text)
 
     def set_thumbnail(self, pixmap: QPixmap) -> None:
-        """更新封面图。"""
-
         scaled = pixmap.scaled(
             self.THUMBNAIL_SIZE,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,

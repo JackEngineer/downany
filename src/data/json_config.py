@@ -3,11 +3,47 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from typing import Any, Dict, Optional
 
 from src.core.download_task import DownloadOptions
 from src.core.quality import normalize_quality
+
+VALID_POSTPROCESSING = {"none", "mp4", "mp3", "script"}
+
+# 文件名模板允许的 yt-dlp 占位符白名单
+TEMPLATE_PLACEHOLDER_RE = re.compile(r"%\((\w+)\)s")
+ALLOWED_TEMPLATE_FIELDS = {
+    "title",
+    "uploader",
+    "id",
+    "ext",
+    "upload_date",
+    "resolution",
+    "duration_string",
+    "height",
+    "width",
+    "fps",
+    "format_id",
+    "extractor",
+}
+
+
+def validate_filename_template(template: str) -> str:
+    """校验 outtmpl 模板；非法抛出 ValueError，合法原样返回。"""
+    text = str(template or "").strip()
+    if not text:
+        return ""
+    if os.path.isabs(text) or ".." in text.split(os.sep):
+        raise ValueError("文件名模板不能是绝对路径或包含 ..")
+    fields = TEMPLATE_PLACEHOLDER_RE.findall(text)
+    unknown = [f for f in fields if f not in ALLOWED_TEMPLATE_FIELDS]
+    if unknown:
+        raise ValueError(f"文件名模板包含不支持的占位符: {', '.join(unknown)}")
+    if "%(ext)s" not in text:
+        raise ValueError("文件名模板必须包含 %(ext)s 占位符")
+    return text
 
 
 class JsonConfig:
@@ -40,6 +76,13 @@ class JsonConfig:
             "default_quality": "best",
             "download_subtitles": False,
             "theme_mode": "system",
+            "auto_start_downloads": True,
+            "clipboard_monitor": False,
+            "postprocessing": "none",
+            "postprocess_script": "",
+            "filename_template": "",
+            "menu_bar_mode": False,
+            "dock_progress": True,
         }
 
     def _load_or_init(self) -> None:
@@ -102,6 +145,18 @@ class JsonConfig:
         next_data["proxy_enabled"] = bool(next_data.get("proxy_enabled", False))
         next_data["proxy_url"] = str(next_data.get("proxy_url", "") or "")
         next_data["download_subtitles"] = bool(next_data.get("download_subtitles", False))
+        next_data["auto_start_downloads"] = bool(next_data.get("auto_start_downloads", True))
+        next_data["clipboard_monitor"] = bool(next_data.get("clipboard_monitor", False))
+        next_data["menu_bar_mode"] = bool(next_data.get("menu_bar_mode", False))
+        next_data["dock_progress"] = bool(next_data.get("dock_progress", True))
+        postprocessing = str(next_data.get("postprocessing", "none")).strip().lower()
+        if postprocessing not in VALID_POSTPROCESSING:
+            raise ValueError("后处理必须是 none / mp4 / mp3 / script")
+        next_data["postprocessing"] = postprocessing
+        next_data["postprocess_script"] = str(next_data.get("postprocess_script", "") or "")
+        next_data["filename_template"] = validate_filename_template(
+            str(next_data.get("filename_template", "") or "")
+        )
         next_data["download_dir"] = str(next_data.get("download_dir") or self._default_download_dir())
 
         if next_data["proxy_enabled"] and not next_data["proxy_url"].strip():
@@ -160,6 +215,28 @@ class JsonConfig:
         self._data["download_subtitles"] = bool(enabled)
         self._save()
 
+    def is_auto_start_downloads(self) -> bool:
+        return bool(self._data.get("auto_start_downloads", True))
+
+    def is_clipboard_monitor(self) -> bool:
+        return bool(self._data.get("clipboard_monitor", False))
+
+    def is_menu_bar_mode(self) -> bool:
+        return bool(self._data.get("menu_bar_mode", False))
+
+    def is_dock_progress(self) -> bool:
+        return bool(self._data.get("dock_progress", True))
+
+    def get_postprocessing(self) -> str:
+        value = str(self._data.get("postprocessing", "none")).strip().lower()
+        return value if value in VALID_POSTPROCESSING else "none"
+
+    def get_postprocess_script(self) -> str:
+        return str(self._data.get("postprocess_script", "") or "")
+
+    def get_filename_template(self) -> str:
+        return str(self._data.get("filename_template", "") or "")
+
     def get_theme_mode(self) -> str:
         value = str(self._data.get("theme_mode", "system"))
         return value if value in {"system", "light", "dark"} else "system"
@@ -185,4 +262,7 @@ class JsonConfig:
             output_path=output_path or self.get_download_dir(),
             speed_limit=speed if speed > 0 else None,
             proxy=self.get_proxy_for_download(),
+            postprocessing=self.get_postprocessing(),
+            filename_template=self.get_filename_template(),
+            postprocess_script=self.get_postprocess_script(),
         )

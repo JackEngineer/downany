@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { openPath, request } from "../lib/api";
 import type { HistoryItem } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 
 const PAGE_SIZE = 30;
 
-export function HistoryPage() {
+export function HistorySection() {
   const pushToast = useAppStore((s) => s.pushToast);
   const connection = useAppStore((s) => s.connection);
-  const [query, setQuery] = useState("");
+  const searchQuery = useAppStore((s) => s.searchQuery);
+  const searchMode = useAppStore((s) => s.searchMode);
+  const effectiveQuery = searchMode === "filter" ? searchQuery : "";
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [offset, setOffset] = useState(0);
@@ -18,10 +20,9 @@ export function HistoryPage() {
   const [hasMore, setHasMore] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmClear, setConfirmClear] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const queryRef = useRef(query);
+  const queryRef = useRef(effectiveQuery);
   const statusRef = useRef(status);
-  queryRef.current = query;
+  queryRef.current = effectiveQuery;
   statusRef.current = status;
 
   const fetchPage = useCallback(
@@ -50,19 +51,15 @@ export function HistoryPage() {
   );
 
   useEffect(() => {
-    void fetchPage(0, true);
-  }, [query, status, connection, fetchPage]);
+    const handle = window.setTimeout(() => void fetchPage(0, true), 200);
+    return () => window.clearTimeout(handle);
+  }, [effectiveQuery, status, connection, fetchPage]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    return window.api.onEvent((event) => {
+      if (event.event === "history.changed") void fetchPage(0, true);
+    });
+  }, [fetchPage]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -103,25 +100,15 @@ export function HistoryPage() {
         items: [{ url: item.url, title: item.title }],
       });
       pushToast({ kind: "success", title: "已重新加入队列" });
-      useAppStore.getState().setRoute("queue");
+      useAppStore.getState().setFilter("all");
     } catch (err) {
       pushToast({ kind: "error", title: "重新下载失败", detail: String(err) });
     }
   };
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <h1>历史记录</h1>
-      </header>
+    <div className="history-section">
       <div className="toolbar">
-        <input
-          ref={searchRef}
-          type="search"
-          placeholder="搜索标题或链接"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
         <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="状态筛选">
           <option value="">全部状态</option>
           <option value="completed">已完成</option>
@@ -137,7 +124,7 @@ export function HistoryPage() {
       </div>
 
       {items.length === 0 && !loading ? (
-        <p className="muted">暂无记录</p>
+        <p className="muted list-empty">暂无记录</p>
       ) : (
         <ul className="history-list">
           {items.map((item) => (
@@ -154,7 +141,7 @@ export function HistoryPage() {
                     {item.platform} · {item.status}
                   </div>
                 </div>
-                <div className="task-actions">
+                <div className="card-actions">
                   <button type="button" onClick={() => void redownload(item)}>
                     重新下载
                   </button>

@@ -33,5 +33,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "renderer/index.html"),
+        settings: path.resolve(__dirname, "renderer/settings.html"),
+      },
+    },
   },
 });

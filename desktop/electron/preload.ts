@@ -39,6 +39,15 @@ const api = {
   getNativeTheme(): Promise<NativeThemeMode> {
     return ipcRenderer.invoke("app:getNativeTheme");
   },
+  setThemeSource(mode: "system" | NativeThemeMode): Promise<void> {
+    return ipcRenderer.invoke("app:setThemeSource", mode);
+  },
+  openSettings(): Promise<void> {
+    return ipcRenderer.invoke("app:openSettings");
+  },
+  readClipboardText(): Promise<string> {
+    return ipcRenderer.invoke("app:readClipboard");
+  },
   quit(): Promise<void> {
     return ipcRenderer.invoke("app:quit");
   },
@@ -73,6 +82,11 @@ const api = {
       handler(payload);
     ipcRenderer.on("app:externalEnqueue", listener);
     return () => ipcRenderer.removeListener("app:externalEnqueue", listener);
+  },
+  onHighlightTask(handler: (taskId: string) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, taskId: string) => handler(taskId);
+    ipcRenderer.on("app:highlightTask", listener);
+    return () => ipcRenderer.removeListener("app:highlightTask", listener);
   },
 };
 

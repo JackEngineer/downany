@@ -8,6 +8,7 @@ import yt_dlp
 from src.core.download_task import VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.platform_detector import PlatformDetector
+from src.core.twitter_fallback import is_twitter_url
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
 
@@ -82,6 +83,16 @@ class VideoInfoExtractor:
 
         except Exception as e:
             logger.error(f"提取视频信息失败: {str(e)}")
+            # X/Twitter：yt-dlp GraphQL 常失败，用 FxTwitter 补元数据（标题/封面）
+            if is_twitter_url(url):
+                try:
+                    from src.core.twitter_fallback import resolve_twitter_media
+
+                    info, _direct = resolve_twitter_media(url, proxy=proxy)
+                    logger.info("Twitter 元数据已由 FxTwitter 回退补齐: %s", info.title[:40])
+                    return info
+                except Exception as fallback_exc:
+                    logger.error("Twitter 元数据回退失败: %s", fallback_exc)
             return None
 
     @staticmethod

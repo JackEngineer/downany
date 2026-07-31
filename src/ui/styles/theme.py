@@ -23,6 +23,13 @@ class ThemeMode(str, Enum):
     DARK = "dark"
 
 
+# 间距 token
+SPACING_XS = 6
+SPACING_S = 10
+SPACING_M = 14
+SPACING_L = 18
+
+
 @dataclass(frozen=True)
 class ThemeTokens:
     """当前主题的设计 token。"""
@@ -242,7 +249,7 @@ def build_palette(tokens: ThemeTokens) -> QPalette:
     return palette
 
 
-def build_qss(tokens: ThemeTokens) -> str:
+def build_qss(tokens: ThemeTokens, fluent_enabled: bool = False) -> str:
     """生成应用级 QSS。"""
 
     selection_bg = tokens.selection_bg
@@ -253,6 +260,168 @@ def build_qss(tokens: ThemeTokens) -> str:
     error_soft = rgba(tokens.error, 0.14)
     info_soft = rgba(tokens.info, 0.14)
     accent_border = rgba(tokens.accent, 0.28)
+
+    legacy_controls_qss = ""
+    if not fluent_enabled:
+        legacy_controls_qss = f"""
+    QLineEdit,
+    QTextEdit,
+    QComboBox {{
+        background-color: {tokens.surface};
+        color: {tokens.text};
+        border: 1px solid {tokens.border};
+        border-radius: 8px;
+        padding: 10px 12px;
+        selection-background-color: {tokens.accent};
+        selection-color: {tokens.selection_text};
+    }}
+
+    QLineEdit:focus,
+    QTextEdit:focus,
+    QComboBox:focus {{
+        border: 1px solid {tokens.accent};
+    }}
+
+    QTextEdit {{
+        line-height: 1.45;
+    }}
+
+    QComboBox::drop-down {{
+        border: none;
+        width: 28px;
+    }}
+
+    QCheckBox {{
+        spacing: 8px;
+        color: {tokens.text};
+    }}
+
+    QCheckBox::indicator {{
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        border: 1px solid {tokens.border};
+        background: {tokens.surface};
+    }}
+
+    QCheckBox::indicator:checked {{
+        background: {tokens.accent};
+        border-color: {tokens.accent};
+    }}
+
+    QCheckBox::indicator:checked:hover {{
+        background: {tokens.accent_hover};
+        border-color: {tokens.accent_hover};
+    }}
+
+    QSpinBox {{
+        background-color: {tokens.surface};
+        color: {tokens.text};
+        border: 1px solid {tokens.border};
+        border-radius: 8px;
+        padding: 8px 10px;
+        min-height: 20px;
+    }}
+
+    QSpinBox:focus {{
+        border: 1px solid {tokens.accent};
+    }}
+
+    QSpinBox::up-button,
+    QSpinBox::down-button {{
+        width: 18px;
+        border: none;
+        background: transparent;
+    }}
+
+    QPushButton {{
+        background-color: {tokens.surface_alt};
+        color: {tokens.text};
+        border: 1px solid {tokens.border};
+        border-radius: 8px;
+        padding: 9px 14px;
+        min-height: 18px;
+        font-weight: 600;
+    }}
+
+    QPushButton:hover {{
+        background-color: {tokens.background_soft};
+        border-color: {tokens.border_soft};
+    }}
+
+    QPushButton:pressed {{
+        background-color: {tokens.surface_elevated};
+        border-color: {tokens.border};
+    }}
+
+    QPushButton:disabled {{
+        background-color: {tokens.background_soft};
+        color: {tokens.text_muted};
+        border-color: {tokens.border_soft};
+    }}
+
+    QPushButton:focus {{
+        border-color: {tokens.accent};
+    }}
+
+    QPushButton#primaryActionButton {{
+        background-color: {tokens.accent};
+        color: #FFFFFF;
+        border-color: {tokens.accent};
+    }}
+
+    QPushButton#primaryActionButton:hover {{
+        background-color: {tokens.accent_hover};
+        border-color: {tokens.accent_hover};
+    }}
+
+    QPushButton#primaryActionButton:pressed {{
+        background-color: {tokens.accent_pressed};
+        border-color: {tokens.accent_pressed};
+    }}
+
+    QPushButton#primaryActionButton:disabled {{
+        background-color: {tokens.background_soft};
+        color: {tokens.text_muted};
+        border-color: {tokens.border_soft};
+    }}
+
+    QPushButton#ghostActionButton {{
+        background-color: transparent;
+        border-color: {tokens.border_soft};
+    }}
+
+    QPushButton#ghostActionButton:hover {{
+        background-color: {tokens.background_soft};
+    }}
+    """
+
+    named_button_qss = f"""
+    QPushButton#primaryActionButton {{
+        background-color: {tokens.accent};
+        color: #FFFFFF;
+        border-color: {tokens.accent};
+    }}
+
+    QPushButton#primaryActionButton:hover {{
+        background-color: {tokens.accent_hover};
+        border-color: {tokens.accent_hover};
+    }}
+
+    QPushButton#primaryActionButton:pressed {{
+        background-color: {tokens.accent_pressed};
+        border-color: {tokens.accent_pressed};
+    }}
+
+    QPushButton#ghostActionButton {{
+        background-color: transparent;
+        border-color: {tokens.border_soft};
+    }}
+
+    QPushButton#ghostActionButton:hover {{
+        background-color: {tokens.background_soft};
+    }}
+    """
 
     return f"""
     QWidget#AppShell,
@@ -456,7 +625,8 @@ def build_qss(tokens: ThemeTokens) -> str:
     QWidget#videoPreviewWidget {{
         background: transparent;
     }}
-
+{legacy_controls_qss}
+{named_button_qss}
     QFrame#VideoPreviewStage {{
         background-color: {tokens.background_soft};
         border: 1px solid {tokens.border_soft};
@@ -505,74 +675,45 @@ def build_qss(tokens: ThemeTokens) -> str:
         color: {tokens.text_secondary};
     }}
 
-    QLineEdit,
-    QTextEdit,
-    QComboBox {{
-        background-color: {tokens.surface};
-        color: {tokens.text};
+    QFrame#ToastFrame {{
+        background-color: {tokens.surface_elevated};
         border: 1px solid {tokens.border};
+        border-radius: 10px;
+        min-width: 280px;
+        max-width: 420px;
+    }}
+
+    QFrame#ToastFrame[level="success"] {{
+        border-color: {rgba(tokens.success, 0.4)};
+    }}
+
+    QFrame#ToastFrame[level="error"] {{
+        border-color: {rgba(tokens.error, 0.4)};
+    }}
+
+    QFrame#ToastFrame[level="warning"] {{
+        border-color: {rgba(tokens.warning, 0.4)};
+    }}
+
+    QLabel#ToastTitle {{
+        font-size: 14px;
+        font-weight: 700;
+        color: {tokens.text};
+    }}
+
+    QLabel#ToastContent {{
+        font-size: 12px;
+        color: {tokens.text_secondary};
+    }}
+
+    QWidget#EmptyStateWidget {{
+        background-color: {tokens.surface_alt};
+        border: 1px dashed {tokens.border};
         border-radius: 8px;
-        padding: 10px 12px;
-        selection-background-color: {tokens.accent};
-        selection-color: {tokens.selection_text};
     }}
 
-    QLineEdit:focus,
-    QTextEdit:focus,
-    QComboBox:focus {{
-        border: 1px solid {tokens.accent};
-    }}
-
-    QTextEdit {{
-        line-height: 1.45;
-    }}
-
-    QComboBox::drop-down {{
-        border: none;
-        width: 28px;
-    }}
-
-    QCheckBox {{
-        spacing: 8px;
-        color: {tokens.text};
-    }}
-
-    QCheckBox::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
-        border: 1px solid {tokens.border};
-        background: {tokens.surface};
-    }}
-
-    QCheckBox::indicator:checked {{
-        background: {tokens.accent};
-        border-color: {tokens.accent};
-    }}
-
-    QCheckBox::indicator:checked:hover {{
-        background: {tokens.accent_hover};
-        border-color: {tokens.accent_hover};
-    }}
-
-    QSpinBox {{
-        background-color: {tokens.surface};
-        color: {tokens.text};
-        border: 1px solid {tokens.border};
-        border-radius: 8px;
-        padding: 8px 10px;
-        min-height: 20px;
-    }}
-
-    QSpinBox:focus {{
-        border: 1px solid {tokens.accent};
-    }}
-
-    QSpinBox::up-button,
-    QSpinBox::down-button {{
-        width: 18px;
-        border: none;
-        background: transparent;
+    QLabel#EmptyStateIcon {{
+        font-size: 28px;
     }}
 
     QListWidget {{
@@ -601,67 +742,6 @@ def build_qss(tokens: ThemeTokens) -> str:
     QListWidget::item:selected {{
         background: transparent;
         color: {tokens.text};
-    }}
-
-    QPushButton {{
-        background-color: {tokens.surface_alt};
-        color: {tokens.text};
-        border: 1px solid {tokens.border};
-        border-radius: 8px;
-        padding: 9px 14px;
-        min-height: 18px;
-        font-weight: 600;
-    }}
-
-    QPushButton:hover {{
-        background-color: {tokens.background_soft};
-        border-color: {tokens.border_soft};
-    }}
-
-    QPushButton:pressed {{
-        background-color: {tokens.surface_elevated};
-        border-color: {tokens.border};
-    }}
-
-    QPushButton:disabled {{
-        background-color: {tokens.background_soft};
-        color: {tokens.text_muted};
-        border-color: {tokens.border_soft};
-    }}
-
-    QPushButton:focus {{
-        border-color: {tokens.accent};
-    }}
-
-    QPushButton#primaryActionButton {{
-        background-color: {tokens.accent};
-        color: #FFFFFF;
-        border-color: {tokens.accent};
-    }}
-
-    QPushButton#primaryActionButton:hover {{
-        background-color: {tokens.accent_hover};
-        border-color: {tokens.accent_hover};
-    }}
-
-    QPushButton#primaryActionButton:pressed {{
-        background-color: {tokens.accent_pressed};
-        border-color: {tokens.accent_pressed};
-    }}
-
-    QPushButton#primaryActionButton:disabled {{
-        background-color: {tokens.background_soft};
-        color: {tokens.text_muted};
-        border-color: {tokens.border_soft};
-    }}
-
-    QPushButton#ghostActionButton {{
-        background-color: transparent;
-        border-color: {tokens.border_soft};
-    }}
-
-    QPushButton#ghostActionButton:hover {{
-        background-color: {tokens.background_soft};
     }}
 
     QProgressBar {{
@@ -790,13 +870,13 @@ def build_qss(tokens: ThemeTokens) -> str:
     """
 
 
-def apply_theme(app: QApplication, theme_mode: Optional[str] = None) -> ThemeMode:
+def apply_theme(app: QApplication, theme_mode: Optional[str] = None, fluent_enabled: bool = False) -> ThemeMode:
     """将主题应用到 QApplication。"""
 
     resolved_mode = Theme.resolve_mode(theme_mode)
     tokens = get_theme_tokens(resolved_mode.value)
     app.setPalette(build_palette(tokens))
-    app.setStyleSheet(build_qss(tokens))
+    app.setStyleSheet(build_qss(tokens, fluent_enabled=fluent_enabled))
     app.setProperty("themeMode", resolved_mode.value)
     app.setProperty("themeAccent", tokens.accent)
     return resolved_mode

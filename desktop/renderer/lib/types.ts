@@ -4,11 +4,43 @@ export type { ConnectionState };
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 
+export type ListFilter = "all" | "active" | "completed" | "history";
+
+export type SearchMode = "filter" | "network";
+
+export interface NetSearchItem {
+  url: string;
+  title: string;
+  duration: number;
+  thumbnail_url: string;
+  uploader: string;
+  platform: string;
+}
+
+export interface NetSearchResultPayload {
+  searchId: string;
+  ok: boolean;
+  query?: string;
+  items?: NetSearchItem[];
+  error?: string;
+}
+
+export interface FormatOption {
+  format_id: string;
+  ext: string;
+  height: number;
+  fps: number;
+  filesize: number;
+  tbr: number;
+  video_only: boolean;
+}
+
 export interface TaskSnapshot {
   id: string;
   url: string;
   title: string;
   platform: string;
+  thumbnail_url?: string;
   status: string;
   progress: number;
   downloaded_bytes: number;
@@ -20,6 +52,11 @@ export interface TaskSnapshot {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  quality?: string;
+  format_id?: string | null;
+  audio_only?: boolean;
+  postprocessing?: string;
+  priority?: number;
 }
 
 export interface AppSettings {
@@ -31,6 +68,13 @@ export interface AppSettings {
   default_quality: string;
   download_subtitles: boolean;
   theme_mode: "system" | "light" | "dark";
+  auto_start_downloads?: boolean;
+  clipboard_monitor?: boolean;
+  postprocessing?: string;
+  postprocess_script?: string;
+  filename_template?: string;
+  menu_bar_mode?: boolean;
+  dock_progress?: boolean;
   [key: string]: unknown;
 }
 
@@ -78,5 +122,6 @@ export interface ParseResultEvent {
     uploader: string;
     platform: string;
     file_size: number;
+    formats?: FormatOption[];
   };
 }

@@ -4,14 +4,15 @@
 from __future__ import annotations
 
 import os
-import queue
 import re
+import shlex
+import subprocess
 import threading
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
-from src.core.download_task import DownloadTask, TaskSnapshot, TaskStatus
+from src.core.download_task import DownloadTask, TaskSnapshot, TaskStatus, VideoInfo
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
@@ -55,7 +56,6 @@ class DownloadManager:
         self._last_progress_persist: Dict[str, float] = {}
 
         self._lock = threading.RLock()
-        self.task_queue: queue.Queue = queue.Queue()
         self.tasks: Dict[str, DownloadTask] = {}
         self.active_tasks: Dict[str, threading.Thread] = {}
         self._resume_requested: Set[str] = set()
@@ -77,8 +77,6 @@ class DownloadManager:
                     task.status = TaskStatus.PAUSED
                     downgraded.append(task)
                 self.tasks[task.id] = task
-                if task.status == TaskStatus.PENDING:
-                    self.task_queue.put(task.id)
         for task in downgraded:
             self._persist(task)
         if restored:
@@ -139,7 +137,6 @@ class DownloadManager:
         """添加任务到队列"""
         with self._lock:
             self.tasks[task.id] = task
-            self.task_queue.put(task.id)
         self._persist(task)
         self.events.emit("task_added", {"task_id": task.id})
         logger.info(f"添加任务: {task.video_info.title}")
@@ -167,7 +164,6 @@ class DownloadManager:
                 return
             task.status = TaskStatus.PENDING
             task.error_message = ""
-            self.task_queue.put(task_id)
         self._persist(task)
         logger.info(f"恢复任务: {task.video_info.title}")
 
@@ -197,7 +193,6 @@ class DownloadManager:
             task.progress = 0.0
             task.downloaded_bytes = 0
             task.total_bytes = 0
-            self.task_queue.put(task_id)
         self._persist(task)
         logger.info(f"重试任务: {task.video_info.title}")
 
@@ -228,41 +223,131 @@ class DownloadManager:
         self._persist_remove(task_id)
         return True
 
+    def update_task(
+        self,
+        task_id: str,
+        *,
+        title: Optional[str] = None,
+        format_id: Optional[str] = None,
+        clear_format: bool = False,
+        quality: Optional[str] = None,
+        audio_only: Optional[bool] = None,
+        postprocessing: Optional[str] = None,
+        priority: Optional[int] = None,
+    ) -> Optional[DownloadTask]:
+        """
+        更新任务选项 / 重命名。下载中的任务不允许改下载选项（可先暂停）。
+        已完成任务重命名会同步改磁盘文件名。
+        """
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return None
+
+            touches_options = any(
+                value is not None
+                for value in (format_id, quality, audio_only, postprocessing)
+            ) or clear_format
+            if touches_options and task.status == TaskStatus.DOWNLOADING:
+                raise ValueError("下载进行中，请先暂停再修改选项")
+
+            if title is not None:
+                new_title = title.strip() or task.video_info.title
+                if task.status == TaskStatus.COMPLETED and task.file_path:
+                    task.file_path = self._rename_output_file(task, new_title)
+                task.video_info.title = new_title
+
+            if touches_options:
+                if clear_format:
+                    task.options.format_id = None
+                if format_id is not None:
+                    task.options.format_id = format_id or None
+                if quality is not None:
+                    task.options.quality = quality
+                if audio_only is not None:
+                    task.options.audio_only = audio_only
+                if postprocessing is not None:
+                    task.options.postprocessing = postprocessing
+
+            if priority is not None:
+                task.priority = int(priority)
+
+        self._persist(task)
+        self.events.emit("task_updated", {"task_id": task.id})
+        return task
+
+    def _rename_output_file(self, task: DownloadTask, new_title: str) -> str:
+        """已完成任务改名：同步重命名磁盘文件（保留扩展名）。"""
+        old_path = task.file_path
+        try:
+            directory = os.path.dirname(old_path)
+            ext = os.path.splitext(old_path)[1]
+            candidate = os.path.join(directory, f"{sanitize_filename(new_title)}{ext}")
+            if candidate == old_path:
+                return old_path
+            if os.path.exists(old_path) and not os.path.exists(candidate):
+                os.rename(old_path, candidate)
+                return candidate
+        except OSError as exc:
+            logger.error(f"重命名输出文件失败 {old_path}: {exc}")
+        return old_path
+
+    def _run_postprocess_script(self, task: DownloadTask) -> None:
+        """执行用户自定义后处理脚本；失败只记日志，不影响任务结果。"""
+        script = (task.options.postprocess_script or "").strip()
+        if not script:
+            logger.warning("任务配置了脚本后处理但脚本为空: %s", task.id)
+            return
+        quoted = shlex.quote(task.file_path)
+        command = script.format(file=quoted) if "{file}" in script else f"{script} {quoted}"
+        logger.info(f"执行后处理脚本: {command}")
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                timeout=600,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                logger.error(
+                    f"后处理脚本退出码 {result.returncode}: {result.stderr.strip()[:500]}"
+                )
+        except Exception as exc:
+            logger.error(f"后处理脚本执行失败: {exc}")
+
+    def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
+        """锁内调用：按优先级（高优先）与创建时间（早优先）挑下一个等待任务。"""
+        candidates = [
+            task
+            for task in self.tasks.values()
+            if task.status == TaskStatus.PENDING and task.id not in self.active_tasks
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda t: (-t.priority, t.created_at))
+        return candidates[0]
+
     def _scheduler_loop(self):
         while True:
+            thread: Optional[threading.Thread] = None
             with self._lock:
                 if not self.running:
                     break
                 max_concurrent = self.config.get_concurrent_downloads()
-                active_count = len(self.active_tasks)
-
-            if active_count < max_concurrent:
-                try:
-                    task_id = self.task_queue.get(timeout=1)
-                except queue.Empty:
-                    continue
-
-                with self._lock:
-                    if not self.running:
-                        break
-                    task = self.tasks.get(task_id)
-                    if not task or task.status != TaskStatus.PENDING:
-                        continue
-                    if task_id in self.active_tasks:
-                        continue
-                    if len(self.active_tasks) >= max_concurrent:
-                        self.task_queue.put(task_id)
-                        continue
-
-                    download_thread = threading.Thread(
-                        target=self._download_task,
-                        args=(task,),
-                        daemon=True,
-                    )
-                    self.active_tasks[task_id] = download_thread
-                    download_thread.start()
+                if len(self.active_tasks) < max_concurrent:
+                    task = self._pick_next_pending_locked()
+                    if task is not None:
+                        thread = threading.Thread(
+                            target=self._download_task,
+                            args=(task,),
+                            daemon=True,
+                        )
+                        self.active_tasks[task.id] = thread
+            if thread is not None:
+                thread.start()
             else:
-                threading.Event().wait(0.2)
+                threading.Event().wait(0.3)
 
     def _download_task(self, task: DownloadTask):
         try:
@@ -274,7 +359,7 @@ class DownloadManager:
             self._persist(task)
             self.events.emit("task_started", {"task_id": task.id})
 
-            # 补齐元数据（失败不阻断下载）
+            # 补齐元数据（失败不阻断下载；X 失败时 VideoInfoExtractor 内会走 FxTwitter）
             if task.video_info.title in _PLACEHOLDER_TITLES:
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
@@ -285,6 +370,8 @@ class DownloadManager:
                 if info:
                     with self._lock:
                         task.video_info = info
+                    self._persist(task)
+                    self.events.emit("task_updated", {"task_id": task.id})
 
             with self._lock:
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
@@ -342,33 +429,51 @@ class DownloadManager:
             downloader.set_callbacks(progress=progress_callback)
 
             opts: Dict = {}
-            format_selector = build_format_selector(
-                task.options.quality, task.options.format_id
-            )
-            if format_selector:
-                opts["format"] = format_selector
+            options = task.options
+            extract_audio = options.audio_only or options.postprocessing == "mp3"
 
-            # 直链媒体：generic extractor 的 format 元数据不可靠
-            # （X 的 HLS 清单报 "Requested format is not available"），
-            # 改用宽松选择器；master 清单取最高码率，DASH 分离流合并
-            if _MEDIA_URL_RE.search(task.video_info.url) and not task.options.format_id:
-                opts["format"] = "bestvideo+bestaudio/best"
+            if extract_audio:
+                opts["format"] = "bestaudio/best"
+                opts["postprocessors"] = [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ]
+            else:
+                format_selector = build_format_selector(
+                    options.quality, options.format_id
+                )
+                if format_selector:
+                    opts["format"] = format_selector
 
-            if task.options.speed_limit and task.options.speed_limit > 0:
-                opts["ratelimit"] = task.options.speed_limit
+                # 直链媒体：generic extractor 的 format 元数据不可靠
+                # （X 的 HLS 清单报 "Requested format is not available"），
+                # 改用宽松选择器；master 清单取最高码率，DASH 分离流合并
+                if _MEDIA_URL_RE.search(task.video_info.url) and not options.format_id:
+                    opts["format"] = "bestvideo+bestaudio/best"
 
-            proxy = (task.options.proxy or "").strip()
+                if options.postprocessing == "mp4":
+                    opts["postprocessors"] = [
+                        {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}
+                    ]
+
+            if options.speed_limit and options.speed_limit > 0:
+                opts["ratelimit"] = options.speed_limit
+
+            proxy = (options.proxy or "").strip()
             if proxy:
                 opts["proxy"] = proxy
 
-            if task.options.download_subtitles:
+            if options.download_subtitles:
                 opts["writesubtitles"] = True
                 opts["writeautomaticsub"] = True
 
-            if task.options.http_headers:
+            if options.http_headers:
                 opts["http_headers"] = {
                     **DEFAULT_HTTP_HEADERS,
-                    **task.options.http_headers,
+                    **options.http_headers,
                 }
 
             # 直链任务：yt-dlp generic extractor 的 title 是 URL 文件名（hash/
@@ -379,8 +484,12 @@ class DownloadManager:
                 and _MEDIA_URL_RE.search(task.video_info.url)
             ):
                 opts["outtmpl"] = os.path.join(
-                    task.options.output_path,
+                    options.output_path,
                     f"{sanitize_filename(task.video_info.title)}.%(ext)s",
+                )
+            elif options.filename_template:
+                opts["outtmpl"] = os.path.join(
+                    options.output_path, options.filename_template
                 )
 
             file_path = downloader.download(task.video_info.url, opts)
@@ -391,6 +500,19 @@ class DownloadManager:
                     return
                 if task.status == TaskStatus.PAUSED:
                     return
+                # 下载成功但标题仍是占位：优先用 Twitter 回退元数据，否则用文件名
+                if task.video_info.title in _PLACEHOLDER_TITLES:
+                    fallback_info = getattr(downloader, "last_info", None)
+                    if (
+                        isinstance(fallback_info, VideoInfo)
+                        and fallback_info.title
+                        and fallback_info.title not in _PLACEHOLDER_TITLES
+                    ):
+                        task.video_info = fallback_info
+                    elif file_path:
+                        stem = os.path.splitext(os.path.basename(file_path))[0].strip()
+                        if stem and stem not in _PLACEHOLDER_TITLES:
+                            task.video_info.title = stem
                 task.status = TaskStatus.COMPLETED
                 task.progress = 100.0
                 task.completed_at = datetime.now()
@@ -399,6 +521,9 @@ class DownloadManager:
 
             self._persist(task)
             self.events.emit("task_completed", {"task_id": task.id})
+
+            if task.options.postprocessing == "script" and task.file_path:
+                self._run_postprocess_script(task)
 
         except DownloadCancelled as e:
             cancelled = False
@@ -433,7 +558,6 @@ class DownloadManager:
                     if task.status == TaskStatus.PAUSED:
                         task.status = TaskStatus.PENDING
                         task.error_message = ""
-                        self.task_queue.put(task.id)
                         requeue = True
             if requeue:
                 self._persist(task)

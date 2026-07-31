@@ -1,9 +1,11 @@
 import os
+import re
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Any, Callable, Dict, Optional
 
 import yt_dlp
 
+from src.core.download_task import VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.twitter_fallback import is_twitter_url, resolve_twitter_media
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
@@ -53,6 +55,8 @@ class Downloader:
         self.finished_callback: Optional[Callable[[], None]] = None
         self.error_callback: Optional[Callable[[str], None]] = None
         self.last_filename: str = ""
+        # Twitter FxTwitter 回退解析到的元数据（供 DownloadManager 回填标题）
+        self.last_info: Optional[VideoInfo] = None
 
     def set_callbacks(
         self,
@@ -119,6 +123,7 @@ class Downloader:
 
         logger.info(f"开始下载: {url}")
         self.last_filename = ""
+        self.last_info = None
 
         try:
             self._download_with_ydl(url, ydl_opts)
@@ -130,11 +135,17 @@ class Downloader:
         except Exception as e:
             if is_twitter_url(url):
                 try:
-                    _info, direct = resolve_twitter_media(url)
+                    info, direct = resolve_twitter_media(url)
+                    self.last_info = info
                     logger.info("Twitter 下载改用 FxTwitter 直链")
-                    # 直链用简单格式，避免合并策略失败
+                    # 直链用简单格式，避免合并策略失败；用推文标题命名文件
                     fallback_opts = dict(ydl_opts)
                     fallback_opts["format"] = "best"
+                    safe = re.sub(r'[\\/:*?"<>|]', " ", info.title).strip()
+                    safe = re.sub(r"\s+", " ", safe)[:80] or "twitter"
+                    fallback_opts["outtmpl"] = os.path.join(
+                        self.download_dir, f"{safe}.%(ext)s"
+                    )
                     self._download_with_ydl(direct, fallback_opts)
                     if self.finished_callback:
                         self.finished_callback()

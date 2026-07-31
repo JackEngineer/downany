@@ -75,7 +75,10 @@ def test_restore_reenqueues_pending(tmp_path):
     manager = _make_manager(store)
     manager.restore_tasks()
 
-    assert manager.task_queue.qsize() == 1
+    # 恢复后处于等待状态，可被优先级调度器选中
+    picked = manager._pick_next_pending_locked()
+    assert picked is not None
+    assert picked.video_info.title == "waiting"
 
 
 def test_manager_without_store_still_works():

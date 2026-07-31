@@ -41,6 +41,9 @@ class DummyHistoryDB:
     def add_search_record(self, *_args, **_kwargs):
         return None
 
+    def get_recent_searches(self, limit=20):
+        return []
+
 
 class DummyDownloadManager:
     def add_task(self, *_args, **_kwargs):
@@ -77,7 +80,8 @@ def test_preview_fallback_to_browser_on_player_failure(monkeypatch):
     with patch.object(tab.preview_widget, "try_play", return_value=False):
         # 模拟浏览器打开成功
         with patch("src.ui.tabs.search_tab.QDesktopServices.openUrl", return_value=True) as mock_open:
-            tab.display_results([_make_video(1)])
+            tab._active_search_request_id = 1
+            tab.display_results(1, [_make_video(1)])
             _flush_events()
 
             tab.result_list.setCurrentRow(0)
@@ -106,7 +110,8 @@ def test_preview_status_on_fallback_failure(monkeypatch):
     # 模拟 try_play 返回 False，同时浏览器打开也失败
     with patch.object(tab.preview_widget, "try_play", return_value=False):
         with patch("src.ui.tabs.search_tab.QDesktopServices.openUrl", return_value=False):
-            tab.display_results([_make_video(1)])
+            tab._active_search_request_id = 1
+            tab.display_results(1, [_make_video(1)])
             _flush_events()
 
             tab.result_list.setCurrentRow(0)

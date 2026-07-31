@@ -209,10 +209,16 @@ class PageHeader(QWidget):
             self.set_metrics(metrics)
 
     def set_metrics(self, metrics: Sequence[tuple[str, str, str]]) -> None:
+        metrics_list = list(metrics)
+        if len(self._metric_cards) == len(metrics_list):
+            for card, (label, value, hint) in zip(self._metric_cards, metrics_list):
+                card.set_metric(label, value, hint)
+            return
+
         clear_layout(self.metrics_layout)
         self._metric_cards = []
         self.metrics_layout.addStretch()
-        for label, value, hint in metrics:
+        for label, value, hint in metrics_list:
             card = MetricCard(label, value, hint)
             self._metric_cards.append(card)
             self.metrics_layout.addWidget(card)

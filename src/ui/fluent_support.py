@@ -1,15 +1,15 @@
 """
 qfluentwidgets 的兼容探测、安全导入与基础初始化。
-
-仅当安装的是 PyQt6 版本的 Fluent Widgets 时才允许启用，
-避免与 PyQt6 主程序混用 PyQt5 绑定导致崩溃。
 """
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
-from typing import Optional
+from typing import Any, Optional
 
 from src.ui.styles.theme import ThemeMode, Theme
+
+_QFW_MODULE: Any = None
+_QFW_CHECKED = False
 
 
 def has_pyqt6_fluent_widgets() -> bool:
@@ -22,28 +22,37 @@ def has_pyqt6_fluent_widgets() -> bool:
         return False
 
 
-def import_qfluentwidgets():
-    """
-    安全导入 qfluentwidgets。
-    返回模块对象；若不可用或导入失败则返回 None。
-    """
+def reset_fluent_cache() -> None:
+    """测试或热重载时重置 Fluent 缓存。"""
+    global _QFW_MODULE, _QFW_CHECKED
+    _QFW_MODULE = None
+    _QFW_CHECKED = False
 
+
+def import_qfluentwidgets():
+    """安全导入 qfluentwidgets；结果模块级缓存。"""
+
+    global _QFW_MODULE, _QFW_CHECKED
+    if _QFW_CHECKED:
+        return _QFW_MODULE
+
+    _QFW_CHECKED = True
     if not has_pyqt6_fluent_widgets():
+        _QFW_MODULE = None
         return None
 
     try:
         import qfluentwidgets as qfw  # type: ignore
+
+        _QFW_MODULE = qfw
         return qfw
     except Exception:
+        _QFW_MODULE = None
         return None
 
 
 def setup_fluent_app(_app, theme_mode: Optional[str] = None) -> bool:
-    """
-    尝试初始化 Fluent 主题。
-
-    返回 True 代表 Fluent 可用且初始化成功；否则返回 False。
-    """
+    """尝试初始化 Fluent 主题。"""
 
     qfw = import_qfluentwidgets()
     if qfw is None:
@@ -68,10 +77,7 @@ def setup_fluent_app(_app, theme_mode: Optional[str] = None) -> bool:
 
 
 def get_fluent_widget(widget_name: str):
-    """
-    获取 qfluentwidgets 中的控件类。
-    若 Fluent 不可用或不存在该控件，返回 None。
-    """
+    """获取 qfluentwidgets 控件类。"""
 
     qfw = import_qfluentwidgets()
     if qfw is None:

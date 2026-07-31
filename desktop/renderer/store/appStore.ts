@@ -1,11 +1,14 @@
 import { create } from "zustand";
 
 import type {
-  AppRoute,
   AppSettings,
   AppSnapshot,
   ConnectionState,
+  ListFilter,
+  NetSearchItem,
+  NetSearchResultPayload,
   ProtocolEvent,
+  SearchMode,
   TaskSnapshot,
   ToastItem,
 } from "../lib/types";
@@ -16,13 +19,27 @@ function toastId(): string {
 
 interface AppState {
   connection: ConnectionState;
-  route: AppRoute;
+  filter: ListFilter;
+  searchQuery: string;
+  searchMode: SearchMode;
+  netSearchId: string;
+  netSearching: boolean;
+  netResults: NetSearchItem[];
+  netError: string;
+  addFocusSignal: number;
+  pendingAddUrls: string[] | null;
   tasks: TaskSnapshot[];
   settings: AppSettings | null;
   logDir: string;
   toasts: ToastItem[];
   setConnection: (state: ConnectionState) => void;
-  setRoute: (route: AppRoute) => void;
+  setFilter: (filter: ListFilter) => void;
+  setSearchQuery: (query: string) => void;
+  setSearchMode: (mode: SearchMode) => void;
+  startNetSearch: (searchId: string) => void;
+  clearNetSearch: () => void;
+  requestAddFocus: () => void;
+  setPendingAddUrls: (urls: string[] | null) => void;
   setLogDir: (dir: string) => void;
   hydrateSnapshot: (snap: AppSnapshot) => void;
   applyEvent: (event: ProtocolEvent) => void;
@@ -34,14 +51,30 @@ const defaultSettings = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   connection: "connecting",
-  route: "new",
+  filter: "all",
+  searchQuery: "",
+  searchMode: "filter",
+  netSearchId: "",
+  netSearching: false,
+  netResults: [],
+  netError: "",
+  addFocusSignal: 0,
+  pendingAddUrls: null,
   tasks: [],
   settings: defaultSettings,
   logDir: "",
   toasts: [],
 
   setConnection: (connection) => set({ connection }),
-  setRoute: (route) => set({ route }),
+  setFilter: (filter) => set({ filter }),
+  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setSearchMode: (searchMode) => set({ searchMode }),
+  startNetSearch: (netSearchId) =>
+    set({ netSearchId, netSearching: true, netResults: [], netError: "" }),
+  clearNetSearch: () =>
+    set({ netSearchId: "", netSearching: false, netResults: [], netError: "" }),
+  requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),
+  setPendingAddUrls: (pendingAddUrls) => set({ pendingAddUrls }),
   setLogDir: (logDir) => set({ logDir }),
 
   hydrateSnapshot: (snap) =>
@@ -57,6 +90,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (event.event === "settings.changed" && payload.settings) {
       set({ settings: payload.settings as AppSettings });
+      return;
+    }
+
+    if (event.event === "search.result") {
+      const result = payload as unknown as NetSearchResultPayload;
+      if (result.searchId && result.searchId === get().netSearchId) {
+        set({
+          netSearching: false,
+          netResults: result.ok ? result.items || [] : [],
+          netError: result.ok ? "" : result.error || "搜索失败",
+        });
+      }
       return;
     }
 

@@ -3,7 +3,10 @@ import { Menu, BrowserWindow, app } from "electron";
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 
-export function buildAppMenu(getWindow: () => BrowserWindow | null): Menu {
+export function buildAppMenu(
+  getWindow: () => BrowserWindow | null,
+  openSettings: () => void,
+): Menu {
   const sendNavigate = (route: AppRoute) => {
     const win = getWindow();
     win?.webContents.send("app:navigate", route);
@@ -22,7 +25,7 @@ export function buildAppMenu(getWindow: () => BrowserWindow | null): Menu {
         {
           label: "设置…",
           accelerator: "CmdOrCtrl+,",
-          click: () => sendNavigate("settings"),
+          click: () => openSettings(),
         },
         { type: "separator" },
         { role: "services" },
@@ -52,11 +55,6 @@ export function buildAppMenu(getWindow: () => BrowserWindow | null): Menu {
           label: "历史记录",
           accelerator: "CmdOrCtrl+2",
           click: () => sendNavigate("history"),
-        },
-        {
-          label: "设置",
-          accelerator: "CmdOrCtrl+3",
-          click: () => sendNavigate("settings"),
         },
       ],
     },

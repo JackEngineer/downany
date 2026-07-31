@@ -7,7 +7,14 @@ from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
 from src.core.download_manager import DownloadManager
-from src.core.download_task import DownloadOptions, DownloadTask, TaskStatus, VideoInfo
+from src.core.download_task import (
+    DownloadOptions,
+    DownloadTask,
+    Platform,
+    TaskStatus,
+    VideoInfo,
+)
+from src.core.search_engine import SearchEngine
 from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, ParseTimeout
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
@@ -118,8 +125,10 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_RETRY.value: _retry,
         Method.DOWNLOAD_REMOVE.value: _remove,
         Method.DOWNLOAD_CLEAR_FINISHED.value: _clear_finished,
+        Method.DOWNLOAD_UPDATE_TASK.value: _update_task,
         Method.DOWNLOAD_PARSE_URLS.value: _parse_urls,
         Method.DOWNLOAD_CANCEL_PARSE.value: _cancel_parse,
+        Method.SEARCH_QUERY.value: _search_query,
         Method.HISTORY_LIST.value: _history_list,
         Method.HISTORY_DELETE.value: _history_delete,
         Method.HISTORY_CLEAR.value: _history_clear,
@@ -169,6 +178,43 @@ def _settings_update(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, 
     return updated
 
 
+def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> DownloadOptions:
+    """以全局选项为底，应用单条目的覆盖项（headers/format/音频/后处理）。"""
+    opts = DownloadOptions(
+        format_id=base.format_id,
+        quality=base.quality,
+        download_subtitles=base.download_subtitles,
+        output_path=base.output_path,
+        speed_limit=base.speed_limit,
+        proxy=base.proxy,
+        http_headers=base.http_headers,
+        audio_only=base.audio_only,
+        postprocessing=base.postprocessing,
+        filename_template=base.filename_template,
+        postprocess_script=base.postprocess_script,
+    )
+    raw_headers = item.get("headers")
+    if isinstance(raw_headers, dict) and raw_headers:
+        headers = {
+            str(k): str(v)
+            for k, v in raw_headers.items()
+            if k and v is not None and str(v)
+        }
+        if headers:
+            opts.http_headers = headers
+    if item.get("format_id"):
+        opts.format_id = str(item["format_id"])
+    if item.get("quality"):
+        opts.quality = str(item["quality"])
+    if item.get("audio_only") is not None:
+        opts.audio_only = bool(item["audio_only"])
+    if item.get("postprocessing"):
+        postprocessing = str(item["postprocessing"]).strip().lower()
+        if postprocessing in {"none", "mp4", "mp3", "script"}:
+            opts.postprocessing = postprocessing
+    return opts
+
+
 def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     urls = payload.get("urls") or []
     if not isinstance(urls, list) or not urls:
@@ -181,8 +227,8 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         if not url:
             continue
         title = "未命名视频"
-        http_headers = None
-        # optional richer items: [{url, title, headers, ...}]
+        thumbnail_url = ""
+        # optional richer items: [{url, title, headers, thumbnail_url, format_id, ...}]
         task_options = options
         if isinstance(items, list):
             for item in items:
@@ -190,28 +236,12 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
                     continue
                 if item.get("title"):
                     title = str(item["title"])
-                raw_headers = item.get("headers")
-                if isinstance(raw_headers, dict) and raw_headers:
-                    http_headers = {
-                        str(k): str(v)
-                        for k, v in raw_headers.items()
-                        if k and v is not None and str(v)
-                    }
-                    if http_headers:
-                        task_options = DownloadOptions(
-                            format_id=options.format_id,
-                            quality=options.quality,
-                            download_subtitles=options.download_subtitles,
-                            output_path=options.output_path,
-                            speed_limit=options.speed_limit,
-                            proxy=options.proxy,
-                            http_headers=http_headers,
-                        )
-                    else:
-                        http_headers = None
+                if item.get("thumbnail_url"):
+                    thumbnail_url = str(item["thumbnail_url"])
+                task_options = _build_item_options(options, item)
                 break
         task = DownloadTask(
-            video_info=VideoInfo(url=url, title=title),
+            video_info=VideoInfo(url=url, title=title, thumbnail_url=thumbnail_url),
             options=task_options,
         )
         ctx.manager.add_task(task)
@@ -254,6 +284,38 @@ def _remove(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     if ok:
         ctx.emit_event(EventName.TASK_REMOVED.value, {"taskId": task_id})
     return {"ok": ok}
+
+
+def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    task_id = _require_task_id(payload)
+    kwargs: Dict[str, Any] = {}
+    if "title" in payload:
+        kwargs["title"] = str(payload["title"])
+    if "format_id" in payload:
+        value = payload.get("format_id")
+        kwargs["format_id"] = str(value) if value else ""
+        if not value:
+            kwargs["clear_format"] = True
+    if "quality" in payload:
+        kwargs["quality"] = str(payload["quality"])
+    if "audio_only" in payload:
+        kwargs["audio_only"] = bool(payload["audio_only"])
+    if "postprocessing" in payload:
+        postprocessing = str(payload["postprocessing"]).strip().lower()
+        if postprocessing not in {"none", "mp4", "mp3", "script"}:
+            raise HandlerError(
+                ErrorCode.INVALID_PARAMS, "postprocessing 必须是 none/mp4/mp3/script"
+            )
+        kwargs["postprocessing"] = postprocessing
+    if "priority" in payload:
+        kwargs["priority"] = int(payload["priority"])
+    try:
+        task = ctx.manager.update_task(task_id, **kwargs)
+    except ValueError as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+    if task is None:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "任务不存在")
+    return {"task": ctx.snapshot_task(task)}
 
 
 def _pause_all(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -328,6 +390,7 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
                                 "uploader": info.uploader,
                                 "platform": info.platform.value,
                                 "file_size": info.file_size,
+                                "formats": info.formats,
                             },
                         },
                     )
@@ -372,6 +435,67 @@ def _cancel_parse(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     if job is not None:
         job.cancel()
     return {"ok": True}
+
+
+def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    query = str(payload.get("query") or "").strip()
+    if not query:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少 query")
+    platform_name = str(payload.get("platform") or "youtube").strip().lower()
+    try:
+        platform = Platform(platform_name)
+    except ValueError as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, f"未知平台: {platform_name}") from exc
+    if not SearchEngine.supports(platform):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, f"平台 {platform_name} 不支持搜索")
+    try:
+        max_results = int(payload.get("maxResults") or payload.get("max_results") or 10)
+    except (TypeError, ValueError):
+        max_results = 10
+    max_results = max(1, min(max_results, 30))
+    proxy = ctx.config.get_proxy_for_download()
+    search_id = str(uuid.uuid4())
+
+    def worker():
+        try:
+            videos = SearchEngine.search(
+                platform, query, max_results=max_results, proxy=proxy
+            )
+            ctx.emit_event(
+                EventName.SEARCH_RESULT.value,
+                {
+                    "searchId": search_id,
+                    "ok": True,
+                    "query": query,
+                    "platform": platform.value,
+                    "items": [
+                        {
+                            "url": v.url,
+                            "title": v.title,
+                            "duration": v.duration,
+                            "thumbnail_url": v.thumbnail_url,
+                            "uploader": v.uploader,
+                            "platform": v.platform.value,
+                        }
+                        for v in videos
+                    ],
+                },
+            )
+        except Exception as exc:
+            logger.warning("搜索失败: %s", exc)
+            ctx.emit_event(
+                EventName.SEARCH_RESULT.value,
+                {
+                    "searchId": search_id,
+                    "ok": False,
+                    "query": query,
+                    "platform": platform.value,
+                    "error": str(exc),
+                },
+            )
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"searchId": search_id}
 
 
 def _history_list(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

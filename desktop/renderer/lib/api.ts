@@ -27,6 +27,10 @@ export async function openPath(target: string): Promise<string> {
   return window.api.openPath(target);
 }
 
+export async function openSettings(): Promise<void> {
+  return window.api.openSettings();
+}
+
 export async function quitApp(): Promise<void> {
   return window.api.quit();
 }

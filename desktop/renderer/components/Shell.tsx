@@ -1,52 +1,93 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
+import { submitAddText } from "../lib/addFlow";
 import { useAppStore } from "../store/appStore";
+import { AddConfirmDialog } from "./AddConfirmDialog";
 import { ConnectionGate } from "./ConnectionGate";
-import { Sidebar } from "./Sidebar";
+import { HistorySection } from "./HistorySection";
+import { TaskList } from "./TaskList";
 import { ToastHost } from "./ToastHost";
-import { NewTaskPage } from "../pages/NewTaskPage";
-import { QueuePage } from "../pages/QueuePage";
-import { HistoryPage } from "../pages/HistoryPage";
-import { SettingsPage } from "../pages/SettingsPage";
+import { TopBar } from "./TopBar";
 
-function useCompact(breakpoint = 960): boolean {
-  const [compact, setCompact] = useState(
-    typeof window !== "undefined" ? window.innerWidth < breakpoint : false,
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true']"),
   );
-  useEffect(() => {
-    const onResize = () => setCompact(window.innerWidth < breakpoint);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [breakpoint]);
-  return compact;
 }
 
 export function Shell() {
   const connection = useAppStore((s) => s.connection);
-  const route = useAppStore((s) => s.route);
-  const setRoute = useAppStore((s) => s.setRoute);
+  const filter = useAppStore((s) => s.filter);
   const settings = useAppStore((s) => s.settings);
-  const compact = useCompact();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
-      if (e.key === "n") {
+      if (e.key === ",") {
         e.preventDefault();
-        setRoute("new");
-      } else if (e.key === ",") {
+        void window.api.openSettings();
+      } else if ((e.key === "v" || e.key === "V") && !isEditableTarget(e.target)) {
         e.preventDefault();
-        setRoute("settings");
+        void window.api.readClipboardText().then((text) => {
+          if (text) void submitAddText(text);
+        });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setRoute]);
+  }, []);
 
   useEffect(() => {
-    return window.api.onNavigate((next) => setRoute(next));
-  }, [setRoute]);
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const text =
+        e.dataTransfer?.getData("text/uri-list") ||
+        e.dataTransfer?.getData("text/plain") ||
+        "";
+      if (text) void submitAddText(text);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
+
+  useEffect(() => {
+    return window.api.onNavigate((next) => {
+      const store = useAppStore.getState();
+      if (next === "new") {
+        store.setFilter("all");
+        store.requestAddFocus();
+      } else if (next === "queue") {
+        store.setFilter("active");
+      } else if (next === "history") {
+        store.setFilter("history");
+      } else if (next === "settings") {
+        void window.api.openSettings();
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.api.onHighlightTask((taskId) => {
+      useAppStore.getState().setFilter("all");
+      window.setTimeout(() => {
+        const el = document.getElementById(`task-${taskId}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("card-flash");
+        window.setTimeout(() => el.classList.remove("card-flash"), 1800);
+      }, 60);
+    });
+  }, []);
 
   useEffect(() => {
     const pushToast = useAppStore.getState().pushToast;
@@ -83,6 +124,14 @@ export function Shell() {
     });
   }, [settings?.theme_mode]);
 
+  useEffect(() => {
+    const themeMode = settings?.theme_mode || "system";
+    void window.api.setThemeSource(themeMode);
+    if (themeMode !== "system") {
+      document.documentElement.setAttribute("data-theme", themeMode);
+    }
+  }, [settings?.theme_mode]);
+
   if (connection === "failed") {
     return (
       <>
@@ -93,14 +142,12 @@ export function Shell() {
   }
 
   return (
-    <div className={`shell ${compact ? "shell-compact" : ""}`}>
-      <Sidebar compact={compact} />
-      <main className="main" id="main">
-        {route === "new" && <NewTaskPage />}
-        {route === "queue" && <QueuePage />}
-        {route === "history" && <HistoryPage />}
-        {route === "settings" && <SettingsPage />}
+    <div className="window-shell">
+      <TopBar />
+      <main className="window-main" id="main">
+        {filter === "history" ? <HistorySection /> : <TaskList />}
       </main>
+      <AddConfirmDialog />
       <ToastHost />
     </div>
   );

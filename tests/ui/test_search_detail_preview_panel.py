@@ -37,6 +37,9 @@ class DummyHistoryDB:
     def add_search_record(self, *_args, **_kwargs):
         return None
 
+    def get_recent_searches(self, limit=20):
+        return []
+
 
 class DummyDownloadManager:
     def add_task(self, *_args, **_kwargs):
@@ -67,7 +70,8 @@ def test_selection_updates_detail_panel_and_enables_preview(monkeypatch):
 
     tab = search_tab_module.SearchTab(DummyDownloadManager())
     tab.show()
-    tab.display_results([_make_video(1), _make_video(2)])
+    tab._active_search_request_id = 1
+    tab.display_results(1, [_make_video(1), _make_video(2)])
     _flush_events()
 
     tab.result_list.setCurrentRow(1)
@@ -86,7 +90,8 @@ def test_selection_handles_none_duration_without_crash(monkeypatch):
     tab.show()
     video = _make_video(1)
     video.duration = None
-    tab.display_results([video])
+    tab._active_search_request_id = 1
+    tab.display_results(1, [video])
     _flush_events()
 
     tab.result_list.setCurrentRow(0)

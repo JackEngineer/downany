@@ -27,7 +27,9 @@ describe("appStore", () => {
   beforeEach(() => {
     useAppStore.setState({
       connection: "connecting",
-      route: "new",
+      filter: "all",
+      searchQuery: "",
+      addFocusSignal: 0,
       tasks: [],
       settings: null,
       logDir: "",
@@ -96,5 +98,64 @@ describe("appStore", () => {
         task({ id: "3", status: "completed" }),
       ]),
     ).toBe(2);
+  });
+
+  it("tracks network search lifecycle", () => {
+    const store = useAppStore.getState();
+    store.startNetSearch("s-1");
+    expect(useAppStore.getState().netSearching).toBe(true);
+    expect(useAppStore.getState().netResults).toEqual([]);
+
+    useAppStore.getState().applyEvent({
+      event: "search.result",
+      payload: {
+        searchId: "s-1",
+        ok: true,
+        items: [
+          {
+            url: "https://www.youtube.com/watch?v=a",
+            title: "A",
+            duration: 10,
+            thumbnail_url: "",
+            uploader: "u",
+            platform: "youtube",
+          },
+        ],
+      },
+    });
+    const state = useAppStore.getState();
+    expect(state.netSearching).toBe(false);
+    expect(state.netResults).toHaveLength(1);
+    expect(state.netError).toBe("");
+  });
+
+  it("ignores stale search results", () => {
+    useAppStore.getState().startNetSearch("s-new");
+    useAppStore.getState().applyEvent({
+      event: "search.result",
+      payload: { searchId: "s-old", ok: true, items: [{ url: "x" }] },
+    });
+    expect(useAppStore.getState().netSearching).toBe(true);
+    expect(useAppStore.getState().netResults).toEqual([]);
+  });
+
+  it("surfaces search errors", () => {
+    useAppStore.getState().startNetSearch("s-err");
+    useAppStore.getState().applyEvent({
+      event: "search.result",
+      payload: { searchId: "s-err", ok: false, error: "网络不可达" },
+    });
+    const state = useAppStore.getState();
+    expect(state.netSearching).toBe(false);
+    expect(state.netError).toBe("网络不可达");
+    expect(state.netResults).toEqual([]);
+  });
+
+  it("clearNetSearch resets state", () => {
+    useAppStore.getState().startNetSearch("s-1");
+    useAppStore.getState().clearNetSearch();
+    const state = useAppStore.getState();
+    expect(state.netSearchId).toBe("");
+    expect(state.netSearching).toBe(false);
   });
 });

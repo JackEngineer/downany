@@ -132,3 +132,15 @@ class ConfigManager:
         if normalized not in {"system", "light", "dark"}:
             normalized = "system"
         self.settings.setValue("theme_mode", normalized)
+
+    def reset_to_defaults(self) -> None:
+        """恢复默认配置。"""
+        default_dir = os.path.join(os.path.expanduser("~"), "Downloads", "TraeDownloader")
+        self.set_download_dir(default_dir)
+        self.set_concurrent_downloads(3)
+        self.set_speed_limit(0)
+        self.set_proxy_enabled(False)
+        self.set_proxy_url("")
+        self.set_default_quality("best")
+        self.set_download_subtitles(False)
+        self.set_theme_mode("system")

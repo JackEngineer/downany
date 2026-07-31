@@ -53,6 +53,12 @@ class QueueStore:
                 )
                 """
             )
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
             conn.commit()
 
     def upsert_task(self, task: DownloadTask) -> None:
@@ -74,14 +80,18 @@ class QueueStore:
             "speed_limit": task.options.speed_limit,
             "proxy": task.options.proxy,
             "http_headers": task.options.http_headers,
+            "audio_only": task.options.audio_only,
+            "postprocessing": task.options.postprocessing,
+            "filename_template": task.options.filename_template,
+            "postprocess_script": task.options.postprocess_script,
         }
         with self._get_connection() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO task_queue
                 (id, status, progress, downloaded_bytes, total_bytes, error_message,
-                 file_path, video_info_json, options_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 file_path, video_info_json, options_json, created_at, updated_at, priority)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task.id,
@@ -95,6 +105,7 @@ class QueueStore:
                     json.dumps(options, ensure_ascii=False),
                     task.created_at.isoformat(),
                     datetime.now().isoformat(),
+                    task.priority,
                 ),
             )
             conn.commit()
@@ -160,6 +171,10 @@ class QueueStore:
                 http_headers=opts.get("http_headers")
                 if isinstance(opts.get("http_headers"), dict)
                 else None,
+                audio_only=bool(opts.get("audio_only", False)),
+                postprocessing=str(opts.get("postprocessing", "none")),
+                filename_template=str(opts.get("filename_template", "")),
+                postprocess_script=str(opts.get("postprocess_script", "")),
             ),
             status=TaskStatus(row["status"]),
             progress=row["progress"],
@@ -167,5 +182,6 @@ class QueueStore:
             total_bytes=row["total_bytes"],
             file_path=row["file_path"],
             error_message=row["error_message"],
+            priority=int(row["priority"]) if "priority" in row.keys() else 0,
             created_at=datetime.fromisoformat(row["created_at"]),
         )

@@ -54,6 +54,10 @@ class DownloadOptions:
     speed_limit: Optional[int] = None  # 速度限制 (bytes/s)
     proxy: Optional[str] = None  # 代理地址
     http_headers: Optional[Dict[str, str]] = None  # 额外 HTTP 头（Referer/Cookie 等）
+    audio_only: bool = False  # 仅音频（提取 MP3）
+    postprocessing: str = "none"  # 后处理: none, mp4, mp3, script
+    filename_template: str = ""  # 输出文件名模板（空 = 默认 %(title)s.%(ext)s）
+    postprocess_script: str = ""  # postprocessing=script 时执行的 shell 脚本
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,12 @@ class TaskSnapshot:
     created_at: str
     started_at: Optional[str]
     completed_at: Optional[str]
+    thumbnail_url: str = ""
+    quality: str = "best"
+    format_id: Optional[str] = None
+    audio_only: bool = False
+    postprocessing: str = "none"
+    priority: int = 0
 
 
 @dataclass
@@ -90,6 +100,7 @@ class DownloadTask:
     eta: str = "暂无"  # 预计剩余时间
     file_path: str = ""  # 下载完成后的文件路径
     error_message: str = ""  # 错误信息
+    priority: int = 0  # 队列优先级，大的先下载
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -136,4 +147,10 @@ class DownloadTask:
             created_at=self.created_at.isoformat(),
             started_at=self.started_at.isoformat() if self.started_at else None,
             completed_at=self.completed_at.isoformat() if self.completed_at else None,
+            thumbnail_url=self.video_info.thumbnail_url,
+            quality=self.options.quality,
+            format_id=self.options.format_id,
+            audio_only=self.options.audio_only,
+            postprocessing=self.options.postprocessing,
+            priority=self.priority,
         )

@@ -41,6 +41,9 @@ class DummyHistoryDB:
     def add_search_record(self, *_args, **_kwargs):
         return None
 
+    def get_recent_searches(self, limit=20):
+        return []
+
 
 class DummyDownloadManager:
     def add_task(self, *_args, **_kwargs):
@@ -93,7 +96,8 @@ def test_visible_items_only_trigger_thumbnail_requests(monkeypatch):
     tab.show()
 
     results = [_make_video(i) for i in range(40)]
-    tab.display_results(results)
+    tab._active_search_request_id = 1
+    tab.display_results(1, results)
     _flush_events()
 
     requested_keys = {item_key for item_key, _ in loader.calls}

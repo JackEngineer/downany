@@ -42,10 +42,37 @@ class DummyConfigManager:
     def get_theme_mode(self):
         return "system"
 
+    def set_theme_mode(self, mode):
+        return None
+
+    def set_download_dir(self, path):
+        return None
+
+    def set_concurrent_downloads(self, count):
+        return None
+
+    def set_speed_limit(self, limit):
+        return None
+
+    def set_default_quality(self, quality):
+        return None
+
+    def set_download_subtitles(self, enabled):
+        return None
+
+    def set_proxy_enabled(self, enabled):
+        return None
+
+    def set_proxy_url(self, url):
+        return None
+
 
 class DummyHistoryDB:
     def add_search_record(self, *_args, **_kwargs):
         return None
+
+    def get_recent_searches(self, limit=20):
+        return []
 
 
 class DummyDownloadManager:
