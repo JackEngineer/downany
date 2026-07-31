@@ -26,6 +26,7 @@ from src.sidecar.diagnostics import export_diagnostics
 from src.sidecar.migration import run_migration
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import ErrorCode, EventName, Method
+from src.sidecar.ytdlp_health import check_ytdlp_health
 from src.utils.logger import setup_logger
 
 logger = setup_logger("SidecarHandlers")
@@ -143,6 +144,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_REMOVE.value: _remove,
         Method.DOWNLOAD_CLEAR_FINISHED.value: _clear_finished,
         Method.DOWNLOAD_UPDATE_TASK.value: _update_task,
+        Method.DOWNLOAD_REORDER.value: _reorder,
         Method.DOWNLOAD_PARSE_URLS.value: _parse_urls,
         Method.DOWNLOAD_CANCEL_PARSE.value: _cancel_parse,
         Method.SEARCH_QUERY.value: _search_query,
@@ -150,6 +152,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.HISTORY_DELETE.value: _history_delete,
         Method.HISTORY_CLEAR.value: _history_clear,
         Method.UPDATER_CHECK_YTDLP.value: _check_ytdlp,
+        Method.UPDATER_CHECK_HEALTH.value: _check_ytdlp_health,
         Method.UPDATER_UPDATE_YTDLP.value: _update_ytdlp,
     }
     handler = handlers.get(method)
@@ -214,8 +217,17 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
         http_headers=base.http_headers,
         audio_only=base.audio_only,
         postprocessing=base.postprocessing,
+        postprocessing_pipeline=list(base.postprocessing_pipeline),
         filename_template=base.filename_template,
         postprocess_script=base.postprocess_script,
+        cookies_from_browser=base.cookies_from_browser,
+        cookiefile=base.cookiefile,
+        embed_metadata=base.embed_metadata,
+        subtitle_langs=base.subtitle_langs,
+        embed_subs=base.embed_subs,
+        concurrent_fragments=base.concurrent_fragments,
+        download_sections=base.download_sections,
+        sponsorblock_remove=base.sponsorblock_remove,
     )
     raw_headers = item.get("headers")
     if isinstance(raw_headers, dict) and raw_headers:
@@ -232,6 +244,8 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
         opts.quality = str(item["quality"])
     if item.get("audio_only") is not None:
         opts.audio_only = bool(item["audio_only"])
+    if item.get("download_subtitles") is not None:
+        opts.download_subtitles = bool(item["download_subtitles"])
     if item.get("postprocessing"):
         postprocessing = str(item["postprocessing"]).strip().lower()
         if postprocessing in {"none", "mp4", "mp3", "script"}:
@@ -375,6 +389,15 @@ def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]
     return {"task": ctx.snapshot_task(task)}
 
 
+def _reorder(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    ordered_ids = payload.get("ordered_ids") or payload.get("orderedIds") or []
+    if not isinstance(ordered_ids, list):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "ordered_ids 必须是数组")
+    ids = [str(item).strip() for item in ordered_ids if str(item).strip()]
+    ctx.manager.reorder_tasks(ids)
+    return {"ok": True}
+
+
 def _pause_all(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     for task_id, task in list(ctx.manager.get_all_tasks().items()):
         if task.status == TaskStatus.DOWNLOADING:
@@ -406,6 +429,7 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     parse_id = str(uuid.uuid4())
     proxy = ctx.config.get_proxy_for_download()
     timeout = float(payload.get("timeout") or 30)
+    allow_playlist = bool(payload.get("allow_playlist") or payload.get("allowPlaylist"))
     job = _ParseJob()
     with ctx._parse_lock:
         ctx._parse_jobs[parse_id] = job
@@ -428,29 +452,35 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
                         },
                     )
                     continue
-                session = ParseSession(url, proxy=proxy, timeout=timeout)
+                session = ParseSession(
+                    url,
+                    proxy=proxy,
+                    timeout=timeout,
+                    allow_playlist=allow_playlist,
+                )
                 if not job.set_session(session):
                     break
                 try:
-                    info = session.run()
-                    ctx.emit_event(
-                        EventName.PARSE_RESULT.value,
-                        {
-                            "parseId": parse_id,
-                            "index": index,
-                            "url": url,
-                            "ok": True,
-                            "info": {
-                                "title": info.title,
-                                "duration": info.duration,
-                                "thumbnail_url": info.thumbnail_url,
-                                "uploader": info.uploader,
-                                "platform": info.platform.value,
-                                "file_size": info.file_size,
-                                "formats": info.formats,
-                            },
+                    result = session.run()
+                    info = result.info
+                    event_payload: Dict[str, Any] = {
+                        "parseId": parse_id,
+                        "index": index,
+                        "url": url,
+                        "ok": True,
+                        "info": {
+                            "title": info.title,
+                            "duration": info.duration,
+                            "thumbnail_url": info.thumbnail_url,
+                            "uploader": info.uploader,
+                            "platform": info.platform.value,
+                            "file_size": info.file_size,
+                            "formats": info.formats,
                         },
-                    )
+                    }
+                    if result.entries:
+                        event_payload["entries"] = result.entries
+                    ctx.emit_event(EventName.PARSE_RESULT.value, event_payload)
                 except ParseCancelled:
                     ctx.emit_event(
                         EventName.PARSE_RESULT.value,
@@ -606,6 +636,13 @@ def _check_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]
         return ytdlp_updater.check_update(ctx.paths)
     except Exception as exc:
         raise HandlerError(ErrorCode.INTERNAL, f"检查 yt-dlp 更新失败: {exc}") from exc
+
+
+def _check_ytdlp_health(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return check_ytdlp_health(ctx.paths)
+    except Exception as exc:
+        raise HandlerError(ErrorCode.INTERNAL, f"检查 yt-dlp 健康状态失败: {exc}") from exc
 
 
 def _update_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

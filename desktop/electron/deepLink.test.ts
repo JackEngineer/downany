@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAddDeepLink,
   extractUrlsFromArgv,
+  parseDeepLinkAdd,
   parseDeepLinkCandidate,
 } from "./deepLink";
 
@@ -55,5 +56,18 @@ describe("extractUrlsFromArgv", () => {
       "--some-flag",
     ];
     expect(extractUrlsFromArgv(argv)).toEqual([a, b]);
+  });
+});
+
+describe("parseDeepLinkAdd", () => {
+  it("parses quality audio and subs params", () => {
+    const page = "https://youtu.be/abc123";
+    const raw = `videodl://add?url=${encodeURIComponent(page)}&quality=1080p&audio=1&subs=1`;
+    expect(parseDeepLinkAdd(raw)).toEqual({
+      url: page,
+      quality: "1080p",
+      audioOnly: true,
+      downloadSubtitles: true,
+    });
   });
 });

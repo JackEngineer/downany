@@ -4,6 +4,19 @@ export const PROTOCOL_SCHEME = "videodl";
 
 const HTTP_URL_RE = /^https?:\/\/\S+$/i;
 
+export type DeepLinkAddPayload = {
+  url: string;
+  quality?: string;
+  audioOnly?: boolean;
+  downloadSubtitles?: boolean;
+};
+
+function truthyParam(value: string | null): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 /**
  * 从单条候选字符串解析出可下载的 http(s) URL。
  * 支持：
@@ -12,11 +25,18 @@ const HTTP_URL_RE = /^https?:\/\/\S+$/i;
  * - 裸 `https://...` / `http://...`
  */
 export function parseDeepLinkCandidate(raw: string): string | null {
+  const payload = parseDeepLinkAdd(raw);
+  return payload?.url ?? null;
+}
+
+/** 解析 videodl://add 完整参数（url / quality / audio / subs）。 */
+export function parseDeepLinkAdd(raw: string): DeepLinkAddPayload | null {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;
 
   if (HTTP_URL_RE.test(trimmed)) {
-    return sanitizeHttpUrl(trimmed);
+    const url = sanitizeHttpUrl(trimmed);
+    return url ? { url } : null;
   }
 
   let parsed: URL;
@@ -37,7 +57,19 @@ export function parseDeepLinkCandidate(raw: string): string | null {
 
   const urlParam = parsed.searchParams.get("url");
   if (!urlParam) return null;
-  return sanitizeHttpUrl(urlParam.trim());
+  const url = sanitizeHttpUrl(urlParam.trim());
+  if (!url) return null;
+
+  const quality = parsed.searchParams.get("quality")?.trim() || undefined;
+  const audioOnly = truthyParam(parsed.searchParams.get("audio"));
+  const downloadSubtitles = truthyParam(parsed.searchParams.get("subs"));
+
+  return {
+    url,
+    quality,
+    audioOnly: audioOnly || undefined,
+    downloadSubtitles: downloadSubtitles || undefined,
+  };
 }
 
 /** 从 argv / commandLine 中提取全部可识别的下载 URL（去重保序）。 */
@@ -49,6 +81,19 @@ export function extractUrlsFromArgv(argv: readonly string[]): string[] {
     if (!url || seen.has(url)) continue;
     seen.add(url);
     out.push(url);
+  }
+  return out;
+}
+
+/** 从 argv 提取带选项的 deep link 入队载荷（去重保序）。 */
+export function extractAddsFromArgv(argv: readonly string[]): DeepLinkAddPayload[] {
+  const seen = new Set<string>();
+  const out: DeepLinkAddPayload[] = [];
+  for (const arg of argv) {
+    const payload = parseDeepLinkAdd(arg);
+    if (!payload || seen.has(payload.url)) continue;
+    seen.add(payload.url);
+    out.push(payload);
   }
   return out;
 }

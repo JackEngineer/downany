@@ -43,7 +43,19 @@ export async function submitAddText(raw: string): Promise<string[]> {
   try {
     await createTasksAndRefresh(urls);
   } catch (err) {
-    pushToast({ kind: "error", title: "添加失败", detail: String(err) });
+    pushToast({
+      kind: "error",
+      title: "添加失败",
+      detail: String(err),
+      sticky: true,
+    });
+    if (urls.length === 1) {
+      pushToast({
+        kind: "info",
+        title: "可尝试浏览器抓取",
+        detail: "若站点需要登录或 yt-dlp 无法解析，可使用顶部「浏览器抓取」按钮。",
+      });
+    }
   }
   return urls;
 }

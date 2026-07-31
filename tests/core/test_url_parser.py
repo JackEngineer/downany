@@ -36,25 +36,31 @@ def test_build_parse_command_includes_proxy():
     assert "--proxy" in cmd
     assert "http://127.0.0.1:7890" in cmd
     assert cmd[-1] == "https://example.com/v"
+    assert "--no-playlist" in cmd
+
+
+def test_build_parse_command_allows_playlist_when_requested():
+    cmd = build_parse_command("https://example.com/playlist", allow_playlist=True)
+    assert "--no-playlist" not in cmd
 
 
 def test_successful_parse(monkeypatch):
     monkeypatch.setattr(
-        url_parser, "build_parse_command", lambda url, proxy=None: _fake_command(FAKE_INFO)
+        url_parser, "build_parse_command", lambda url, proxy=None, allow_playlist=False: _fake_command(FAKE_INFO)
     )
     session = ParseSession("https://www.youtube.com/watch?v=x", timeout=10)
-    info = session.run()
-    assert info.title == "测试视频"
-    assert info.duration == 61
-    assert info.uploader == "uploader1"
-    assert info.platform == Platform.YOUTUBE
+    result = session.run()
+    assert result.info.title == "测试视频"
+    assert result.info.duration == 61
+    assert result.info.uploader == "uploader1"
+    assert result.info.platform == Platform.YOUTUBE
 
 
 def test_timeout_kills_process(monkeypatch):
     monkeypatch.setattr(
         url_parser,
         "build_parse_command",
-        lambda url, proxy=None: [sys.executable, "-c", "import time; time.sleep(30)"],
+        lambda url, proxy=None, allow_playlist=False: [sys.executable, "-c", "import time; time.sleep(30)"],
     )
     session = ParseSession("https://example.com/v", timeout=0.5)
     start = time.monotonic()
@@ -67,7 +73,7 @@ def test_cancel_interrupts_running_parse(monkeypatch):
     monkeypatch.setattr(
         url_parser,
         "build_parse_command",
-        lambda url, proxy=None: [sys.executable, "-c", "import time; time.sleep(30)"],
+        lambda url, proxy=None, allow_playlist=False: [sys.executable, "-c", "import time; time.sleep(30)"],
     )
     session = ParseSession("https://example.com/v", timeout=60)
     result = {}
@@ -99,7 +105,7 @@ def test_nonzero_exit_raises_parse_failed(monkeypatch):
     monkeypatch.setattr(
         url_parser,
         "build_parse_command",
-        lambda url, proxy=None: [
+        lambda url, proxy=None, allow_playlist=False: [
             sys.executable,
             "-c",
             "import sys; sys.stderr.write('ERROR: Unsupported URL'); sys.exit(1)",
@@ -115,7 +121,7 @@ def test_twitter_parse_falls_back_to_fxtwitter(monkeypatch):
     monkeypatch.setattr(
         url_parser,
         "build_parse_command",
-        lambda url, proxy=None: [
+        lambda url, proxy=None, allow_playlist=False: [
             sys.executable,
             "-c",
             "import sys; sys.stderr.write('ERROR: [twitter] Video #1 is unavailable'); sys.exit(1)",
@@ -143,5 +149,29 @@ def test_twitter_parse_falls_back_to_fxtwitter(monkeypatch):
         timeout=10,
     )
     info = session.run()
-    assert info.title == "回退标题"
-    assert info.platform == Platform.TWITTER
+    assert info.info.title == "回退标题"
+    assert info.info.platform == Platform.TWITTER
+
+
+def test_playlist_parse_returns_entries_summary(monkeypatch):
+    payload = {
+        "title": "播放列表",
+        "duration": 0,
+        "entries": [
+            {"id": "a1", "title": "第一集", "url": "https://example.com/a1"},
+            {"id": "a2", "title": "第二集", "webpage_url": "https://example.com/a2"},
+        ],
+    }
+    monkeypatch.setattr(
+        url_parser, "build_parse_command", lambda url, proxy=None, allow_playlist=False: _fake_command(payload)
+    )
+    session = ParseSession(
+        "https://www.youtube.com/playlist?list=xyz",
+        timeout=10,
+        allow_playlist=True,
+    )
+    result = session.run()
+    assert result.info.title == "播放列表"
+    assert len(result.entries) == 2
+    assert result.entries[0]["id"] == "a1"
+    assert result.entries[1]["url"] == "https://example.com/a2"

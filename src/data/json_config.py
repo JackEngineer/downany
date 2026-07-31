@@ -83,6 +83,14 @@ class JsonConfig:
             "filename_template": "",
             "menu_bar_mode": False,
             "dock_progress": True,
+            "cookies_from_browser": "",
+            "embed_metadata": True,
+            "subtitle_langs": "",
+            "embed_subs": False,
+            "concurrent_fragments": 4,
+            "download_sections": "",
+            "sponsorblock_remove": "",
+            "telemetry_enabled": False,
         }
 
     def _load_or_init(self) -> None:
@@ -157,6 +165,20 @@ class JsonConfig:
         next_data["filename_template"] = validate_filename_template(
             str(next_data.get("filename_template", "") or "")
         )
+        next_data["cookies_from_browser"] = str(
+            next_data.get("cookies_from_browser", "") or ""
+        )
+        next_data["embed_metadata"] = bool(next_data.get("embed_metadata", True))
+        next_data["subtitle_langs"] = str(next_data.get("subtitle_langs", "") or "")
+        next_data["embed_subs"] = bool(next_data.get("embed_subs", False))
+        next_data["concurrent_fragments"] = max(
+            0, int(next_data.get("concurrent_fragments", 4) or 0)
+        )
+        next_data["download_sections"] = str(next_data.get("download_sections", "") or "")
+        next_data["sponsorblock_remove"] = str(
+            next_data.get("sponsorblock_remove", "") or ""
+        )
+        next_data["telemetry_enabled"] = bool(next_data.get("telemetry_enabled", False))
         next_data["download_dir"] = str(next_data.get("download_dir") or self._default_download_dir())
 
         if next_data["proxy_enabled"] and not next_data["proxy_url"].strip():
@@ -227,6 +249,9 @@ class JsonConfig:
     def is_dock_progress(self) -> bool:
         return bool(self._data.get("dock_progress", True))
 
+    def is_telemetry_enabled(self) -> bool:
+        return bool(self._data.get("telemetry_enabled", False))
+
     def get_postprocessing(self) -> str:
         value = str(self._data.get("postprocessing", "none")).strip().lower()
         return value if value in VALID_POSTPROCESSING else "none"
@@ -265,4 +290,11 @@ class JsonConfig:
             postprocessing=self.get_postprocessing(),
             filename_template=self.get_filename_template(),
             postprocess_script=self.get_postprocess_script(),
+            cookies_from_browser=str(self._data.get("cookies_from_browser", "") or ""),
+            embed_metadata=bool(self._data.get("embed_metadata", True)),
+            subtitle_langs=str(self._data.get("subtitle_langs", "") or ""),
+            embed_subs=bool(self._data.get("embed_subs", False)),
+            concurrent_fragments=int(self._data.get("concurrent_fragments", 4) or 0),
+            download_sections=str(self._data.get("download_sections", "") or ""),
+            sponsorblock_remove=str(self._data.get("sponsorblock_remove", "") or ""),
         )

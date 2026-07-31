@@ -227,3 +227,19 @@ def test_search_query_validation(tmp_path):
         dispatch(ctx, Method.SEARCH_QUERY.value, {"query": "x", "platform": "twitter"})
     assert exc_info.value.code == ErrorCode.INVALID_PARAMS
     assert Platform.TWITTER.value == "twitter"
+
+
+def test_download_reorder(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    created = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": ["https://example.com/a", "https://example.com/b"]},
+    )
+    ids = created["taskIds"]
+    assert len(ids) == 2
+    dispatch(ctx, Method.DOWNLOAD_REORDER.value, {"ordered_ids": list(reversed(ids))})
+    tasks = ctx.manager.get_all_tasks()
+    by_id = {tid: tasks[tid].queue_order for tid in ids}
+    assert by_id[ids[0]] == 1
+    assert by_id[ids[1]] == 0

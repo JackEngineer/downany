@@ -33,6 +33,14 @@ def test_proxy_for_download_none_when_disabled(tmp_path):
     assert cfg.get_proxy_for_download() is None
 
 
+def test_telemetry_enabled_roundtrip(tmp_path):
+    cfg = JsonConfig(str(tmp_path / "config.json"))
+    updated = cfg.update_from_dict({"telemetry_enabled": True})
+    assert updated["telemetry_enabled"] is True
+    again = JsonConfig(str(tmp_path / "config.json"))
+    assert again.is_telemetry_enabled() is True
+
+
 def test_update_from_dict_rejects_empty_proxy_when_enabled(tmp_path):
     cfg = JsonConfig(str(tmp_path / "c.json"))
     try:

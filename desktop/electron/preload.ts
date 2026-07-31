@@ -17,6 +17,13 @@ export type ExternalEnqueuePayload = {
   error?: string;
 };
 
+export type ContextMenuTemplateItem = {
+  id: string;
+  label: string;
+  enabled?: boolean;
+  type?: "separator";
+};
+
 const api = {
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
@@ -95,6 +102,12 @@ const api = {
     const listener = (_: Electron.IpcRendererEvent, taskId: string) => handler(taskId);
     ipcRenderer.on("app:highlightTask", listener);
     return () => ipcRenderer.removeListener("app:highlightTask", listener);
+  },
+  openExtractWindow(url: string): Promise<void> {
+    return ipcRenderer.invoke("app:openExtractWindow", url);
+  },
+  showTaskContextMenu(template: ContextMenuTemplateItem[]): Promise<string | null> {
+    return ipcRenderer.invoke("app:showTaskContextMenu", template);
   },
 };
 

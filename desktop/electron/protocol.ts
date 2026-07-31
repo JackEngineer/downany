@@ -18,6 +18,7 @@ export const Methods = [
   "download.remove",
   "download.clearFinished",
   "download.updateTask",
+  "download.reorder",
   "search.query",
   "history.list",
   "history.delete",

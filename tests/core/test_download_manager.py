@@ -8,6 +8,7 @@ import pytest
 from src.core.download_manager import DownloadManager
 from src.core.download_task import DownloadOptions, DownloadTask, TaskStatus, VideoInfo
 from src.core.downloader import DownloadCancelled, DownloadError
+from src.core import error_codes as ec
 
 
 @pytest.fixture
@@ -81,6 +82,7 @@ def test_download_failure_marks_failed_and_emits_event(manager):
 
     assert task.status == TaskStatus.FAILED
     assert "boom" in task.error_message
+    assert task.error_code == ec.UNKNOWN
     manager.db.add_download_record.assert_called()
     assert ("task_added", {"task_id": task.id}) in events
     assert ("task_failed", {"task_id": task.id, "error": task.error_message}) in events
@@ -298,6 +300,37 @@ def test_script_postprocess_runs_after_completion(manager):
     assert "'/tmp/my file.mp4'" in command  # shlex.quote 处理空格
 
 
+def test_queue_order_picks_lower_first():
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+    mgr = DownloadManager(config=config, db=MagicMock())
+    late = _make_task(url="https://example.com/late")
+    early = _make_task(url="https://example.com/early")
+    late.queue_order, early.queue_order = 5, 1
+    late.priority, early.priority = 10, 0
+    for task in (late, early):
+        mgr.tasks[task.id] = task
+    with mgr._lock:
+        first = mgr._pick_next_pending_locked()
+        assert first is not None and first.id == early.id
+
+
+def test_reorder_tasks_updates_queue_order():
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+    mgr = DownloadManager(config=config, db=MagicMock())
+    a = _make_task(url="https://example.com/a")
+    b = _make_task(url="https://example.com/b")
+    c = _make_task(url="https://example.com/c")
+    for idx, task in enumerate((a, b, c)):
+        task.queue_order = idx
+        mgr.tasks[task.id] = task
+    mgr.reorder_tasks([c.id, a.id, b.id])
+    assert a.queue_order == 1
+    assert b.queue_order == 2
+    assert c.queue_order == 0
+
+
 def test_priority_picks_highest_first():
     config = MagicMock()
     config.get_concurrent_downloads.return_value = 1
@@ -487,3 +520,53 @@ def test_instagram_weak_title_backfilled_from_description(manager):
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
 
     assert task.video_info.title == "今日份小狗 #cute"
+
+
+def test_failure_sets_structured_error_code(manager):
+    task = _make_task()
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.download.side_effect = DownloadError("Sign in to confirm your age")
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.FAILED)
+    assert task.error_code == ec.NEED_LOGIN
+
+
+def test_embed_metadata_and_m2_opts_passed_to_ytdlp(manager):
+    task = _make_task()
+    task.options.embed_metadata = True
+    task.options.subtitle_langs = "en,zh-Hans"
+    task.options.embed_subs = True
+    task.options.concurrent_fragments = 8
+    task.options.download_sections = "*10:00-12:00"
+    task.options.sponsorblock_remove = "sponsor,intro"
+    task.options.cookies_from_browser = "chrome"
+    opts = _run_one_task(manager, task)
+    assert opts["writethumbnail"] is True
+    assert opts["embedmetadata"] is True
+    assert opts["subtitleslangs"] == ["en", "zh-Hans"]
+    assert opts["embedsubtitles"] == ["en", "zh-Hans"]
+    assert opts["concurrent_fragment_downloads"] == 8
+    assert opts["download_sections"] == "*10:00-12:00"
+    assert opts["sponsorblock_remove"] == ["sponsor", "intro"]
+    assert opts["cookiesfrombrowser"] == ("chrome",)
+
+
+def test_download_subtitles_without_langs_keeps_legacy_behavior(manager):
+    task = _make_task()
+    task.options.download_subtitles = True
+    task.options.subtitle_langs = ""
+    opts = _run_one_task(manager, task)
+    assert opts["writesubtitles"] is True
+    assert opts["writeautomaticsub"] is True
+    assert "subtitleslangs" not in opts
+
+
+def test_concurrent_fragments_zero_omits_option(manager):
+    task = _make_task()
+    task.options.concurrent_fragments = 0
+    opts = _run_one_task(manager, task)
+    assert "concurrent_fragment_downloads" not in opts

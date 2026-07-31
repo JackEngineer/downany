@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { onEvent, request } from "../lib/api";
+import { onEvent, openExtractWindow, request } from "../lib/api";
 import { createTasksAndRefresh } from "../lib/addFlow";
 import { formatOptionLabel, formatSelectorValue } from "../lib/formats";
 import type { FormatOption, ParseResultEvent } from "../lib/types";
@@ -37,7 +37,10 @@ export function AddConfirmDialog() {
     setRows(
       pendingAddUrls.map((url) => ({ url, status: "pending", selected: false })),
     );
-    request<{ parseId: string }>("download.parseUrls", { urls: pendingAddUrls })
+    request<{ parseId: string }>("download.parseUrls", {
+      urls: pendingAddUrls,
+      allow_playlist: true,
+    })
       .then((res) => setParseId(res.parseId))
       .catch((err) => {
         pushToast({ kind: "error", title: "解析启动失败", detail: String(err) });
@@ -65,6 +68,19 @@ export function AddConfirmDialog() {
         if (data.cancelled) {
           row.status = "cancelled";
           row.error = "已取消";
+        } else if (data.ok && data.entries && data.entries.length > 1) {
+          // 播放列表：展开为多行可选条目（PlaylistPicker 最小实现）
+          const expanded: ParseRow[] = data.entries.map((entry) => ({
+            url: entry.url,
+            status: "ok" as const,
+            title: entry.title || entry.id || entry.url,
+            platform: data.info?.platform,
+            thumbnailUrl: data.info?.thumbnail_url,
+            formats: data.info?.formats || [],
+            selected: true,
+          }));
+          next.splice(data.index, 1, ...expanded);
+          return next;
         } else if (data.ok && data.info) {
           row.status = "ok";
           row.title = data.info.title;
@@ -157,7 +173,19 @@ export function AddConfirmDialog() {
                   <div className="muted">
                     {row.status === "pending" && "解析中…"}
                     {row.status === "ok" && row.platform}
-                    {row.status === "error" && row.error}
+                    {row.status === "error" && (
+                      <>
+                        {row.error}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => void openExtractWindow(row.url)}
+                        >
+                          用浏览器抓取
+                        </button>
+                      </>
+                    )}
                     {row.status === "cancelled" && "已取消"}
                   </div>
                 </div>

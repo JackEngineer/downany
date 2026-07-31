@@ -12,6 +12,7 @@ def test_required_methods_exist():
         "app.ping",
         "app.shutdown",
         "app.runMigration",
+        "app.exportDiagnostics",
         "download.parseUrls",
         "download.cancelParse",
         "download.createTasks",
@@ -24,6 +25,7 @@ def test_required_methods_exist():
         "download.remove",
         "download.clearFinished",
         "download.updateTask",
+        "download.reorder",
         "search.query",
         "history.list",
         "history.delete",
@@ -31,6 +33,7 @@ def test_required_methods_exist():
         "settings.get",
         "settings.update",
         "updater.checkYtDlp",
+        "updater.checkHealth",
         "updater.updateYtDlp",
     }
     assert {m.value for m in Method} == required

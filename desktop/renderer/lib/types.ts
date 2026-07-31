@@ -49,6 +49,7 @@ export interface TaskSnapshot {
   eta: string;
   file_path: string;
   error_message: string;
+  error_code?: string;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -57,6 +58,7 @@ export interface TaskSnapshot {
   audio_only?: boolean;
   postprocessing?: string;
   priority?: number;
+  queue_order?: number;
 }
 
 export interface AppSettings {
@@ -75,6 +77,10 @@ export interface AppSettings {
   filename_template?: string;
   menu_bar_mode?: boolean;
   dock_progress?: boolean;
+  cookies_from_browser?: string;
+  embed_metadata?: boolean;
+  concurrent_fragments?: number;
+  telemetry_enabled?: boolean;
   [key: string]: unknown;
 }
 
@@ -108,6 +114,12 @@ export interface HistoryItem {
   created_at: string | null;
 }
 
+export interface PlaylistEntry {
+  id?: string;
+  title?: string;
+  url: string;
+}
+
 export interface ParseResultEvent {
   parseId: string;
   index: number;
@@ -115,6 +127,7 @@ export interface ParseResultEvent {
   ok: boolean;
   cancelled?: boolean;
   error?: string;
+  entries?: PlaylistEntry[];
   info?: {
     title: string;
     duration: number;

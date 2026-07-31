@@ -31,6 +31,10 @@ export async function openSettings(): Promise<void> {
   return window.api.openSettings();
 }
 
+export async function openExtractWindow(url: string): Promise<void> {
+  return window.api.openExtractWindow(url);
+}
+
 export async function quitApp(): Promise<void> {
   return window.api.quit();
 }

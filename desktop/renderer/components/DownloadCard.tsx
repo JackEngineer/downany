@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import { openPath, request } from "../lib/api";
+import { getLocale, t } from "../i18n";
+import { openExtractWindow, openPath, openSettings, request } from "../lib/api";
 import { formatBytes, statusLabel } from "../lib/format";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
@@ -131,9 +132,163 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
   const optionEditable = task.status !== "downloading";
   const qBadge = qualityBadge(task);
   const pBadge = postBadge(task);
+  const locale = getLocale();
+
+  const openExtract = () => {
+    void openExtractWindow(task.url);
+  };
+
+  const handleContextAction = async (actionId: string) => {
+    switch (actionId) {
+      case "rename":
+        setDraftTitle(task.title);
+        setEditing(true);
+        break;
+      case "extract":
+        openExtract();
+        break;
+      case "priority-high":
+        await update({ priority: 1 });
+        break;
+      case "priority-normal":
+        await update({ priority: 0 });
+        break;
+      case "audio-toggle":
+        await update({ audio_only: !task.audio_only });
+        break;
+      case "cancel":
+        await act("download.cancel");
+        break;
+      case "retry":
+        await act("download.retry");
+        break;
+      case "remove":
+        await act("download.remove");
+        break;
+      case "open":
+        await openPath(task.file_path);
+        break;
+      case "reveal":
+        await window.api.showItemInFolder(task.file_path);
+        break;
+      default:
+        if (actionId.startsWith("pp:")) {
+          await update({ postprocessing: actionId.slice(3) });
+        } else if (actionId === "pause") {
+          await act("download.pause");
+        } else if (actionId === "resume") {
+          await act("download.resume");
+        }
+        break;
+    }
+  };
+
+  const buildContextTemplate = () => {
+    const items: Array<{ id: string; label: string; enabled?: boolean; type?: string }> = [];
+    items.push({ id: "rename", label: "重命名" });
+    items.push({ id: "extract", label: t("menu.extract", locale) });
+    if (showDownloadOptions) {
+      items.push({ type: "separator", id: "sep1", label: "" });
+      items.push({
+        id: (task.priority ?? 0) > 0 ? "priority-normal" : "priority-high",
+        label: (task.priority ?? 0) > 0 ? "取消高优先级" : "设为高优先级",
+      });
+      items.push({
+        id: "audio-toggle",
+        label: task.audio_only ? "取消仅音频" : "仅音频 (MP3)",
+        enabled: optionEditable,
+      });
+    }
+    if (task.status === "downloading") {
+      items.push({ id: "pause", label: "暂停" });
+    }
+    if (task.status === "paused") {
+      items.push({ id: "resume", label: "恢复" });
+    }
+    if (active) {
+      items.push({ id: "cancel", label: "取消下载" });
+    }
+    if (task.status === "failed") {
+      items.push({ id: "retry", label: "重试" });
+    }
+    if (task.status === "completed" && task.file_path) {
+      items.push({ id: "open", label: "打开文件" });
+      items.push({ id: "reveal", label: "在访达中显示" });
+    }
+    if (finished) {
+      items.push({ id: "remove", label: "移除" });
+    }
+    return items;
+  };
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    void window.api.showTaskContextMenu(buildContextTemplate()).then((picked) => {
+      if (picked) void handleContextAction(picked);
+    });
+  };
+
+  const failedActions = () => {
+    const code = task.error_code || "";
+    const buttons: JSX.Element[] = [];
+
+    buttons.push(
+      <button key="retry" type="button" className="primary" onClick={() => void act("download.retry")}>
+        重试
+      </button>,
+    );
+
+    if (code === "need_login") {
+      buttons.push(
+        <button key="settings" type="button" onClick={() => void openSettings()}>
+          导入 Cookie
+        </button>,
+        <button key="extract" type="button" onClick={openExtract}>
+          浏览器抓取
+        </button>,
+      );
+    } else if (code === "geo_blocked") {
+      buttons.push(
+        <button
+          key="proxy"
+          type="button"
+          onClick={() => {
+            pushToast({
+              kind: "info",
+              title: "地区受限",
+              detail: "请在设置中启用代理并填写代理地址后重试。",
+            });
+            void openSettings();
+          }}
+        >
+          检查代理
+        </button>,
+      );
+    } else if (code === "ytdlp_outdated") {
+      buttons.push(
+        <button key="settings" type="button" onClick={() => void openSettings()}>
+          打开设置
+        </button>,
+      );
+    }
+
+    if (code !== "need_login") {
+      buttons.push(
+        <button key="extract-generic" type="button" onClick={openExtract}>
+          浏览器抓取
+        </button>,
+      );
+    }
+
+    return buttons;
+  };
 
   return (
-    <li id={`task-${task.id}`} className={`download-card status-${task.status}`}>
+    <li
+      id={`task-${task.id}`}
+      className={`download-card status-${task.status}`}
+      onContextMenu={onContextMenu}
+    >
       <Thumbnail task={task} />
       <div className="card-main">
         {editing ? (
@@ -206,11 +361,7 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
             恢复
           </button>
         )}
-        {task.status === "failed" && (
-          <button type="button" className="primary" onClick={() => void act("download.retry")}>
-            重试
-          </button>
-        )}
+        {task.status === "failed" && failedActions()}
         <details className="card-menu" ref={menuRef}>
           <summary aria-label="更多操作">⋯</summary>
           <div className="card-menu-list" role="menu">
@@ -223,6 +374,9 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
               }}
             >
               重命名
+            </button>
+            <button type="button" onClick={openExtract}>
+              {t("menu.extract", locale)}
             </button>
             {showDownloadOptions && (
               <>

@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { EmptyState, isOnboardingDismissed } from "./EmptyState";
 import { isActiveStatus } from "../lib/format";
+import { getLocale, t } from "../i18n";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { DownloadCard } from "./DownloadCard";
@@ -16,6 +18,9 @@ function sortTasks(tasks: TaskSnapshot[]): TaskSnapshot[] {
     .sort((a, b) => {
       const r = rank(a) - rank(b);
       if (r !== 0) return r;
+      const orderA = a.queue_order ?? 0;
+      const orderB = b.queue_order ?? 0;
+      if (orderA !== orderB) return orderA - orderB;
       const ta = a.completed_at || a.created_at;
       const tb = b.completed_at || b.created_at;
       return tb.localeCompare(ta);
@@ -27,6 +32,18 @@ export function TaskList() {
   const filter = useAppStore((s) => s.filter);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const searchMode = useAppStore((s) => s.searchMode);
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDismissed());
+  const locale = getLocale();
+
+  useEffect(() => {
+    const refresh = () => setShowOnboarding(!isOnboardingDismissed());
+    window.addEventListener("videodl:onboarding", refresh);
+    window.addEventListener("videodl:locale", refresh);
+    return () => {
+      window.removeEventListener("videodl:onboarding", refresh);
+      window.removeEventListener("videodl:locale", refresh);
+    };
+  }, []);
 
   const visible = useMemo(() => {
     let list = sortTasks(tasks);
@@ -45,19 +62,22 @@ export function TaskList() {
   }, [tasks, filter, searchQuery, searchMode]);
 
   if (tasks.length === 0) {
+    if (showOnboarding) {
+      return <EmptyState />;
+    }
     return (
       <div className="drop-hint">
         <div className="drop-hint-icon" aria-hidden>
           ⇩
         </div>
-        <p>把链接拖到这里，或在上方粘贴 URL 回车开始下载</p>
-        <p className="muted">也可以从浏览器扩展一键发送</p>
+        <p>{t("onboarding.paste", locale)}</p>
+        <p className="muted">{t("onboarding.extension", locale)}</p>
       </div>
     );
   }
 
   if (visible.length === 0) {
-    return <p className="muted list-empty">没有匹配的任务</p>;
+    return <p className="muted list-empty">{t("empty.noMatch", locale)}</p>;
   }
 
   return (

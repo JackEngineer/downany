@@ -222,8 +222,19 @@ select {
   padding: 4px 10px;
 }
 
-.topbar-settings {
+.topbar-settings,
+.topbar-extract {
   flex-shrink: 0;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  color: var(--accent, #0a84ff);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .topbar-menu {
@@ -523,6 +534,61 @@ select {
 .drop-hint-icon {
   font-size: 44px;
   line-height: 1;
+}
+
+.drop-hint p {
+  margin: 0;
+}
+
+.empty-state {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 24px;
+  -webkit-app-region: drag;
+}
+
+.empty-state-icon {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.empty-state-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.empty-state-steps {
+  margin: 0 auto;
+  padding-left: 1.2rem;
+  text-align: left;
+  color: var(--muted);
+  max-width: 420px;
+}
+
+.empty-state-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.sites-panel h3 {
+  margin: 0 0 8px;
+  grid-column: 1 / -1;
+}
+
+.sites-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  grid-column: 1 / -1;
+  columns: 2;
+}
+
+.sites-panel .muted {
+  grid-column: 1 / -1;
 }
 
 .drop-hint p {

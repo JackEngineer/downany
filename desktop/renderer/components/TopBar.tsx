@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-import { request } from "../lib/api";
+import { request, openExtractWindow } from "../lib/api";
 import { submitAddText } from "../lib/addFlow";
+import { getLocale, t, type Locale } from "../i18n";
 import type { ListFilter, SearchMode } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { NetSearchPanel } from "./NetSearchPanel";
 
-const SEGMENTS: { key: ListFilter; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "active", label: "进行中" },
-  { key: "completed", label: "已完成" },
-  { key: "history", label: "历史" },
+const SEGMENT_KEYS: { key: ListFilter; labelKey: string }[] = [
+  { key: "all", labelKey: "nav.all" },
+  { key: "active", labelKey: "nav.active" },
+  { key: "completed", labelKey: "nav.completed" },
+  { key: "history", labelKey: "nav.history" },
 ];
 
-const SEARCH_MODES: { key: SearchMode; label: string; hint: string }[] = [
-  { key: "filter", label: "列表", hint: "过滤当前列表" },
-  { key: "network", label: "网络", hint: "在视频平台内搜索" },
+const SEARCH_MODES: { key: SearchMode; labelKey: string; hint: string }[] = [
+  { key: "filter", labelKey: "search.filter", hint: "过滤当前列表" },
+  { key: "network", labelKey: "search.network", hint: "在视频平台内搜索" },
 ];
 
 const SEARCH_PLATFORMS = [
@@ -38,13 +39,16 @@ export function TopBar() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [netPlatform, setNetPlatform] = useState("youtube");
+  const [locale, setLocaleState] = useState<Locale>(() => getLocale());
   const addRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
-    if (addFocusSignal > 0) addRef.current?.focus();
-  }, [addFocusSignal]);
+    const onLocale = () => setLocaleState(getLocale());
+    window.addEventListener("videodl:locale", onLocale);
+    return () => window.removeEventListener("videodl:locale", onLocale);
+  }, []);
 
   useEffect(() => {
     const el = menuRef.current;
@@ -62,6 +66,10 @@ export function TopBar() {
     el.addEventListener("toggle", onToggle);
     return () => el.removeEventListener("toggle", onToggle);
   }, []);
+
+  useEffect(() => {
+    if (addFocusSignal > 0) addRef.current?.focus();
+  }, [addFocusSignal]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -118,6 +126,20 @@ export function TopBar() {
     }
   };
 
+  const openExtract = async () => {
+    const candidate = text.trim();
+    if (!candidate) {
+      pushToast({ kind: "info", title: "请先输入要抓取的页面 URL" });
+      addRef.current?.focus();
+      return;
+    }
+    try {
+      await openExtractWindow(candidate);
+    } catch (err) {
+      pushToast({ kind: "error", title: "无法打开抓取窗口", detail: String(err) });
+    }
+  };
+
   return (
     <header className="topbar">
       <div className="topbar-row">
@@ -125,7 +147,7 @@ export function TopBar() {
           ref={addRef}
           className="topbar-add"
           type="text"
-          placeholder="粘贴链接，回车开始下载…"
+          placeholder={t("add.placeholder", locale)}
           value={text}
           disabled={disabled || busy}
           onChange={(e) => setText(e.target.value)}
@@ -147,7 +169,7 @@ export function TopBar() {
                 className={searchMode === mode.key ? "mode active" : "mode"}
                 onClick={() => setSearchMode(mode.key)}
               >
-                {mode.label}
+                {t(mode.labelKey, locale)}
               </button>
             ))}
           </div>
@@ -169,7 +191,11 @@ export function TopBar() {
             ref={searchRef}
             className="topbar-search"
             type="search"
-            placeholder={searchMode === "network" ? "搜索网络视频，回车搜索…" : "过滤列表"}
+            placeholder={
+              searchMode === "network"
+                ? "搜索网络视频，回车搜索…"
+                : t("search.placeholder", locale)
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -181,6 +207,15 @@ export function TopBar() {
             aria-label="搜索"
           />
         </div>
+        <button
+          type="button"
+          className="topbar-extract"
+          title="在内置浏览器中抓取媒体"
+          disabled={disabled}
+          onClick={() => void openExtract()}
+        >
+          浏览器抓取
+        </button>
         <details className="topbar-menu" ref={menuRef}>
           <summary aria-label="批量操作">⋯</summary>
           <div className="topbar-menu-list" role="menu">
@@ -210,22 +245,22 @@ export function TopBar() {
         <button
           type="button"
           className="topbar-settings"
-          title="设置 (⌘,)"
-          aria-label="设置"
+          title={t("settings.open", locale)}
+          aria-label={t("settings.open", locale)}
           onClick={() => void window.api.openSettings()}
         >
           ⚙
         </button>
       </div>
       <nav className="segments" aria-label="列表过滤">
-        {SEGMENTS.map((seg) => (
+        {SEGMENT_KEYS.map((seg) => (
           <button
             key={seg.key}
             type="button"
             className={filter === seg.key ? "segment active" : "segment"}
             onClick={() => setFilter(seg.key)}
           >
-            {seg.label}
+            {t(seg.labelKey, locale)}
           </button>
         ))}
       </nav>

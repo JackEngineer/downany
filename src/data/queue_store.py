@@ -59,6 +59,18 @@ class QueueStore:
                 )
             except sqlite3.OperationalError:
                 pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN error_code TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
             conn.commit()
 
     def upsert_task(self, task: DownloadTask) -> None:
@@ -82,16 +94,26 @@ class QueueStore:
             "http_headers": task.options.http_headers,
             "audio_only": task.options.audio_only,
             "postprocessing": task.options.postprocessing,
+            "postprocessing_pipeline": task.options.postprocessing_pipeline,
             "filename_template": task.options.filename_template,
             "postprocess_script": task.options.postprocess_script,
+            "cookies_from_browser": task.options.cookies_from_browser,
+            "cookiefile": task.options.cookiefile,
+            "embed_metadata": task.options.embed_metadata,
+            "subtitle_langs": task.options.subtitle_langs,
+            "embed_subs": task.options.embed_subs,
+            "concurrent_fragments": task.options.concurrent_fragments,
+            "download_sections": task.options.download_sections,
+            "sponsorblock_remove": task.options.sponsorblock_remove,
         }
         with self._get_connection() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO task_queue
                 (id, status, progress, downloaded_bytes, total_bytes, error_message,
-                 file_path, video_info_json, options_json, created_at, updated_at, priority)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 error_code, file_path, video_info_json, options_json, created_at, updated_at,
+                 priority, queue_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task.id,
@@ -100,12 +122,14 @@ class QueueStore:
                     task.downloaded_bytes,
                     task.total_bytes,
                     task.error_message,
+                    task.error_code,
                     task.file_path,
                     json.dumps(video_info, ensure_ascii=False),
                     json.dumps(options, ensure_ascii=False),
                     task.created_at.isoformat(),
                     datetime.now().isoformat(),
                     task.priority,
+                    task.queue_order,
                 ),
             )
             conn.commit()
@@ -132,7 +156,7 @@ class QueueStore:
     def load_tasks(self) -> List[DownloadTask]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM task_queue ORDER BY created_at ASC"
+                "SELECT * FROM task_queue ORDER BY queue_order ASC, created_at ASC"
             ).fetchall()
         tasks: List[DownloadTask] = []
         for row in rows:
@@ -143,9 +167,25 @@ class QueueStore:
         return tasks
 
     @staticmethod
+    def _parse_postprocessing(opts: dict) -> tuple[str, list[str]]:
+        raw_pp = opts.get("postprocessing", "none")
+        pipeline_raw = opts.get("postprocessing_pipeline")
+        if isinstance(raw_pp, list):
+            pipeline = [str(item) for item in raw_pp if str(item).strip()]
+            postprocessing = pipeline[0] if pipeline else "none"
+            return postprocessing, pipeline
+        postprocessing = str(raw_pp or "none")
+        if isinstance(pipeline_raw, list):
+            pipeline = [str(item) for item in pipeline_raw if str(item).strip()]
+        else:
+            pipeline = []
+        return postprocessing, pipeline
+
+    @staticmethod
     def _row_to_task(row: sqlite3.Row) -> DownloadTask:
         info = json.loads(row["video_info_json"])
         opts = json.loads(row["options_json"])
+        postprocessing, pipeline = QueueStore._parse_postprocessing(opts)
         try:
             platform = Platform(info.get("platform", "unknown"))
         except ValueError:
@@ -172,9 +212,18 @@ class QueueStore:
                 if isinstance(opts.get("http_headers"), dict)
                 else None,
                 audio_only=bool(opts.get("audio_only", False)),
-                postprocessing=str(opts.get("postprocessing", "none")),
+                postprocessing=postprocessing,
+                postprocessing_pipeline=pipeline,
                 filename_template=str(opts.get("filename_template", "")),
                 postprocess_script=str(opts.get("postprocess_script", "")),
+                cookies_from_browser=str(opts.get("cookies_from_browser", "")),
+                cookiefile=str(opts.get("cookiefile", "")),
+                embed_metadata=bool(opts.get("embed_metadata", True)),
+                subtitle_langs=str(opts.get("subtitle_langs", "")),
+                embed_subs=bool(opts.get("embed_subs", False)),
+                concurrent_fragments=int(opts.get("concurrent_fragments", 4) or 0),
+                download_sections=str(opts.get("download_sections", "")),
+                sponsorblock_remove=str(opts.get("sponsorblock_remove", "")),
             ),
             status=TaskStatus(row["status"]),
             progress=row["progress"],
@@ -182,6 +231,8 @@ class QueueStore:
             total_bytes=row["total_bytes"],
             file_path=row["file_path"],
             error_message=row["error_message"],
+            error_code=str(row["error_code"]) if "error_code" in row.keys() else "",
             priority=int(row["priority"]) if "priority" in row.keys() else 0,
+            queue_order=int(row["queue_order"]) if "queue_order" in row.keys() else 0,
             created_at=datetime.fromisoformat(row["created_at"]),
         )

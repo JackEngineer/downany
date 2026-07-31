@@ -56,8 +56,17 @@ class DownloadOptions:
     http_headers: Optional[Dict[str, str]] = None  # 额外 HTTP 头（Referer/Cookie 等）
     audio_only: bool = False  # 仅音频（提取 MP3）
     postprocessing: str = "none"  # 后处理: none, mp4, mp3, script
+    postprocessing_pipeline: List[str] = field(default_factory=list)  # 可选多步后处理
     filename_template: str = ""  # 输出文件名模板（空 = 默认 %(title)s.%(ext)s）
     postprocess_script: str = ""  # postprocessing=script 时执行的 shell 脚本
+    cookies_from_browser: str = ""  # yt-dlp cookiesfrombrowser 浏览器名
+    cookiefile: str = ""  # Netscape cookie 文件路径
+    embed_metadata: bool = True  # 嵌入封面/元数据/章节
+    subtitle_langs: str = ""  # 字幕语言（逗号分隔；空则沿用 download_subtitles）
+    embed_subs: bool = False  # 将字幕嵌入视频
+    concurrent_fragments: int = 4  # 分片并发；0 表示不设
+    download_sections: str = ""  # 片段下载，如 *10:15-15:35
+    sponsorblock_remove: str = ""  # SponsorBlock 类别，如 sponsor,intro
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,7 @@ class TaskSnapshot:
     eta: str
     file_path: str
     error_message: str
+    error_code: str
     created_at: str
     started_at: Optional[str]
     completed_at: Optional[str]
@@ -84,6 +94,7 @@ class TaskSnapshot:
     audio_only: bool = False
     postprocessing: str = "none"
     priority: int = 0
+    queue_order: int = 0
 
 
 @dataclass
@@ -100,7 +111,9 @@ class DownloadTask:
     eta: str = "暂无"  # 预计剩余时间
     file_path: str = ""  # 下载完成后的文件路径
     error_message: str = ""  # 错误信息
+    error_code: str = ""  # 结构化失败码（见 error_codes）
     priority: int = 0  # 队列优先级，大的先下载
+    queue_order: int = 0  # 队列顺序，小的先调度
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -124,6 +137,7 @@ class DownloadTask:
             'file_path': self.file_path,
             'file_size': self.video_info.file_size,
             'error_message': self.error_message,
+            'error_code': self.error_code,
             'created_at': self.created_at.isoformat(),
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
@@ -144,6 +158,7 @@ class DownloadTask:
             eta=self.eta,
             file_path=self.file_path,
             error_message=self.error_message,
+            error_code=self.error_code,
             created_at=self.created_at.isoformat(),
             started_at=self.started_at.isoformat() if self.started_at else None,
             completed_at=self.completed_at.isoformat() if self.completed_at else None,
@@ -153,4 +168,5 @@ class DownloadTask:
             audio_only=self.options.audio_only,
             postprocessing=self.options.postprocessing,
             priority=self.priority,
+            queue_order=self.queue_order,
         )

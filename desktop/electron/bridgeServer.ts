@@ -15,6 +15,9 @@ export type BridgeEnqueueItem = {
   url: string;
   title?: string;
   headers?: Record<string, string>;
+  quality?: string;
+  audio_only?: boolean;
+  download_subtitles?: boolean;
 };
 
 export type BridgeHandlers = {

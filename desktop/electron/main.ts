@@ -25,8 +25,9 @@ import {
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
 import {
   PROTOCOL_SCHEME,
-  extractUrlsFromArgv,
-  parseDeepLinkCandidate,
+  extractAddsFromArgv,
+  parseDeepLinkAdd,
+  type DeepLinkAddPayload,
 } from "./deepLink";
 import {
   decideBridgeEnqueue,
@@ -47,6 +48,11 @@ import {
   saveWindowState,
 } from "./windowState";
 import { checkForAppUpdates } from "./appUpdater";
+import {
+  buildExtractEnqueueItems,
+  getExtractSession,
+  openExtractWindow,
+} from "./extractWindow";
 
 function installThumbnailReferrerFix(): void {
   session.defaultSession.webRequest.onBeforeSendHeaders(
@@ -73,7 +79,7 @@ const pendingEnqueueItems: BridgeEnqueueItem[] = [];
 
 const taskTracker = new TaskTracker();
 const clipboardWatcher = new ClipboardWatcher((urls) => {
-  enqueueFromExternal(urls);
+  enqueueFromExternal(urls.map((url) => ({ url })));
 });
 
 const tray = new TrayController({
@@ -85,7 +91,7 @@ const tray = new TrayController({
   },
   onAddFromClipboard: () => {
     const urls = extractUrlsFromText(clipboard.readText());
-    if (urls.length > 0) enqueueFromExternal(urls);
+    if (urls.length > 0) enqueueFromExternal(urls.map((url) => ({ url })));
   },
   onPauseAll: () => void sidecar?.request("download.pauseAll", {}),
   onResumeAll: () => void sidecar?.request("download.resumeAll", {}),
@@ -128,6 +134,9 @@ function dedupeItems(items: BridgeEnqueueItem[]): BridgeEnqueueItem[] {
       url,
       ...(item.title ? { title: item.title } : {}),
       ...(item.headers ? { headers: item.headers } : {}),
+      ...(item.quality ? { quality: item.quality } : {}),
+      ...(item.audio_only ? { audio_only: item.audio_only } : {}),
+      ...(item.download_subtitles ? { download_subtitles: item.download_subtitles } : {}),
     });
   }
   return unique;
@@ -152,16 +161,25 @@ function markSidecarReady(ready: boolean): void {
   }
 }
 
-function enqueueFromExternal(urls: string[]): void {
-  const items = dedupeItems(urls.map((url) => ({ url })));
-  if (items.length === 0) return;
+function payloadToItem(payload: DeepLinkAddPayload): BridgeEnqueueItem {
+  return {
+    url: payload.url,
+    ...(payload.quality ? { quality: payload.quality } : {}),
+    ...(payload.audioOnly ? { audio_only: true } : {}),
+    ...(payload.downloadSubtitles ? { download_subtitles: true } : {}),
+  };
+}
+
+function enqueueFromExternal(items: BridgeEnqueueItem[]): void {
+  const unique = dedupeItems(items);
+  if (unique.length === 0) return;
 
   if (!sidecarReady || !sidecar) {
-    queuePendingItems(items);
+    queuePendingItems(unique);
     return;
   }
 
-  void flushEnqueueItems(items);
+  void flushEnqueueItems(unique);
 }
 
 async function flushEnqueueItems(
@@ -179,6 +197,9 @@ async function flushEnqueueItems(
         url: item.url,
         title: item.title || undefined,
         headers: item.headers || undefined,
+        quality: item.quality || undefined,
+        audio_only: item.audio_only || undefined,
+        download_subtitles: item.download_subtitles || undefined,
       })),
     });
     mainWindow?.webContents.send("app:navigate", "queue");
@@ -253,13 +274,13 @@ function stopBridge(): void {
 }
 
 function handleDeepLinkRaw(raw: string): void {
-  const url = parseDeepLinkCandidate(raw);
-  if (url) enqueueFromExternal([url]);
+  const payload = parseDeepLinkAdd(raw);
+  if (payload) enqueueFromExternal([payloadToItem(payload)]);
 }
 
 function handleArgv(argv: readonly string[]): void {
-  const urls = extractUrlsFromArgv(argv);
-  if (urls.length > 0) enqueueFromExternal(urls);
+  const adds = extractAddsFromArgv(argv);
+  if (adds.length > 0) enqueueFromExternal(adds.map(payloadToItem));
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -287,7 +308,7 @@ app.on("open-file", (event, filePath) => {
       const url = parseWeblocUrl(content);
       if (url) {
         focusMainWindow();
-        enqueueFromExternal([url]);
+        enqueueFromExternal([{ url }]);
       }
     } else {
       process.stderr.write(`open-file 收到未支持的文件: ${filePath}\n`);
@@ -603,6 +624,56 @@ function registerIpc(): void {
   ipcMain.handle("app:checkUpdate", async () => {
     return checkForAppUpdates(app.getVersion());
   });
+
+  ipcMain.handle("app:openExtractWindow", async (_evt, url: string) => {
+    openExtractWindow(String(url || ""));
+  });
+
+  ipcMain.handle(
+    "app:showTaskContextMenu",
+    async (
+      evt,
+      template: Array<{ id: string; label: string; enabled?: boolean; type?: string }>,
+    ) => {
+      const win = BrowserWindow.fromWebContents(evt.sender);
+      return new Promise<string | null>((resolve) => {
+        let settled = false;
+        const finish = (id: string | null) => {
+          if (settled) return;
+          settled = true;
+          resolve(id);
+        };
+        const built = (template || []).map((item) => {
+          if (item.type === "separator") {
+            return { type: "separator" as const };
+          }
+          return {
+            label: item.label,
+            enabled: item.enabled !== false,
+            click: () => finish(item.id),
+          };
+        });
+        const menu = Menu.buildFromTemplate(built);
+        menu.popup({
+          window: win ?? undefined,
+          callback: () => finish(null),
+        });
+      });
+    },
+  );
+
+  ipcMain.handle(
+    "extract:enqueue",
+    async (_evt, payload: { items?: Array<{ url: string; title?: string }> }) => {
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      if (items.length === 0) {
+        return { ok: false, error: "未选择媒体", count: 0 };
+      }
+      const ses = getExtractSession();
+      const bridgeItems = await buildExtractEnqueueItems(ses, items);
+      return flushEnqueueItems(bridgeItems);
+    },
+  );
 }
 
 app.whenReady().then(async () => {

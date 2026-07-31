@@ -1,6 +1,7 @@
 """Cookie 头 → Netscape cookiefile（供 yt-dlp cookiejar / Instagram 登录态）。"""
 
 from src.core.ytdlp_cookies import (
+    apply_cookie_sources,
     cookie_header_to_netscape,
     cookiefile_domain_for_url,
     materialize_cookiefile,
@@ -33,3 +34,19 @@ def test_materialize_cookiefile_writes_readable_file(tmp_path, monkeypatch):
     content = open(path, encoding="utf-8").read()
     assert "sessionid" in content
     assert "s1" in content
+
+
+def test_apply_cookie_sources_sets_browser_and_file(tmp_path):
+    cookie_path = tmp_path / "cookies.txt"
+    cookie_path.write_text("# Netscape\n", encoding="utf-8")
+    opts: dict = {}
+    apply_cookie_sources(opts, cookies_from_browser="chrome", cookiefile=str(cookie_path))
+    assert opts["cookiesfrombrowser"] == ("chrome",)
+    assert opts["cookiefile"] == str(cookie_path)
+
+
+def test_apply_cookie_sources_does_not_override_existing():
+    opts = {"cookiesfrombrowser": ("firefox",), "cookiefile": "/existing.txt"}
+    apply_cookie_sources(opts, cookies_from_browser="chrome", cookiefile="/new.txt")
+    assert opts["cookiesfrombrowser"] == ("firefox",)
+    assert opts["cookiefile"] == "/existing.txt"

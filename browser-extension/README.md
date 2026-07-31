@@ -2,6 +2,8 @@
 
 识别当前页面中的多媒体（DOM + 网络嗅探），勾选后发送到本机 **视频下载器**（Electron）。优先走本机 HTTP 桥 `127.0.0.1:17888`（可携带 Referer/Cookie），失败再回退 `videodl://`。
 
+纯嗅探逻辑在 `sniff-core.js`（无 Chrome API），桌面端 `desktop/electron/mediaSniff.ts` 与之对齐，便于复用清单解析与 URL 分类。
+
 ## 必做：改完代码后重新加载
 
 1. 确认 **Electron 下载器正在运行**（桥才会监听）
@@ -57,9 +59,27 @@ cd desktop && VIDEODL_PYTHON="$(pwd)/../venv/bin/python" npm run dev
 
 ## 手动安装（持久）
 
+### Google Chrome
+
 1. `chrome://extensions` → 开发者模式
 2. 加载已解压 → 选本目录 `browser-extension/`
 3. 固定工具栏图标
+
+### Microsoft Edge（Chromium / MV3）
+
+1. 打开 `edge://extensions`
+2. 开启 **开发人员模式**
+3. **加载解压缩的扩展** → 选择本目录 `browser-extension/`
+4. 固定扩展图标；用法与 Chrome 相同（HTTP 桥 + `videodl://` 回退）
+
+### Mozilla Firefox（MV3 临时加载）
+
+Firefox 对 Manifest V3 的支持因版本而异；开发调试可用临时加载：
+
+1. 打开 `about:debugging#/runtime/this-firefox`
+2. **临时载入附加组件…** → 选择本目录下的 `manifest.json`
+3. 重启浏览器后需重新加载（临时附加组件不持久）
+4. 若网络嗅探或 `contextMenus` 权限异常，请优先使用 Chrome/Edge；Firefox 正式上架待后续适配
 
 ## 说明
 

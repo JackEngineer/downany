@@ -81,6 +81,21 @@ def extract_cookie_header(http_headers: Optional[Mapping[str, Any]]) -> str:
     return ""
 
 
+def apply_cookie_sources(
+    ydl_opts: Dict[str, Any],
+    cookies_from_browser: str = "",
+    cookiefile: str = "",
+) -> None:
+    """把 cookiesfrombrowser / cookiefile 写入 yt-dlp 选项（不覆盖已有值）。"""
+    browser = (cookies_from_browser or "").strip()
+    if browser and not ydl_opts.get("cookiesfrombrowser"):
+        ydl_opts["cookiesfrombrowser"] = (browser,)
+
+    path = (cookiefile or "").strip()
+    if path and os.path.isfile(path) and not ydl_opts.get("cookiefile"):
+        ydl_opts["cookiefile"] = path
+
+
 def apply_cookiefile_from_headers(
     ydl_opts: Dict[str, Any],
     url: str,

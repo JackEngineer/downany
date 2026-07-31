@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MigrationResult } from "../electron/preload";
 import { ConnectionGate } from "./components/ConnectionGate";
+import { SitesPanel } from "./components/SitesPanel";
 import { ToastHost } from "./components/ToastHost";
 import { request } from "./lib/api";
+import { getLocale, setLocale, t, type Locale } from "./i18n";
 import type { AppSettings } from "./lib/types";
 import { useAppStore } from "./store/appStore";
 
@@ -110,6 +112,70 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
           onChange={(e) => update({ speed_limit: Number(e.target.value) })}
         />
       </label>
+
+      <label className="settings-row">
+        <span>从浏览器导入 Cookie</span>
+        <select
+          value={draft.cookies_from_browser || ""}
+          disabled={disabled}
+          onChange={(e) => update({ cookies_from_browser: e.target.value })}
+        >
+          <option value="">不导入</option>
+          <option value="chrome">Chrome</option>
+          <option value="safari">Safari</option>
+          <option value="firefox">Firefox</option>
+          <option value="edge">Edge</option>
+        </select>
+      </label>
+
+      <label className="settings-row">
+        <span>嵌入元数据</span>
+        <input
+          type="checkbox"
+          checked={draft.embed_metadata !== false}
+          disabled={disabled}
+          onChange={(e) => update({ embed_metadata: e.target.checked })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>HLS 分片并发</span>
+        <input
+          type="number"
+          min={0}
+          max={32}
+          value={draft.concurrent_fragments ?? 4}
+          disabled={disabled}
+          onChange={(e) => update({ concurrent_fragments: Number(e.target.value) })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>{t("settings.telemetry", getLocale())}</span>
+        <input
+          type="checkbox"
+          checked={Boolean(draft.telemetry_enabled)}
+          disabled={disabled}
+          onChange={(e) => update({ telemetry_enabled: e.target.checked })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>{t("settings.language", getLocale())}</span>
+        <select
+          value={getLocale()}
+          disabled={disabled}
+          onChange={(e) => {
+            setLocale(e.target.value as Locale);
+            window.dispatchEvent(new CustomEvent("videodl:locale"));
+          }}
+        >
+          <option value="zh-CN">简体中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+
+      <SitesPanel />
 
       <label className="settings-row">
         <span>剪贴板监控</span>

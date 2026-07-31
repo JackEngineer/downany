@@ -5,7 +5,8 @@ import json
 import subprocess
 import sys
 import threading
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from src.core.download_task import VideoInfo
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
@@ -35,16 +36,29 @@ class ParseFailed(Exception):
     """解析失败（无效链接、网络错误等）。"""
 
 
-def build_parse_command(url: str, proxy: Optional[str] = None) -> List[str]:
+@dataclass
+class ParseResult:
+    """解析结果：单视频元数据 + 可选播放列表条目摘要。"""
+    info: VideoInfo
+    entries: List[Dict[str, str]] = field(default_factory=list)
+
+
+def build_parse_command(
+    url: str,
+    proxy: Optional[str] = None,
+    *,
+    allow_playlist: bool = False,
+) -> List[str]:
     cmd = [
         sys.executable,
         "-m",
         "yt_dlp",
         "--dump-single-json",
-        "--no-playlist",
         "--no-warnings",
         "--no-color",
     ]
+    if not allow_playlist:
+        cmd.append("--no-playlist")
     if proxy:
         cmd += ["--proxy", proxy]
     cmd.append(url)
@@ -59,6 +73,8 @@ class ParseSession:
         url: str,
         proxy: Optional[str] = None,
         timeout: float = DEFAULT_PARSE_TIMEOUT,
+        *,
+        allow_playlist: bool = False,
     ):
         cleaned = (url or "").strip()
         if is_twitter_url(cleaned):
@@ -68,6 +84,7 @@ class ParseSession:
         self.url = cleaned
         self.proxy = proxy
         self.timeout = timeout
+        self.allow_playlist = allow_playlist
         self._lock = threading.Lock()
         self._process: Optional[subprocess.Popen] = None
         self._cancelled = False
@@ -78,7 +95,7 @@ class ParseSession:
             if self._process is not None and self._process.poll() is None:
                 self._process.terminate()
 
-    def run(self) -> VideoInfo:
+    def run(self) -> ParseResult:
         """阻塞执行解析。由调用方决定放在哪个线程。"""
         try:
             return self._run_ytdlp()
@@ -94,7 +111,7 @@ class ParseSession:
             try:
                 info, _direct = resolve_twitter_media(self.url, proxy=self.proxy)
                 logger.info("Twitter 解析改用 FxTwitter 回退: %s", self.url)
-                return info
+                return ParseResult(info=info)
             except Exception as fallback_exc:
                 logger.warning(
                     "Twitter FxTwitter 回退失败: %s (%s)",
@@ -112,12 +129,16 @@ class ParseSession:
             return "该推文没有可下载视频（可能已删除、受限，或需登录可见）"
         return text
 
-    def _run_ytdlp(self) -> VideoInfo:
+    def _run_ytdlp(self) -> ParseResult:
         with self._lock:
             if self._cancelled:
                 raise ParseCancelled(self.url)
             self._process = subprocess.Popen(
-                build_parse_command(self.url, self.proxy),
+                build_parse_command(
+                    self.url,
+                    self.proxy,
+                    allow_playlist=self.allow_playlist,
+                ),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -143,7 +164,24 @@ class ParseSession:
             raise ParseFailed(f"解析输出无法读取: {exc}") from exc
         if not isinstance(info, dict):
             raise ParseFailed("解析结果为空")
-        return self._to_video_info(info)
+        return self._to_parse_result(info)
+
+    def _summarize_entries(self, info: dict) -> List[Dict[str, str]]:
+        entries: List[Dict[str, str]] = []
+        for entry in info.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            entry_url = (
+                str(entry.get("url") or entry.get("webpage_url") or "").strip()
+            )
+            entries.append(
+                {
+                    "id": str(entry.get("id") or ""),
+                    "title": str(entry.get("title") or ""),
+                    "url": entry_url,
+                }
+            )
+        return entries
 
     def _to_video_info(self, info: dict) -> VideoInfo:
         duration = info.get("duration") or 0
@@ -157,3 +195,7 @@ class ParseSession:
             file_size=info.get("filesize", 0) or info.get("filesize_approx", 0) or 0,
             formats=summarize_formats(info.get("formats")),
         )
+
+    def _to_parse_result(self, info: dict) -> ParseResult:
+        entries = self._summarize_entries(info) if self.allow_playlist else []
+        return ParseResult(info=self._to_video_info(info), entries=entries)

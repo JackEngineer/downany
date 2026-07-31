@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>浏览器抓取</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #1c1c1e;
+        color: #f5f5f7;
+      }
+      .shell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #2c2c2e;
+        border-bottom: 1px solid #3a3a3c;
+        align-items: center;
+      }
+      .toolbar input {
+        flex: 1;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #48484a;
+        background: #1c1c1e;
+        color: inherit;
+      }
+      .toolbar button {
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #48484a;
+        background: #3a3a3c;
+        color: inherit;
+        cursor: pointer;
+      }
+      .toolbar button.primary {
+        background: #0a84ff;
+        border-color: #0a84ff;
+      }
+      .toolbar button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .browser {
+        flex: 1 1 55%;
+        min-height: 200px;
+        border-bottom: 1px solid #3a3a3c;
+      }
+      webview.browser {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .panel {
+        flex: 1 1 45%;
+        display: flex;
+        flex-direction: column;
+        min-height: 160px;
+      }
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 10px;
+        background: #2c2c2e;
+        border-bottom: 1px solid #3a3a3c;
+        font-size: 13px;
+      }
+      .list {
+        flex: 1;
+        overflow: auto;
+        margin: 0;
+        padding: 8px;
+        list-style: none;
+      }
+      .list li {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        padding: 6px 4px;
+        border-bottom: 1px solid #2c2c2e;
+        font-size: 12px;
+      }
+      .list li label {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        flex: 1;
+        cursor: pointer;
+      }
+      .type {
+        flex-shrink: 0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #3a3a3c;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      .url {
+        word-break: break-all;
+        color: #aeaeb2;
+      }
+      .empty {
+        padding: 16px;
+        color: #8e8e93;
+        font-size: 13px;
+      }
+      .status {
+        padding: 4px 10px;
+        font-size: 12px;
+        color: #8e8e93;
+        min-height: 22px;
+      }
+      .status.error {
+        color: #ff453a;
+      }
+      .status.ok {
+        color: #30d158;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="toolbar">
+        <input id="urlInput" type="url" placeholder="输入页面 URL…" />
+        <button id="goBtn" type="button">前往</button>
+        <button id="enqueueBtn" type="button" class="primary" disabled>加入下载</button>
+      </div>
+      <webview
+        id="browser"
+        class="browser"
+        partition="persist:extract"
+        allowpopups
+        webpreferences="contextIsolation=yes"
+      ></webview>
+      <div class="panel">
+        <div class="panel-header">
+          <span>检测到的媒体</span>
+          <label><input id="selectAll" type="checkbox" /> 全选</label>
+        </div>
+        <ul id="mediaList" class="list"></ul>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+    <script>
+      const urlInput = document.getElementById("urlInput");
+      const goBtn = document.getElementById("goBtn");
+      const enqueueBtn = document.getElementById("enqueueBtn");
+      const selectAll = document.getElementById("selectAll");
+      const mediaList = document.getElementById("mediaList");
+      const statusEl = document.getElementById("status");
+      const webview = document.getElementById("browser");
+
+      /** @type {import('./extractWindow').ExtractMediaItem[]} */
+      let items = [];
+      /** @type {Set<string>} */
+      let selected = new Set();
+
+      function setStatus(text, kind) {
+        statusEl.textContent = text || "";
+        statusEl.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function navigate(url) {
+        const trimmed = (url || "").trim();
+        if (!trimmed) return;
+        urlInput.value = trimmed;
+        webview.src = trimmed;
+        setStatus("正在加载页面…");
+      }
+
+      function renderList() {
+        mediaList.innerHTML = "";
+        if (items.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "浏览页面后，检测到的 m3u8 / mp4 等链接会显示在这里。";
+          mediaList.appendChild(empty);
+          enqueueBtn.disabled = true;
+          selectAll.checked = false;
+          selectAll.indeterminate = false;
+          return;
+        }
+
+        for (const item of items) {
+          const li = document.createElement("li");
+          const label = document.createElement("label");
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = selected.has(item.url);
+          cb.addEventListener("change", () => {
+            if (cb.checked) selected.add(item.url);
+            else selected.delete(item.url);
+            updateEnqueueState();
+          });
+          const type = document.createElement("span");
+          type.className = "type";
+          type.textContent = item.type || "?";
+          const url = document.createElement("span");
+          url.className = "url";
+          url.textContent = item.url;
+          label.append(cb, type, url);
+          li.appendChild(label);
+          mediaList.appendChild(li);
+        }
+
+        const allSelected = items.length > 0 && selected.size === items.length;
+        selectAll.checked = allSelected;
+        selectAll.indeterminate = selected.size > 0 && !allSelected;
+        updateEnqueueState();
+      }
+
+      function updateEnqueueState() {
+        enqueueBtn.disabled = selected.size === 0;
+      }
+
+      selectAll.addEventListener("change", () => {
+        if (selectAll.checked) {
+          selected = new Set(items.map((i) => i.url));
+        } else {
+          selected.clear();
+        }
+        renderList();
+      });
+
+      goBtn.addEventListener("click", () => navigate(urlInput.value));
+      urlInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") navigate(urlInput.value);
+      });
+
+      enqueueBtn.addEventListener("click", async () => {
+        const chosen = items.filter((i) => selected.has(i.url));
+        if (chosen.length === 0) return;
+        enqueueBtn.disabled = true;
+        setStatus("正在加入下载…");
+        try {
+          const result = await window.extractApi.enqueue(
+            chosen.map((i) => ({ url: i.url })),
+          );
+          if (result.ok) {
+            setStatus(`已加入 ${result.count || chosen.length} 个任务`, "ok");
+          } else {
+            setStatus(result.error || "加入失败", "error");
+          }
+        } catch (err) {
+          setStatus(String(err), "error");
+        } finally {
+          updateEnqueueState();
+        }
+      });
+
+      window.extractApi.onList((next) => {
+        items = next;
+        const urls = new Set(items.map((i) => i.url));
+        selected = new Set([...selected].filter((u) => urls.has(u)));
+        renderList();
+        if (items.length > 0) setStatus(`检测到 ${items.length} 个候选媒体`);
+      });
+
+      window.extractApi.onNavigate((url) => navigate(url));
+
+      webview.addEventListener("did-navigate", (e) => {
+        urlInput.value = e.url;
+      });
+
+      const initial = window.extractApi.getInitialUrl();
+      if (initial) navigate(initial);
+      else renderList();
+    </script>
+  </body>
+</html>

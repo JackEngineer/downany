@@ -19,7 +19,9 @@ from src.core.download_task import (
     TaskStatus,
     VideoInfo,
 )
+from src.core.error_codes import classify_download_error
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
+from src.core.ytdlp_cookies import apply_cookie_sources
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
@@ -149,6 +151,8 @@ class DownloadManager:
     def add_task(self, task: DownloadTask):
         """添加任务到队列"""
         with self._lock:
+            max_order = max((t.queue_order for t in self.tasks.values()), default=-1)
+            task.queue_order = max_order + 1
             self.tasks[task.id] = task
         self._persist(task)
         self.events.emit("task_added", {"task_id": task.id})
@@ -177,6 +181,7 @@ class DownloadManager:
                 return
             task.status = TaskStatus.PENDING
             task.error_message = ""
+            task.error_code = ""
         self._persist(task)
         logger.info(f"恢复任务: {task.video_info.title}")
 
@@ -203,6 +208,7 @@ class DownloadManager:
                 return
             task.status = TaskStatus.PENDING
             task.error_message = ""
+            task.error_code = ""
             task.progress = 0.0
             task.downloaded_bytes = 0
             task.total_bytes = 0
@@ -289,6 +295,30 @@ class DownloadManager:
         self.events.emit("task_updated", {"task_id": task.id})
         return task
 
+    def reorder_tasks(self, ordered_ids: List[str]) -> bool:
+        """按 ordered_ids 重写 queue_order；未列出的任务排在末尾。"""
+        with self._lock:
+            seen: Set[str] = set()
+            for idx, task_id in enumerate(ordered_ids):
+                task = self.tasks.get(task_id)
+                if not task:
+                    continue
+                task.queue_order = idx
+                seen.add(task_id)
+            next_order = len(seen)
+            for task in sorted(
+                self.tasks.values(), key=lambda t: (t.queue_order, t.created_at)
+            ):
+                if task.id in seen:
+                    continue
+                task.queue_order = next_order
+                next_order += 1
+            tasks_to_persist = list(self.tasks.values())
+        for task in tasks_to_persist:
+            self._persist(task)
+        self.events.emit("tasks_reordered", {})
+        return True
+
     def _rename_output_file(self, task: DownloadTask, new_title: str) -> str:
         """已完成任务改名：同步重命名磁盘文件（保留扩展名）。"""
         old_path = task.file_path
@@ -330,7 +360,7 @@ class DownloadManager:
             logger.error(f"后处理脚本执行失败: {exc}")
 
     def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
-        """锁内调用：按优先级（高优先）与创建时间（早优先）挑下一个等待任务。"""
+        """锁内调用：queue_order 升序，再 priority 降序，再创建时间早优先。"""
         candidates = [
             task
             for task in self.tasks.values()
@@ -338,7 +368,7 @@ class DownloadManager:
         ]
         if not candidates:
             return None
-        candidates.sort(key=lambda t: (-t.priority, t.created_at))
+        candidates.sort(key=lambda t: (t.queue_order, -t.priority, t.created_at))
         return candidates[0]
 
     def _scheduler_loop(self):
@@ -472,16 +502,17 @@ class DownloadManager:
             opts: Dict = {}
             options = task.options
             extract_audio = options.audio_only or options.postprocessing == "mp3"
+            postprocessors: List[Dict] = []
 
             if extract_audio:
                 opts["format"] = "bestaudio/best"
-                opts["postprocessors"] = [
+                postprocessors.append(
                     {
                         "key": "FFmpegExtractAudio",
                         "preferredcodec": "mp3",
                         "preferredquality": "192",
                     }
-                ]
+                )
             else:
                 format_selector = build_format_selector(
                     options.quality, options.format_id
@@ -496,9 +527,55 @@ class DownloadManager:
                     opts["format"] = "bestvideo+bestaudio/best"
 
                 if options.postprocessing == "mp4":
-                    opts["postprocessors"] = [
+                    postprocessors.append(
                         {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}
-                    ]
+                    )
+
+            if options.embed_metadata:
+                opts["writethumbnail"] = True
+                opts["embedthumbnail"] = True
+                opts["embedmetadata"] = True
+                opts["embedchapters"] = True
+
+            subtitle_langs = [
+                lang.strip()
+                for lang in (options.subtitle_langs or "").split(",")
+                if lang.strip()
+            ]
+            if subtitle_langs:
+                opts["writesubtitles"] = True
+                opts["writeautomaticsub"] = True
+                opts["subtitleslangs"] = subtitle_langs
+            elif options.download_subtitles:
+                opts["writesubtitles"] = True
+                opts["writeautomaticsub"] = True
+
+            if options.embed_subs:
+                opts["embedsubtitles"] = subtitle_langs if subtitle_langs else True
+
+            if options.concurrent_fragments and options.concurrent_fragments > 0:
+                opts["concurrent_fragment_downloads"] = options.concurrent_fragments
+
+            sections = (options.download_sections or "").strip()
+            if sections:
+                opts["download_sections"] = sections
+
+            sponsor_parts = [
+                part.strip()
+                for part in (options.sponsorblock_remove or "").split(",")
+                if part.strip()
+            ]
+            if sponsor_parts:
+                opts["sponsorblock_remove"] = sponsor_parts
+
+            apply_cookie_sources(
+                opts,
+                options.cookies_from_browser,
+                options.cookiefile,
+            )
+
+            if postprocessors:
+                opts["postprocessors"] = postprocessors
 
             if options.speed_limit and options.speed_limit > 0:
                 opts["ratelimit"] = options.speed_limit
@@ -506,10 +583,6 @@ class DownloadManager:
             proxy = (options.proxy or "").strip()
             if proxy:
                 opts["proxy"] = proxy
-
-            if options.download_subtitles:
-                opts["writesubtitles"] = True
-                opts["writeautomaticsub"] = True
 
             if options.http_headers:
                 opts["http_headers"] = {
@@ -574,9 +647,11 @@ class DownloadManager:
                     return
                 task.status = TaskStatus.FAILED
                 task.error_message = str(e)
+                task.error_code = classify_download_error(e)
                 self._save_to_history(task)
             self._persist(task)
             self.events.emit("task_failed", {"task_id": task.id, "error": str(e)})
+            self._maybe_report_failure(task)
             logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
         finally:
             requeue = False
@@ -587,10 +662,24 @@ class DownloadManager:
                     if task.status == TaskStatus.PAUSED:
                         task.status = TaskStatus.PENDING
                         task.error_message = ""
+                        task.error_code = ""
                         requeue = True
             if requeue:
                 self._persist(task)
                 logger.info(f"暂停任务线程退出后重新入队: {task.video_info.title}")
+
+    def _maybe_report_failure(self, task: DownloadTask) -> None:
+        """opt-in 本地失败统计（不上报网络）。"""
+        try:
+            from src.sidecar.telemetry import maybe_report_failure
+
+            maybe_report_failure(
+                self.config,
+                task.error_code,
+                task.video_info.platform.value,
+            )
+        except Exception as exc:
+            logger.debug("telemetry skipped: %s", exc)
 
     def _backfill_metadata_after_download(
         self,

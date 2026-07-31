@@ -33,6 +33,7 @@ class Method(str, Enum):
     DOWNLOAD_REMOVE = "download.remove"
     DOWNLOAD_CLEAR_FINISHED = "download.clearFinished"
     DOWNLOAD_UPDATE_TASK = "download.updateTask"
+    DOWNLOAD_REORDER = "download.reorder"
     SEARCH_QUERY = "search.query"
     HISTORY_LIST = "history.list"
     HISTORY_DELETE = "history.delete"
@@ -40,6 +41,7 @@ class Method(str, Enum):
     SETTINGS_GET = "settings.get"
     SETTINGS_UPDATE = "settings.update"
     UPDATER_CHECK_YTDLP = "updater.checkYtDlp"
+    UPDATER_CHECK_HEALTH = "updater.checkHealth"
     UPDATER_UPDATE_YTDLP = "updater.updateYtDlp"
 
 

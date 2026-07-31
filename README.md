@@ -11,6 +11,8 @@ macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desk
 - **设置**：下载目录、并发、限速、代理、画质、字幕、主题、yt-dlp 更新
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
 - **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
+- **浏览器抓取窗口**：登录墙 / 纯 HLS 页可用内置浏览器嗅探入队
+- **CLI**：`./scripts/videodl add <url> [--audio] [--quality 1080p] [--detach]`
 
 > 站内搜索 / 应用内预览仍在冻结的 PyQt 线（`legacy/`）；Electron 主线聚焦下载命令中心，路线见 [docs/roadmap.md](docs/roadmap.md)。
 
