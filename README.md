@@ -1,6 +1,6 @@
 # 视频下载器（VideoDownloader）
 
-macOS 视频下载应用。当前主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）；另保留 PyQt6 与 SwiftUI 并行实现。
+macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。PyQt6 / SwiftUI 已冻结于 [`legacy/`](legacy/)，不再新增功能。
 
 ## 功能
 
@@ -12,7 +12,7 @@ macOS 视频下载应用。当前主线为 **Electron + Python Sidecar**（`desk
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
 - **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
 
-> 站内搜索 / 预览等能力仍在 PyQt 线；Electron 首版聚焦下载命令中心。
+> 站内搜索 / 应用内预览仍在冻结的 PyQt 线（`legacy/`）；Electron 主线聚焦下载命令中心，路线见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 快速开始（Electron 主线）
 
@@ -54,18 +54,15 @@ python -m src.sidecar
 
 会打开已预装扩展的独立 Chrome 窗口，或重启主 Chrome 加载扩展；点工具栏图标可查看嗅探到的媒体并勾选下载。细节见 [browser-extension/README.md](browser-extension/README.md)。
 
-## PyQt 线（仍可运行）
+## 冻结的旁线（legacy）
+
+PyQt / Swift 代码在 [`legacy/`](legacy/)。日常请用 Electron 主线。若需启动旧 PyQt：
 
 ```bash
-./scripts/install_env.sh
-source venv/bin/activate
-python src/main.py
-# 或 npm start → scripts/start_app.sh
+./scripts/start_app.sh --pyqt
+# 或：python legacy/main.py
 ```
 
-配置仍为旧路径：`~/Library/Preferences/com.Trae.Downloader.plist`  
-历史：`~/.trae_downloader/history.db`  
-（Electron 首次启动可幂等迁移到 VideoDownloader 目录。）
 
 ## 架构
 
@@ -74,28 +71,19 @@ desktop/           # Electron Main / Preload / React 命令中心
 src/sidecar/       # JSON Lines Sidecar（无 Qt）
 src/core/          # 下载调度、yt-dlp、解析、平台识别
 src/data/          # SQLite、JsonConfig / 旧 QSettings
-src/ui/            # PyQt 主窗口（并行）
-swift-app/         # SwiftUI 并行版
+legacy/            # 已冻结：PyQt UI、SwiftUI、旧 UI 测试
 packaging/         # Sidecar PyInstaller 规格
 ```
 
-## Swift 原生版
-
-见 [swift-app/README.md](swift-app/README.md)。
-
-```bash
-cd swift-app && swift test
-./scripts/package_swift_app.sh
-```
+分支约定见 [docs/BRANCHING.md](docs/BRANCHING.md)、路线图 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 测试
 
 ```bash
 source venv/bin/activate
 pip install -r requirements-dev.txt
-pytest tests/sidecar -q
+pytest tests/core tests/data tests/sidecar -q
 cd desktop && npm test && npm run build
-# PyQt UI（需离屏）：QT_QPA_PLATFORM=offscreen pytest tests/ui -q
 ```
 
 设计与阶段计划见 `docs/superpowers/specs/`、`docs/superpowers/plans/`。

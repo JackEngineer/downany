@@ -4,9 +4,8 @@
 
 macOS 视频下载器（产品名 **视频下载器** / `VideoDownloader`）：
 
-- **Electron 主线**：`desktop/` + `src/sidecar/`（JSON Lines）+ yt-dlp
-- **Python/PyQt 并行**：`src/ui/` + `python src/main.py`
-- **Swift 并行**：`swift-app/`（SwiftUI + Process 调用 yt-dlp）
+- **唯一产品主线**：`desktop/` + `src/sidecar/`（JSON Lines）+ yt-dlp
+- **已冻结**：`legacy/`（原 PyQt `src/ui`、SwiftUI `swift-app`、`tests/ui`）——勿新增功能
 
 ## 开发命令
 
@@ -20,12 +19,6 @@ cd desktop && npm install && npm run dev
 
 # Sidecar 单独跑
 python -m src.sidecar
-
-# PyQt
-python src/main.py
-
-cd swift-app && swift test
-./scripts/package_swift_app.sh
 
 # 打包
 ./scripts/build_macos_dmg.sh
@@ -46,7 +39,8 @@ cd swift-app && swift test
 - UI 文案中文，标识符英文；发布产物无 Trae 标识
 - 默认 `noplaylist: True`
 - 暂停为中断下载 + 恢复入队（依赖 yt-dlp 续传），非流式 pause API
-- 不要内联 import；Swift / TS 对 enum/union 做 exhaustive switch
+- 不要内联 import；TS 对 enum/union 做 exhaustive switch
 - 提交时勿夹带无关 WIP
+- 分支：`feat/m{N}-{slug}` / `chore/{slug}`；见 [docs/BRANCHING.md](docs/BRANCHING.md)
 
-更完整说明见 [README.md](README.md)。
+更完整说明见 [README.md](README.md)、[docs/roadmap.md](docs/roadmap.md)。

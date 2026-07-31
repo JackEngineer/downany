@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.download_task import DownloadTask, Platform, VideoInfo
+from src.core.preview_url import normalize_video_url
 from src.core.search_engine import SearchEngine
 from src.data.config_manager import ConfigManager
 from src.data.database import HistoryDB
@@ -796,18 +797,7 @@ class SearchTab(QWidget):
 
     def _normalize_video_url(self, raw_value: str) -> str:
         """标准化视频链接，支持 ID 到可访问 URL 的转换。"""
-
-        value = (raw_value or "").strip()
-        if value.startswith(("http://", "https://")):
-            return value
-
-        if re.fullmatch(r"[0-9A-Za-z_-]{11}", value):
-            return f"https://www.youtube.com/watch?v={value}"
-
-        if re.fullmatch(r"BV[0-9A-Za-z]{10}", value, re.IGNORECASE):
-            return f"https://www.bilibili.com/video/{value}"
-
-        return value
+        return normalize_video_url(raw_value)
 
     def _platform_label(self, platform: Platform) -> str:
         platform_value = platform.value if platform else "unknown"

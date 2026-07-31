@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGE_DIR="${ROOT_DIR}/swift-app"
+PACKAGE_DIR="${ROOT_DIR}/legacy/swift-app"
 CONFIGURATION="${CONFIGURATION:-release}"
 PRODUCT_NAME="${PRODUCT_NAME:-TraeDownloaderApp}"
 BUNDLE_NAME="${BUNDLE_NAME:-TraeDownloader}"

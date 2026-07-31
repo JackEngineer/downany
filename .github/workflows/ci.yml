@@ -17,17 +17,35 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-      - name: Run pytest
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: pytest -q
+      - name: Run pytest (mainline)
+        run: pytest tests/core tests/data tests/sidecar -q
 
-  swift-tests:
+  desktop:
     runs-on: macos-latest
     defaults:
       run:
-        working-directory: swift-app
+        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
-      - name: Run Swift tests
-        run: swift test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck and build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+
+  browser-extension:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Extension shared tests
+        working-directory: browser-extension
+        run: node shared.test.js
