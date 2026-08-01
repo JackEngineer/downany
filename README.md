@@ -77,7 +77,7 @@ pytest tests/core tests/data tests/sidecar -q
 cd desktop && npm test && npm run build
 ```
 
-设计与阶段计划见 `docs/superpowers/specs/`、`docs/superpowers/plans/`。
+产品路线见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 许可证
 

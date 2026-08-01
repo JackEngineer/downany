@@ -143,5 +143,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 
 ## 7. 相关文档
 
-- 架构主线：[`superpowers/specs/2026-07-19-electron-migration-design.md`](superpowers/specs/2026-07-19-electron-migration-design.md)
-- 历史技术债清单：[`系统问题检测报告.md`](系统问题检测报告.md)
+- 分支约定：[`BRANCHING.md`](BRANCHING.md)
+- 发布流程：[`RELEASE.md`](RELEASE.md)
+- 商业化备忘：[`COMMERCIAL.md`](COMMERCIAL.md)
+- yt-dlp 站点清单：[`yt-dlp-extractors.md`](yt-dlp-extractors.md)
