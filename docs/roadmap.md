@@ -42,11 +42,11 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 
 ### M0 — 收敛与地基
 
-**问题**：三条 UI 线并行（Electron 主线、PyQt、SwiftUI），而 `.github/workflows/ci.yml` 只跑 `pytest -q` 与 `swift test`——主线 `desktop/` 的 `npm test` / `npm run build` 完全未进 CI。测试成本花在不发布的实现上，要发布的那条裸奔。
+**问题**（历史）：旁线 UI 与主线争资源，CI 曾未覆盖 `desktop/`。现已收敛为 Electron + Sidecar 唯一主线。
 
 | # | 任务 | 落点 |
 |---|---|---|
-| 0.1 | 移除 PyQt / Swift 旁线，README / AGENTS.md 声明 Electron 主线唯一 | 已删除 `legacy/` |
+| 0.1 | 移除 PyQt / Swift 旁线，README / AGENTS.md 声明 Electron 主线唯一 | 已完成 |
 | 0.2 | CI 覆盖主线：`tsc --noEmit`、`npm test`、`npm run build`、扩展 `shared.test.js`；pytest 收窄到 `tests/core tests/data tests/sidecar` | `.github/workflows/ci.yml` |
 | 0.3 | 签名 + 公证走通，产出可分发 DMG | `scripts/notarize_macos.sh`、`desktop/electron-builder.yml` |
 | 0.4 | 应用自更新通道（electron-updater + 更新 feed），设置页可查看/触发 | `desktop/electron/`、`SettingsApp.tsx` |
