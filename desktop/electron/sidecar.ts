@@ -117,8 +117,13 @@ export class SidecarProcess extends EventEmitter {
     });
     this.proc = spawn(launch.command, launch.args, {
       cwd: launch.cwd,
-      env: launch.env,
+      env: {
+        ...launch.env,
+        PYTHONUNBUFFERED: "1",
+      },
       stdio: ["pipe", "pipe", "pipe"],
+      // 独立进程组，便于一次杀掉 PyInstaller 父子进程，避免孤儿占库
+      detached: process.platform !== "win32",
     });
 
     this.proc.stdout.setEncoding("utf8");
@@ -155,7 +160,8 @@ export class SidecarProcess extends EventEmitter {
 
   private waitForHello(): Promise<{ protocolVersion: number }> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("等待 Sidecar hello 超时")), 10000);
+      // onedir 通常 <2s；保留余量覆盖慢盘 / 首次签名校验
+      const timer = setTimeout(() => reject(new Error("等待 Sidecar hello 超时")), 90000);
       const onHello = (msg: Record<string, unknown>) => {
         clearTimeout(timer);
         this.off("raw-hello", onHello);
@@ -267,9 +273,23 @@ export class SidecarProcess extends EventEmitter {
   }
 
   private killProcess(): void {
-    if (this.proc) {
-      this.proc.kill("SIGTERM");
-      this.proc = null;
+    if (!this.proc) return;
+    const child = this.proc;
+    this.proc = null;
+    const pid = child.pid;
+    try {
+      if (pid && process.platform !== "win32") {
+        // 负 PID：杀掉整个进程组（含 PyInstaller 子进程）
+        process.kill(-pid, "SIGTERM");
+      } else {
+        child.kill("SIGTERM");
+      }
+    } catch {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
     }
   }
 

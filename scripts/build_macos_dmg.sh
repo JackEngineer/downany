@@ -15,10 +15,15 @@ if [[ "${BUILD_SIDECAR}" == "1" ]]; then
   "${ROOT}/scripts/build_sidecar.sh"
 fi
 
-if [[ ! -x "${DESKTOP}/resources/sidecar/VideoDownloaderSidecar" ]]; then
+SIDECAR_BIN="${DESKTOP}/resources/sidecar/VideoDownloaderSidecar/VideoDownloaderSidecar"
+if [[ ! -x "${SIDECAR_BIN}" ]]; then
+  SIDECAR_BIN="${DESKTOP}/resources/sidecar/VideoDownloaderSidecar"
+fi
+if [[ ! -x "${SIDECAR_BIN}" ]]; then
   echo "缺少 Sidecar 二进制，请先 scripts/build_sidecar.sh" >&2
   exit 1
 fi
+
 if [[ ! -x "${DESKTOP}/resources/bin/ffmpeg" ]]; then
   echo "缺少 ffmpeg，请先 scripts/fetch_release_binaries.sh" >&2
   exit 1

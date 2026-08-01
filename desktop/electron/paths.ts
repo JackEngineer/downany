@@ -29,8 +29,16 @@ export function bundledBinDir(fromDir: string): string {
 }
 
 export function bundledSidecarPath(fromDir: string): string {
-  return path.join(resourcesRoot(fromDir), "sidecar", "VideoDownloaderSidecar");
+  const root = path.join(resourcesRoot(fromDir), "sidecar");
+  // onedir（推荐）：sidecar/VideoDownloaderSidecar/VideoDownloaderSidecar
+  const onedir = path.join(root, "VideoDownloaderSidecar", "VideoDownloaderSidecar");
+  if (fs.existsSync(onedir)) {
+    return onedir;
+  }
+  // onefile 兼容：sidecar/VideoDownloaderSidecar
+  return path.join(root, "VideoDownloaderSidecar");
 }
+
 
 export interface SidecarLaunch {
   command: string;

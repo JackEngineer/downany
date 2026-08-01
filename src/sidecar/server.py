@@ -153,15 +153,24 @@ class SidecarServer:
         self._write_event(name, body)
 
     def run(self, stdin: TextIO, stdout: TextIO) -> int:
+        """完整握手 + 请求循环（测试与兼容入口）。"""
         self._stdout = stdout
         self._write_hello()
+        if not self._consume_peer_hello(stdin):
+            self._cleanup()
+            return 1
+        return self._serve_requests(stdin)
 
-        # Expect peer hello
+    def serve_after_handshake(self, stdin: TextIO, stdout: TextIO) -> int:
+        """握手已在外部完成（启动期提前 hello）时进入请求循环。"""
+        self._stdout = stdout
+        return self._serve_requests(stdin)
+
+    def _consume_peer_hello(self, stdin: TextIO) -> bool:
         line = stdin.readline()
         if not line:
             logger.error("未收到对方 hello，退出")
-            self._cleanup()
-            return 1
+            return False
         try:
             peer = decode_line(line)
         except ProtocolError as exc:
@@ -169,8 +178,7 @@ class SidecarServer:
                 "hello",
                 error=HandlerError(ErrorCode.INVALID_MESSAGE, str(exc)).to_dict(),
             )
-            self._cleanup()
-            return 1
+            return False
         if peer.get("type") != MessageType.HELLO.value:
             self._write_response(
                 "hello",
@@ -178,8 +186,7 @@ class SidecarServer:
                     ErrorCode.INVALID_MESSAGE, "期望 hello 消息"
                 ).to_dict(),
             )
-            self._cleanup()
-            return 1
+            return False
         if int(peer.get("protocolVersion", -1)) != PROTOCOL_VERSION:
             self._write_response(
                 "hello",
@@ -188,9 +195,10 @@ class SidecarServer:
                     f"协议版本不兼容: 对方 {peer.get('protocolVersion')} / 本地 {PROTOCOL_VERSION}",
                 ).to_dict(),
             )
-            self._cleanup()
-            return 1
+            return False
+        return True
 
+    def _serve_requests(self, stdin: TextIO) -> int:
         while True:
             line = stdin.readline()
             if not line:
@@ -241,10 +249,66 @@ class SidecarServer:
             logger.error("停止管理器失败: %s", exc)
 
 
+def _write_early_hello(stdout: TextIO) -> None:
+    """在重初始化之前写出 hello，避免 Electron 握手超时。"""
+    msg = {
+        "protocolVersion": PROTOCOL_VERSION,
+        "type": MessageType.HELLO.value,
+        "payload": {
+            "app": APP_NAME,
+            "appVersion": APP_VERSION,
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    stdout.write(encode_message(msg))
+    stdout.flush()
+
+
+def _consume_peer_hello_early(stdin: TextIO, stdout: TextIO) -> bool:
+    """启动期握手：不依赖已构造的 Server 实例。"""
+    line = stdin.readline()
+    if not line:
+        sys.stderr.write("未收到对方 hello，退出\n")
+        return False
+    try:
+        peer = decode_line(line)
+    except ProtocolError as exc:
+        err = HandlerError(ErrorCode.INVALID_MESSAGE, str(exc)).to_dict()
+        stdout.write(
+            encode_message(
+                {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "type": MessageType.RESPONSE.value,
+                    "correlationId": "hello",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "error": err,
+                }
+            )
+        )
+        stdout.flush()
+        return False
+    if peer.get("type") != MessageType.HELLO.value:
+        return False
+    if int(peer.get("protocolVersion", -1)) != PROTOCOL_VERSION:
+        return False
+    return True
+
+
 def main(argv: Optional[list] = None) -> int:
+    # 协议 stdout 必须行缓冲，避免管道下 hello 被块缓冲吞掉
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     paths = AppPaths.default().ensure()
-    # 日志走 stderr，避免污染 stdout 协议流
     logging_msg = f"Sidecar 启动 data={paths.data_dir} log={paths.log_dir}\n"
     sys.stderr.write(logging_msg)
+
+    # 先握手，再做迁移/恢复队列（可能较慢），防止宿主 10s 超时误杀
+    _write_early_hello(sys.stdout)
+    if not _consume_peer_hello_early(sys.stdin, sys.stdout):
+        return 1
+
     server = SidecarServer.from_paths(paths)
-    return server.run(sys.stdin, sys.stdout)
+    return server.serve_after_handshake(sys.stdin, sys.stdout)
