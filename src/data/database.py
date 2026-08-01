@@ -37,7 +37,13 @@ class HistoryDB:
             return
 
         self._initialized = True
-        db_dir = os.path.join(os.path.expanduser("~"), ".trae_downloader")
+        # 与 Sidecar AppPaths 默认一致；生产路径应显式传入 db_path
+        db_dir = os.path.join(
+            os.path.expanduser("~"),
+            "Library",
+            "Application Support",
+            "VideoDownloader",
+        )
         os.makedirs(db_dir, exist_ok=True)
         self.db_path = os.path.join(db_dir, "history.db")
         self._init_database()

@@ -13,13 +13,14 @@ __pycache__/
 *.log
 .start_app_last.log
 .cursor/
-bin/ffmpeg
-bin/ffprobe
+.claude/
+.trae/
+.superpowers/
+bin/
 *.app
 .idea/
 telemetry.jsonl
 *.telemetry.jsonl
-.superpowers/
 
 desktop/node_modules/
 desktop/dist/
