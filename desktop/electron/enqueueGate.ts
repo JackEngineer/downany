@@ -5,7 +5,7 @@ export type BridgeGateDecision =
   | { kind: "defer"; error: string };
 
 export const SIDECAR_NOT_READY_ERROR =
-  "下载服务未就绪，请确认视频下载器已完全启动后再试";
+  "下载服务未就绪，请确认百纳已完全启动后再试";
 
 /**
  * 桥接入队决策。

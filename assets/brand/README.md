@@ -1,4 +1,4 @@
-# 视频下载器品牌资源
+# Downany · 百纳品牌资源
 
 核心图形把“播放”与“下载入队”合并为一个符号：播放三角形是箭头中的负形，箭头落入青绿色托盘。
 
@@ -6,7 +6,7 @@
 
 - `logo-mark.svg`：透明底品牌标志，适合文档和界面。
 - `app-icon.svg`：应用图标母版，适合 macOS 与扩展图标派生。
-- `logo-lockup.svg`：中英文横版组合。
+- `logo-lockup.svg`：中英文横版组合（百纳 + DOWNANY）。
 - `../../browser-extension/icons/icon-small.svg`：16 px 工具栏专用简化稿。
 
 ## 颜色

@@ -18,9 +18,9 @@ export function buildAppMenu(
 
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: app.name || "视频下载器",
+      label: app.name || "百纳",
       submenu: [
-        { role: "about", label: "关于 视频下载器" },
+        { role: "about", label: "关于 百纳" },
         { type: "separator" },
         {
           label: "设置…",
@@ -30,11 +30,11 @@ export function buildAppMenu(
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
-        { role: "hide", label: "隐藏 视频下载器" },
+        { role: "hide", label: "隐藏 百纳" },
         { role: "hideOthers", label: "隐藏其他" },
         { role: "unhide", label: "全部显示" },
         { type: "separator" },
-        { role: "quit", label: "退出 视频下载器" },
+        { role: "quit", label: "退出 百纳" },
       ],
     },
     {

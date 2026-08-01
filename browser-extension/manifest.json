@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "视频下载器",
+  "name": "百纳",
   "version": "0.5.10",
-  "description": "识别页面媒体后一键发送到本机视频下载器",
+  "description": "识别页面媒体后一键发送到本机百纳",
   "minimum_chrome_version": "102",
   "permissions": [
     "activeTab",
@@ -30,7 +30,7 @@
     }
   ],
   "action": {
-    "default_title": "用视频下载器下载",
+    "default_title": "用百纳下载",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

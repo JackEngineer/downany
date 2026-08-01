@@ -146,7 +146,7 @@ export function startBridgeServer(handlers: BridgeHandlers): http.Server {
         const status = handlers.getStatus?.();
         sendJson(res, 200, {
           ok: true,
-          service: "videodl-bridge",
+          service: "downany-bridge",
           sidecarReady: status ? status.sidecarReady : true,
         });
         return;

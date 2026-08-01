@@ -110,7 +110,7 @@ def export_diagnostics(
     env = collect_environment(paths)
     failed = _failed_task_summaries(manager)
 
-    with tempfile.TemporaryDirectory(prefix="videodl-diag-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="downany-diag-") as tmp:
         tmp_path = Path(tmp)
         (tmp_path / "environment.json").write_text(
             json.dumps(env, ensure_ascii=False, indent=2),

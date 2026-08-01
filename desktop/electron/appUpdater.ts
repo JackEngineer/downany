@@ -17,7 +17,11 @@ export type AppUpdateInfo = {
   message: string;
 };
 
-const FEED_URL = (process.env.VIDEODL_UPDATE_FEED || "").trim();
+const FEED_URL = (
+  process.env.DOWNANY_UPDATE_FEED ||
+  process.env.VIDEODL_UPDATE_FEED ||
+  ""
+).trim();
 
 export function isAppUpdateConfigured(): boolean {
   return Boolean(FEED_URL);
@@ -31,7 +35,7 @@ export async function checkForAppUpdates(
       status: "disabled",
       currentVersion,
       message:
-        "应用自更新尚未配置。设置 VIDEODL_UPDATE_FEED 并完成签名公证后启用（见 docs/RELEASE.md）。",
+        "应用自更新尚未配置。设置 DOWNANY_UPDATE_FEED 并完成签名公证后启用（见 docs/RELEASE.md）。",
     };
   }
 

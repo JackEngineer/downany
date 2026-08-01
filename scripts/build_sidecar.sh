@@ -7,7 +7,7 @@ OUT="${ROOT}/desktop/resources/sidecar"
 BUILD_DIR="${ROOT}/.build/sidecar"
 SPEC="${ROOT}/packaging/sidecar.spec"
 
-PYTHON="${VIDEODL_PYTHON:-${ROOT}/venv/bin/python}"
+PYTHON="${DOWNANY_PYTHON:-${ROOT}/venv/bin/python}"
 if [[ ! -x "${PYTHON}" ]]; then
   PYTHON="$(command -v python3)"
 fi
@@ -28,15 +28,15 @@ cd "${ROOT}"
   --workpath "${BUILD_DIR}/work" \
   "${SPEC}"
 
-# onedir: OUT/VideoDownloaderSidecar/VideoDownloaderSidecar
-# onefile 兼容: OUT/VideoDownloaderSidecar
-SIDECAR_DIR="${OUT}/VideoDownloaderSidecar"
-SIDECAR="${SIDECAR_DIR}/VideoDownloaderSidecar"
+# onedir: OUT/DownanySidecar/DownanySidecar
+# onefile 兼容: OUT/DownanySidecar
+SIDECAR_DIR="${OUT}/DownanySidecar"
+SIDECAR="${SIDECAR_DIR}/DownanySidecar"
 if [[ ! -x "${SIDECAR}" ]]; then
-  SIDECAR="${OUT}/VideoDownloaderSidecar"
+  SIDECAR="${OUT}/DownanySidecar"
 fi
 if [[ ! -x "${SIDECAR}" ]]; then
-  echo "未找到 Sidecar 可执行文件（期望 onedir ${SIDECAR_DIR}/VideoDownloaderSidecar）" >&2
+  echo "未找到 Sidecar 可执行文件（期望 onedir ${SIDECAR_DIR}/DownanySidecar）" >&2
   exit 1
 fi
 

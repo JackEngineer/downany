@@ -91,7 +91,7 @@ export class TrayController {
   private rebuild(): void {
     if (!this.tray) return;
     this.tray.setToolTip(
-      this.activeCount > 0 ? `视频下载器 — ${this.activeCount} 个进行中` : "视频下载器",
+      this.activeCount > 0 ? `百纳 — ${this.activeCount} 个进行中` : "百纳",
     );
     const recent = this.tasks.slice(0, 5);
     const template: Electron.MenuItemConstructorOptions[] = [
@@ -114,7 +114,7 @@ export class TrayController {
       { label: "全部暂停", click: () => this.callbacks.onPauseAll() },
       { label: "全部恢复", click: () => this.callbacks.onResumeAll() },
       { type: "separator" },
-      { label: "退出 视频下载器", click: () => this.callbacks.onQuit() },
+      { label: "退出 百纳", click: () => this.callbacks.onQuit() },
     );
     this.tray.setContextMenu(Menu.buildFromTemplate(template));
   }

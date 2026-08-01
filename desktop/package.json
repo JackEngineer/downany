@@ -1,9 +1,9 @@
 {
-  "name": "video-downloader",
+  "name": "downany-desktop",
   "version": "0.1.0",
   "private": true,
   "author": "Jack Lee",
-  "description": "Video Downloader desktop shell (Electron + Python Sidecar)",
+  "description": "Downany · 百纳 desktop shell (Electron + Python Sidecar)",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",

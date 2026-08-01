@@ -167,7 +167,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
           disabled={disabled}
           onChange={(e) => {
             setLocale(e.target.value as Locale);
-            window.dispatchEvent(new CustomEvent("videodl:locale"));
+            window.dispatchEvent(new CustomEvent("downany:locale"));
           }}
         >
           <option value="zh-CN">简体中文</option>

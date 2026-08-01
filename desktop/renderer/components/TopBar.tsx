@@ -46,8 +46,8 @@ export function TopBar() {
 
   useEffect(() => {
     const onLocale = () => setLocaleState(getLocale());
-    window.addEventListener("videodl:locale", onLocale);
-    return () => window.removeEventListener("videodl:locale", onLocale);
+    window.addEventListener("downany:locale", onLocale);
+    return () => window.removeEventListener("downany:locale", onLocale);
   }, []);
 
   useEffect(() => {

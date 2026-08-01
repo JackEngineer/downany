@@ -15,9 +15,9 @@ if [[ "${BUILD_SIDECAR}" == "1" ]]; then
   "${ROOT}/scripts/build_sidecar.sh"
 fi
 
-SIDECAR_BIN="${DESKTOP}/resources/sidecar/VideoDownloaderSidecar/VideoDownloaderSidecar"
+SIDECAR_BIN="${DESKTOP}/resources/sidecar/DownanySidecar/DownanySidecar"
 if [[ ! -x "${SIDECAR_BIN}" ]]; then
-  SIDECAR_BIN="${DESKTOP}/resources/sidecar/VideoDownloaderSidecar"
+  SIDECAR_BIN="${DESKTOP}/resources/sidecar/DownanySidecar"
 fi
 if [[ ! -x "${SIDECAR_BIN}" ]]; then
   echo "缺少 Sidecar 二进制，请先 scripts/build_sidecar.sh" >&2

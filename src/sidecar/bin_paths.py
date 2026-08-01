@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 
 def bin_dir_from_env() -> Optional[Path]:
-    raw = os.environ.get("VIDEODL_BIN_DIR", "").strip()
+    raw = (os.environ.get("DOWNANY_BIN_DIR") or "").strip()
+    if not raw:
+        legacy = (os.environ.get("VIDEODL_BIN_DIR") or "").strip()
+        if legacy:
+            sys.stderr.write("警告: VIDEODL_BIN_DIR 已弃用，请改用 DOWNANY_BIN_DIR\n")
+            raw = legacy
     if not raw:
         return None
     return Path(raw).expanduser().resolve()
@@ -16,7 +22,7 @@ def bin_dir_from_env() -> Optional[Path]:
 def resolve_ffmpeg_path(*, project_root: Optional[Path] = None) -> Optional[Path]:
     """
     优先级：
-    1. VIDEODL_BIN_DIR/ffmpeg
+    1. DOWNANY_BIN_DIR/ffmpeg
     2. project_root/bin/ffmpeg（开发态仓库）
     """
     env_dir = bin_dir_from_env()

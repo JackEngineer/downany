@@ -17,7 +17,7 @@ TEAM_ID="XXXXXXXXXX" \
 ## 应用自更新（需签名）
 
 1. 托管更新 feed（generic server 或 GitHub Releases）。
-2. 设置环境变量 `VIDEODL_UPDATE_FEED`（或在 builder `publish` 中配置）。
+2. 设置环境变量 `DOWNANY_UPDATE_FEED`（或在 builder `publish` 中配置）。
 3. 引入 `electron-updater`，替换 [`desktop/electron/appUpdater.ts`](../desktop/electron/appUpdater.ts) 中的占位实现。
 4. 设置页「检查应用更新」已接 IPC `app:checkUpdate`。
 

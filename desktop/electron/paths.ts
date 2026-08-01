@@ -30,13 +30,13 @@ export function bundledBinDir(fromDir: string): string {
 
 export function bundledSidecarPath(fromDir: string): string {
   const root = path.join(resourcesRoot(fromDir), "sidecar");
-  // onedir（推荐）：sidecar/VideoDownloaderSidecar/VideoDownloaderSidecar
-  const onedir = path.join(root, "VideoDownloaderSidecar", "VideoDownloaderSidecar");
+  // onedir（推荐）：sidecar/DownanySidecar/DownanySidecar
+  const onedir = path.join(root, "DownanySidecar", "DownanySidecar");
   if (fs.existsSync(onedir)) {
     return onedir;
   }
-  // onefile 兼容：sidecar/VideoDownloaderSidecar
-  return path.join(root, "VideoDownloaderSidecar");
+  // onefile 兼容：sidecar/DownanySidecar
+  return path.join(root, "DownanySidecar");
 }
 
 
@@ -54,11 +54,24 @@ export function resolveSidecarLaunch(
   const env: NodeJS.ProcessEnv = { ...process.env };
   const binDir = bundledBinDir(fromDir);
 
+  const legacyBin = process.env.VIDEODL_BIN_DIR;
+  const legacyData = process.env.VIDEODL_DATA_DIR;
+  const legacyPython = process.env.VIDEODL_PYTHON;
+  if (!process.env.DOWNANY_BIN_DIR && legacyBin) {
+    env.DOWNANY_BIN_DIR = legacyBin;
+  }
+  if (!process.env.DOWNANY_DATA_DIR && legacyData) {
+    env.DOWNANY_DATA_DIR = legacyData;
+  }
+  if (!process.env.DOWNANY_PYTHON && legacyPython) {
+    env.DOWNANY_PYTHON = legacyPython;
+  }
+
   if (fs.existsSync(binDir)) {
-    env.VIDEODL_BIN_DIR = binDir;
+    env.DOWNANY_BIN_DIR = binDir;
   }
   if (opts.dataDir) {
-    env.VIDEODL_DATA_DIR = opts.dataDir;
+    env.DOWNANY_DATA_DIR = opts.dataDir;
   }
 
   if (app.isPackaged) {
@@ -73,11 +86,12 @@ export function resolveSidecarLaunch(
   const repoRoot = opts.repoRoot || resolveRepoRoot(fromDir);
   const python =
     opts.pythonPath ||
+    process.env.DOWNANY_PYTHON ||
     process.env.VIDEODL_PYTHON ||
     path.join(repoRoot, "venv", "bin", "python");
   const devBin = path.join(repoRoot, "bin");
-  if (!env.VIDEODL_BIN_DIR && fs.existsSync(devBin)) {
-    env.VIDEODL_BIN_DIR = devBin;
+  if (!env.DOWNANY_BIN_DIR && fs.existsSync(devBin)) {
+    env.DOWNANY_BIN_DIR = devBin;
   }
   return {
     command: python,

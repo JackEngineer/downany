@@ -42,7 +42,7 @@ class HistoryDB:
             os.path.expanduser("~"),
             "Library",
             "Application Support",
-            "VideoDownloader",
+            "Downany",
         )
         os.makedirs(db_dir, exist_ok=True)
         self.db_path = os.path.join(db_dir, "history.db")

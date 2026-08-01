@@ -341,7 +341,7 @@ function createWindow(): void {
     y: state.y,
     minWidth: 720,
     minHeight: 480,
-    title: "视频下载器",
+    title: "百纳",
     show: false,
     titleBarStyle: "hiddenInset",
     vibrancy: "under-window",
@@ -580,7 +580,7 @@ function registerIpc(): void {
 
   ipcMain.handle("sidecar:getLogDir", async () => {
     const home = app.getPath("home");
-    return path.join(home, "Library", "Logs", "VideoDownloader");
+    return path.join(home, "Library", "Logs", "Downany");
   });
 
   ipcMain.handle("app:openPath", async (_evt, target: string) => {

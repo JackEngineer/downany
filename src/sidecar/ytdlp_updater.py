@@ -68,7 +68,7 @@ def current_version(paths: AppPaths) -> str:
             return _run_version(exe)
         # 回退到环境中的 yt-dlp 模块
         proc = subprocess.run(
-            [os.environ.get("VIDEODL_PYTHON") or "python3", "-m", "yt_dlp", "--version"],
+            [os.environ.get("DOWNANY_PYTHON") or os.environ.get("VIDEODL_PYTHON") or "python3", "-m", "yt_dlp", "--version"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -85,7 +85,7 @@ def check_update(paths: AppPaths, *, opener=urllib.request.urlopen) -> Dict[str,
     current = current_version(paths)
     req = urllib.request.Request(
         RELEASE_API,
-        headers={"User-Agent": "VideoDownloader/0.1", "Accept": "application/vnd.github+json"},
+        headers={"User-Agent": "Downany/0.1", "Accept": "application/vnd.github+json"},
     )
     with opener(req, timeout=30) as resp:
         data = json.loads(resp.read().decode("utf-8"))
@@ -133,7 +133,7 @@ def update_ytdlp(
     if target.is_file():
         shutil.copy2(target, backup)
 
-    req = urllib.request.Request(url, headers={"User-Agent": "VideoDownloader/0.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "Downany/0.1"})
     try:
         with opener(req, timeout=120) as resp, tmp.open("wb") as out:
             shutil.copyfileobj(resp, out)

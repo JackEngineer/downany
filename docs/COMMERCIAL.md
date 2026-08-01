@@ -1,6 +1,6 @@
 # 商业与许可（占位）
 
-本文档为 **视频下载器（VideoDownloader）** 官网、试用与正式许可的占位说明，具体条款以正式发布为准。
+本文档为 **Downany · 百纳** 官网、试用与正式许可的占位说明，具体条款以正式发布为准。
 
 ## 产品定位
 
@@ -9,9 +9,9 @@
 
 ## 官网（占位）
 
-- 主页：`https://videodl.app`（待上线）
-- 文档：`https://videodl.app/docs`
-- 更新日志：`https://videodl.app/changelog`
+- 主页：`https://downany.app`（待上线）
+- 文档：`https://downany.app/docs`
+- 更新日志：`https://downany.app/changelog`
 
 ## 试用
 
@@ -37,5 +37,5 @@
 
 ## 联系
 
-- 支持邮箱：`support@videodl.app`（占位）
-- 商务合作：`hello@videodl.app`（占位）
+- 支持邮箱：`support@downany.app`（占位）
+- 商务合作：`hello@downany.app`（占位）

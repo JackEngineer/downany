@@ -1,6 +1,6 @@
-appId: com.jacklee.videodownloader
-productName: VideoDownloader
-executableName: VideoDownloader
+appId: com.jacklee.downany
+productName: Downany
+executableName: Downany
 copyright: Copyright © Jack Lee
 directories:
   output: release
@@ -21,9 +21,9 @@ extraResources:
       - "**/*"
       - "!**/.gitkeep"
 protocols:
-  - name: VideoDownloader
+  - name: Downany
     schemes:
-      - videodl
+      - downany
 mac:
   icon: build/icon.png
   category: public.app-category.utilities
@@ -37,7 +37,7 @@ mac:
   extendInfo:
     # 仅改 DisplayName；CFBundleName 必须保持与 productName/Helper 一致，
     # 否则 Electron 会 FATAL: Unable to find helper app（启动即崩溃）。
-    CFBundleDisplayName: 视频下载器
+    CFBundleDisplayName: Downany · 百纳
     # 允许把 URL / .webloc 拖到 Dock 图标（配合 main.ts 的 open-file 处理；需打包后真机验证）
     CFBundleDocumentTypes:
       - CFBundleTypeName: 网页链接
@@ -48,5 +48,5 @@ mac:
           - public.url-name
           - com.apple.web-internet-location
 dmg:
-  artifactName: VideoDownloader-${version}-mac.${ext}
-  title: 视频下载器 ${version}
+  artifactName: Downany-${version}-mac.${ext}
+  title: Downany · 百纳 ${version}

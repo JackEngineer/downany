@@ -24,7 +24,7 @@ def _read_json_line(proc: subprocess.Popen) -> dict:
 
 def test_subprocess_hello_ping_snapshot_shutdown(tmp_path):
     env = os.environ.copy()
-    env["VIDEODL_DATA_DIR"] = str(tmp_path / "data")
+    env["DOWNANY_DATA_DIR"] = str(tmp_path / "data")
     repo = Path(__file__).resolve().parents[2]
     python = repo / "venv" / "bin" / "python"
     if not python.exists():

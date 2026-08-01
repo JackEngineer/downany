@@ -15,15 +15,15 @@ if [[ ! -x "$CHROME_BIN" ]]; then
   exit 1
 fi
 
-# 确保 Electron 在跑（注册 videodl://）
+# 确保 Electron 在跑（注册 downany://）
 if ! pgrep -f "downloader/desktop/node_modules/electron/dist/Electron" >/dev/null 2>&1 \
-  && ! pgrep -fl "VideoDownloader" >/dev/null 2>&1; then
+  && ! pgrep -fl "Downany" >/dev/null 2>&1; then
   echo "==> 启动 Electron 下载器…"
   (
     cd "$ROOT/desktop"
-    export VIDEODL_PYTHON="${VIDEODL_PYTHON:-$ROOT/venv/bin/python}"
+    export DOWNANY_PYTHON="${DOWNANY_PYTHON:-$ROOT/venv/bin/python}"
     npm run dev
-  ) >/tmp/videodl-electron-dev.log 2>&1 &
+  ) >/tmp/downany-electron-dev.log 2>&1 &
   for _ in $(seq 1 40); do
     if pgrep -f "downloader/desktop/node_modules/electron/dist/Electron" >/dev/null 2>&1; then
       break
@@ -51,9 +51,9 @@ fi
 nohup "$CHROME_BIN" \
   --load-extension="$EXT" \
   --restore-last-session \
-  >/tmp/videodl-chrome-main.log 2>&1 &
+  >/tmp/downany-chrome-main.log 2>&1 &
 
 sleep 2
 open -a "Google Chrome" "chrome://extensions"
-echo "==> 完成。扩展「视频下载器」应已出现在工具栏/扩展页。"
+echo "==> 完成。扩展「百纳」应已出现在工具栏/扩展页。"
 echo "    打开视频页点图标即可入队。若完全退出 Chrome 后再开，请再跑一次本脚本。"

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { getLocale, t } from "../i18n";
 
-const DISMISS_KEY = "videodl.onboarding.dismissed";
+const DISMISS_KEY = "downany.onboarding.dismissed";
 
 export function isOnboardingDismissed(): boolean {
   try {
@@ -14,7 +14,7 @@ export function isOnboardingDismissed(): boolean {
 
 function dismissOnboarding(): void {
   localStorage.setItem(DISMISS_KEY, "1");
-  window.dispatchEvent(new CustomEvent("videodl:onboarding"));
+  window.dispatchEvent(new CustomEvent("downany:onboarding"));
 }
 
 export function EmptyState() {
@@ -23,8 +23,8 @@ export function EmptyState() {
 
   useEffect(() => {
     const onLocale = () => bump((n) => n + 1);
-    window.addEventListener("videodl:locale", onLocale);
-    return () => window.removeEventListener("videodl:locale", onLocale);
+    window.addEventListener("downany:locale", onLocale);
+    return () => window.removeEventListener("downany:locale", onLocale);
   }, []);
 
   return (

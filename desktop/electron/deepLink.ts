@@ -1,6 +1,6 @@
-/** videodl:// 深度链接解析（纯函数，便于单测）。 */
+/** downany:// 深度链接解析（纯函数，便于单测）。 */
 
-export const PROTOCOL_SCHEME = "videodl";
+export const PROTOCOL_SCHEME = "downany";
 
 const HTTP_URL_RE = /^https?:\/\/\S+$/i;
 
@@ -20,8 +20,8 @@ function truthyParam(value: string | null): boolean {
 /**
  * 从单条候选字符串解析出可下载的 http(s) URL。
  * 支持：
- * - `videodl://add?url=<encoded>`
- * - `videodl:add?url=<encoded>`（少见写法）
+ * - `downany://add?url=<encoded>`
+ * - `downany:add?url=<encoded>`（少见写法）
  * - 裸 `https://...` / `http://...`
  */
 export function parseDeepLinkCandidate(raw: string): string | null {
@@ -29,7 +29,7 @@ export function parseDeepLinkCandidate(raw: string): string | null {
   return payload?.url ?? null;
 }
 
-/** 解析 videodl://add 完整参数（url / quality / audio / subs）。 */
+/** 解析 downany://add 完整参数（url / quality / audio / subs）。 */
 export function parseDeepLinkAdd(raw: string): DeepLinkAddPayload | null {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;

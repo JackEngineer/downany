@@ -1,13 +1,13 @@
 # Chrome 扩展：媒体识别 + 一键入队
 
-识别当前页面中的多媒体（DOM + 网络嗅探），勾选后发送到本机 **视频下载器**（Electron）。优先走本机 HTTP 桥 `127.0.0.1:17888`（可携带 Referer/Cookie），失败再回退 `videodl://`。
+识别当前页面中的多媒体（DOM + 网络嗅探），勾选后发送到本机 **百纳**（Electron）。优先走本机 HTTP 桥 `127.0.0.1:17888`（可携带 Referer/Cookie），失败再回退 `downany://`。
 
 纯嗅探逻辑在 `sniff-core.js`（无 Chrome API），桌面端 `desktop/electron/mediaSniff.ts` 与之对齐，便于复用清单解析与 URL 分类。
 
 ## 必做：改完代码后重新加载
 
 1. 确认 **Electron 下载器正在运行**（桥才会监听）
-2. 打开 `chrome://extensions` →「视频下载器」→ 点 **重新加载**（版本应为 0.5.3）
+2. 打开 `chrome://extensions` →「百纳」→ 点 **重新加载**（版本应为 0.5.3）
 3. 打开视频页并**播放** → 点工具栏图标 → 勾选媒体 →「下载选中」
 
 首次加载会申请访问所有网站的权限（用于网络嗅探与读取 Cookie）。
@@ -16,7 +16,7 @@
 
 ```bash
 # 终端 1：下载器
-cd desktop && VIDEODL_PYTHON="$(pwd)/../venv/bin/python" npm run dev
+cd desktop && DOWNANY_PYTHON="$(pwd)/../venv/bin/python" npm run dev
 
 # 终端 2（可选）：重启 Chrome 并加载扩展
 ./scripts/setup_chrome_extension.sh
@@ -70,7 +70,7 @@ cd desktop && VIDEODL_PYTHON="$(pwd)/../venv/bin/python" npm run dev
 1. 打开 `edge://extensions`
 2. 开启 **开发人员模式**
 3. **加载解压缩的扩展** → 选择本目录 `browser-extension/`
-4. 固定扩展图标；用法与 Chrome 相同（HTTP 桥 + `videodl://` 回退）
+4. 固定扩展图标；用法与 Chrome 相同（HTTP 桥 + `downany://` 回退）
 
 ### Mozilla Firefox（MV3 临时加载）
 

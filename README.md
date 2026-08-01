@@ -1,4 +1,4 @@
-# 视频下载器（VideoDownloader）
+# Downany · 百纳
 
 macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
@@ -12,7 +12,7 @@ macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desk
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
 - **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
 - **浏览器抓取窗口**：登录墙 / 纯 HLS 页可用内置浏览器嗅探入队
-- **CLI**：`./scripts/videodl add <url> [--audio] [--quality 1080p] [--detach]`
+- **CLI**：`./scripts/downany add <url> [--audio] [--quality 1080p] [--detach]`
 
 路线图见 [docs/roadmap.md](docs/roadmap.md)。
 
@@ -31,8 +31,8 @@ Sidecar 单独调试：
 python -m src.sidecar
 ```
 
-数据目录：`~/Library/Application Support/VideoDownloader/`  
-日志：`~/Library/Logs/VideoDownloader/`
+数据目录：`~/Library/Application Support/Downany/`  
+日志：`~/Library/Logs/Downany/`
 
 ## 打包（macOS）
 

@@ -2,7 +2,7 @@
 
 export type Locale = "zh-CN" | "en";
 
-const STORAGE_KEY = "videodl.locale";
+const STORAGE_KEY = "downany.locale";
 
 type Dict = Record<string, string>;
 
@@ -16,7 +16,7 @@ const zhCN: Dict = {
   "search.placeholder": "搜索任务…",
   "add.placeholder": "粘贴视频链接，回车添加",
   "settings.open": "设置",
-  "onboarding.title": "欢迎使用视频下载器",
+  "onboarding.title": "欢迎使用 Downany · 百纳",
   "onboarding.paste": "在上方粘贴链接或拖放到窗口",
   "onboarding.extension": "安装浏览器扩展，一键发送当前页",
   "onboarding.settings": "打开设置配置下载目录与画质",
@@ -39,7 +39,7 @@ const en: Dict = {
   "search.placeholder": "Search tasks…",
   "add.placeholder": "Paste a video URL and press Enter",
   "settings.open": "Settings",
-  "onboarding.title": "Welcome to Video Downloader",
+  "onboarding.title": "Welcome to Downany",
   "onboarding.paste": "Paste a link above or drag & drop here",
   "onboarding.extension": "Install the browser extension to send the current page",
   "onboarding.settings": "Open Settings to configure folder and quality",
@@ -69,7 +69,7 @@ export function getLocale(): Locale {
 
 export function setLocale(locale: Locale): void {
   localStorage.setItem(STORAGE_KEY, locale);
-  window.dispatchEvent(new CustomEvent("videodl:locale"));
+  window.dispatchEvent(new CustomEvent("downany:locale"));
 }
 
 export function t(key: string, locale: Locale = getLocale()): string {

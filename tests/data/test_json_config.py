@@ -5,8 +5,8 @@ def test_defaults_and_roundtrip(tmp_path):
     path = tmp_path / "config.json"
     cfg = JsonConfig(str(path))
     assert cfg.get_concurrent_downloads() == 3
-    assert cfg.get_download_dir().endswith("Downloads/VideoDownloader") or cfg.get_download_dir().endswith(
-        "Downloads\\VideoDownloader"
+    assert cfg.get_download_dir().endswith("Downloads/Downany") or cfg.get_download_dir().endswith(
+        "Downloads\\Downany"
     )
     cfg.set_concurrent_downloads(5)
     cfg.set_theme_mode("dark")
@@ -23,7 +23,20 @@ def test_sanitizes_trae_download_dir(tmp_path):
     )
     cfg = JsonConfig(str(path))
     assert "TraeDownloader" not in cfg.get_download_dir()
-    assert cfg.get_download_dir().endswith("VideoDownloader")
+    assert cfg.get_download_dir().endswith("Downany")
+
+
+def test_sanitizes_videodownloader_download_dir(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        '{"download_dir": "/tmp/VideoDownloader/clips", "concurrent_downloads": 3}',
+        encoding="utf-8",
+    )
+    cfg = JsonConfig(str(path))
+    assert "VideoDownloader" not in cfg.get_download_dir()
+    assert cfg.get_download_dir().endswith("Downany/clips") or cfg.get_download_dir().endswith(
+        "Downany\\clips"
+    )
 
 
 def test_proxy_for_download_none_when_disabled(tmp_path):

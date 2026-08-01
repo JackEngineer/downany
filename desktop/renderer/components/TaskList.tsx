@@ -37,11 +37,11 @@ export function TaskList() {
 
   useEffect(() => {
     const refresh = () => setShowOnboarding(!isOnboardingDismissed());
-    window.addEventListener("videodl:onboarding", refresh);
-    window.addEventListener("videodl:locale", refresh);
+    window.addEventListener("downany:onboarding", refresh);
+    window.addEventListener("downany:locale", refresh);
     return () => {
-      window.removeEventListener("videodl:onboarding", refresh);
-      window.removeEventListener("videodl:locale", refresh);
+      window.removeEventListener("downany:onboarding", refresh);
+      window.removeEventListener("downany:locale", refresh);
     };
   }, []);
 

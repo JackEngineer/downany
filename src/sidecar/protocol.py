@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 
 PROTOCOL_VERSION = 1
-APP_NAME = "VideoDownloader"
+APP_NAME = "Downany"
 APP_VERSION = "0.1.0-phase1"
 
 

@@ -2,7 +2,7 @@
 
 日期：2026-08-01  
 状态：待评审  
-标杆：Downie 4（macOS 专业视频下载器）
+标杆：Downie 4（macOS 专业百纳）
 
 ## 1. 当前基线
 
@@ -11,7 +11,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 - **下载核心**：6 态任务机（pending / downloading / paused / completed / failed / cancelled）、优先级调度、并发上限、限速、暂停恢复（中断 + 重新入队，依赖 yt-dlp 续传）、崩溃恢复
 - **持久化**：`task_queue` 队列表、`download_history` 历史表、`JsonConfig` 15 项设置
 - **协议**：Sidecar JSON Lines，24 个 request method + 11 个 event
-- **入队入口**：手动粘贴、拖放 URL、剪贴板监控、Chrome 扩展（HTTP 桥 127.0.0.1:17888）、`videodl://`、`.webloc`
+- **入队入口**：手动粘贴、拖放 URL、剪贴板监控、Chrome 扩展（HTTP 桥 127.0.0.1:17888）、`downany://`、`.webloc`
 - **桌面集成**：原生菜单、通知（含失败重试 action）、Dock 角标与进度、可选菜单栏 Tray、窗口几何持久化、浅深主题
 - **平台**：显式识别 YouTube / Bilibili / 抖音 / TikTok / Twitter / Instagram / Pornhub，其余交由 yt-dlp（1752 个 extractor）
 - **维护**：yt-dlp 应用内更新、旧 Trae 数据迁移
@@ -31,7 +31,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 | 队列拖拽排序 / 多选 | 有 | 仅整数 `priority` | 中 |
 | 分片并发加速 | 有 | 无 `concurrent_fragment_downloads` | 中（体感最强） |
 | 后处理链 | 可组合 + 外部应用 | 单选 none/mp4/mp3/script | 中 |
-| 自动化（Shortcuts / AppleScript / CLI） | 全部支持 | 仅 `videodl://add` | 中 |
+| 自动化（Shortcuts / AppleScript / CLI） | 全部支持 | 仅 `downany://add` | 中 |
 | 多浏览器扩展 | Safari / Chrome / Firefox / Edge | 仅 Chrome MV3 | 中 |
 | 多语言 | 20+ | 文案硬编码中文 | 低 |
 | 片段裁剪 / SponsorBlock | 不支持 | 不支持 | 差异化机会 |
@@ -105,9 +105,9 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 
 | # | 任务 |
 |---|---|
-| 4.1 | CLI：`videodl add <url> --audio --quality 1080p`（本质是第二个 Sidecar 客户端，架构天然支持）|
+| 4.1 | CLI：`downany add <url> --audio --quality 1080p`（本质是第二个 Sidecar 客户端，架构天然支持）|
 | 4.2 | macOS Shortcuts（App Intents）+ AppleScript 支持 |
-| 4.3 | `videodl://` 参数化：quality / audio / folder / subs |
+| 4.3 | `downany://` 参数化：quality / audio / folder / subs |
 | 4.4 | 监听文件夹、`.txt` 批量导入、队列导出 |
 | 4.5 | i18n（zh-CN + en 起步）——文案当前全硬编码，越晚拆越贵 |
 | 4.6 | 应用内"支持站点"页：把 `docs/yt-dlp-extractors.md` 的 1752 个 extractor 做成可搜索页 |

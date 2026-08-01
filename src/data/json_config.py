@@ -58,12 +58,13 @@ class JsonConfig:
         self._load_or_init()
 
     def _default_download_dir(self) -> str:
-        return os.path.join(os.path.expanduser("~"), "Downloads", "VideoDownloader")
+        return os.path.join(os.path.expanduser("~"), "Downloads", "Downany")
 
     def _sanitize_download_dir(self, path: str) -> str:
         text = str(path or "").strip() or self._default_download_dir()
-        if "TraeDownloader" in text:
-            text = text.replace("TraeDownloader", "VideoDownloader")
+        for old in ("TraeDownloader", "VideoDownloader"):
+            if old in text:
+                text = text.replace(old, "Downany")
         return text
 
     def _defaults(self) -> Dict[str, Any]:

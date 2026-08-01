@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_PATH="${1:-${ROOT}/desktop/release/mac/视频下载器.app}"
+APP_PATH="${1:-${ROOT}/desktop/release/mac-arm64/Downany.app}"
 DMG_PATH="${2:-}"
 
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"

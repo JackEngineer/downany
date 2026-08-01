@@ -66,7 +66,7 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="videodl-cli", description="视频下载器 CLI")
+    parser = argparse.ArgumentParser(prog="downany", description="Downany · 百纳 CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     add_parser = sub.add_parser("add", help="添加入队下载任务")

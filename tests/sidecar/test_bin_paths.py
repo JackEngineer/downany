@@ -11,12 +11,12 @@ def test_resolve_ffmpeg_from_env(tmp_path, monkeypatch):
     ffmpeg = bin_dir / "ffmpeg"
     ffmpeg.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
     ffmpeg.chmod(0o755)
-    monkeypatch.setenv("VIDEODL_BIN_DIR", str(bin_dir))
+    monkeypatch.setenv("DOWNANY_BIN_DIR", str(bin_dir))
     assert resolve_ffmpeg_path() == ffmpeg.resolve()
 
 
 def test_resolve_ffmpeg_from_project_root(tmp_path, monkeypatch):
-    monkeypatch.delenv("VIDEODL_BIN_DIR", raising=False)
+    monkeypatch.delenv("DOWNANY_BIN_DIR", raising=False)
     root = tmp_path / "repo"
     bin_dir = root / "bin"
     bin_dir.mkdir(parents=True)
@@ -32,11 +32,11 @@ def test_resolve_bundled_ytdlp(tmp_path, monkeypatch):
     ytdlp = bin_dir / "yt-dlp"
     ytdlp.write_text("#!/bin/sh\necho 1\n", encoding="utf-8")
     ytdlp.chmod(0o755)
-    monkeypatch.setenv("VIDEODL_BIN_DIR", str(bin_dir))
+    monkeypatch.setenv("DOWNANY_BIN_DIR", str(bin_dir))
     assert resolve_bundled_ytdlp_path() == ytdlp.resolve()
 
 
 def test_missing_bin_returns_none(monkeypatch):
-    monkeypatch.setenv("VIDEODL_BIN_DIR", "/tmp/videodl-missing-bin-dir-xyz")
+    monkeypatch.setenv("DOWNANY_BIN_DIR", "/tmp/downany-missing-bin-dir-xyz")
     assert resolve_ffmpeg_path() is None
     assert resolve_bundled_ytdlp_path() is None

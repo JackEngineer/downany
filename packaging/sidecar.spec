@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec：无 Qt 的 VideoDownloader Sidecar（onedir，避免 onefile 解压慢导致握手超时）。"""
+"""PyInstaller spec：无 Qt 的 Downany Sidecar（onedir，避免 onefile 解压慢导致握手超时）。"""
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
@@ -42,7 +42,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="VideoDownloaderSidecar",
+    name="DownanySidecar",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -63,5 +63,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="VideoDownloaderSidecar",
+    name="DownanySidecar",
 )

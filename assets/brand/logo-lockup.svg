@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 360" role="img" aria-labelledby="title desc">
-  <title id="title">视频下载器横版 Logo</title>
-  <desc id="desc">视频下载器应用图标与中英文产品名称的横向组合。</desc>
+  <title id="title">Downany · 百纳横版 Logo</title>
+  <desc id="desc">Downany 应用图标与中英文产品名称的横向组合。</desc>
   <rect x="28" y="28" width="304" height="304" rx="72" fill="#101827"/>
   <path
     fill="#397BFF"
@@ -19,7 +19,7 @@
     font-size="92"
     font-weight="700"
     letter-spacing="2"
-  >视频下载器</text>
+  >百纳</text>
   <text
     x="404"
     y="246"
@@ -28,5 +28,5 @@
     font-size="32"
     font-weight="650"
     letter-spacing="7"
-  >VIDEODOWNLOADER</text>
+  >DOWNANY</text>
 </svg>

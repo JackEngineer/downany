@@ -1,4 +1,4 @@
-"""旧 Trae 数据 → VideoDownloader 迁移（幂等、复制不移动）。"""
+"""旧 Trae / VideoDownloader 数据 → Downany 迁移（幂等、复制不移动）。"""
 from __future__ import annotations
 
 import plistlib
@@ -14,8 +14,10 @@ from src.utils.logger import setup_logger
 logger = setup_logger("Migration")
 
 MIGRATION_MARKER = ".migration_v1_done"
+MIGRATION_VD_MARKER = ".migration_videodownloader_done"
 OLD_PLIST_NAME = "com.Trae.Downloader.plist"
 OLD_HISTORY_DIR = ".trae_downloader"
+OLD_VIDEODL_APP_SUPPORT = "VideoDownloader"
 
 
 def default_old_plist_path(home: Optional[Path] = None) -> Path:
@@ -28,12 +30,25 @@ def default_old_history_path(home: Optional[Path] = None) -> Path:
     return root / OLD_HISTORY_DIR / "history.db"
 
 
+def default_old_videodownloader_data_dir(home: Optional[Path] = None) -> Path:
+    root = home or Path.home()
+    return root / "Library" / "Application Support" / OLD_VIDEODL_APP_SUPPORT
+
+
 def _read_plist(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
     with path.open("rb") as fh:
         data = plistlib.load(fh)
     return data if isinstance(data, dict) else {}
+
+
+def _normalize_download_dir(path: str) -> str:
+    text = str(path or "")
+    for old in ("TraeDownloader", "VideoDownloader"):
+        if old in text:
+            text = text.replace(old, "Downany")
+    return text
 
 
 def _map_plist_to_config(plist: Dict[str, Any]) -> Dict[str, Any]:
@@ -52,10 +67,9 @@ def _map_plist_to_config(plist: Dict[str, Any]) -> Dict[str, Any]:
     for old_key, new_key in key_map.items():
         if old_key in plist:
             mapped[new_key] = plist[old_key]
-    # 去掉旧品牌目录名
     download_dir = mapped.get("download_dir")
-    if isinstance(download_dir, str) and "TraeDownloader" in download_dir:
-        mapped["download_dir"] = download_dir.replace("TraeDownloader", "VideoDownloader")
+    if isinstance(download_dir, str):
+        mapped["download_dir"] = _normalize_download_dir(download_dir)
     return mapped
 
 
@@ -64,7 +78,6 @@ def _copy_history(src: Path, dest: Path) -> int:
     if not src.is_file():
         return 0
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # 若目标不存在，直接复制整个文件更简单
     if not dest.is_file():
         shutil.copy2(src, dest)
         with sqlite3.connect(dest) as conn:
@@ -139,6 +152,57 @@ def _copy_history(src: Path, dest: Path) -> int:
     return copied
 
 
+def _migrate_videodownloader_tree(
+    paths: AppPaths,
+    *,
+    home: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """把 Application Support/VideoDownloader 复制到 Downany（若目标尚空）。"""
+    marker = paths.data_dir / MIGRATION_VD_MARKER
+    if marker.is_file():
+        return {"status": "skipped", "message": "VideoDownloader 迁移已完成"}
+
+    old_data = default_old_videodownloader_data_dir(home)
+    details: Dict[str, Any] = {"old_data": str(old_data)}
+    if not old_data.is_dir():
+        marker.write_text("ok\n", encoding="utf-8")
+        return {
+            "status": "skipped",
+            "message": "未发现 VideoDownloader 数据目录",
+            "details": details,
+        }
+
+    copied_files: list[str] = []
+    for name in ("config.json", "history.db", "history.db-wal", "history.db-shm"):
+        src = old_data / name
+        dest = paths.data_dir / name
+        if src.is_file() and not dest.exists():
+            shutil.copy2(src, dest)
+            copied_files.append(name)
+            if name == "config.json":
+                cfg = JsonConfig(str(dest))
+                download_dir = cfg.get_download_dir()
+                normalized = _normalize_download_dir(download_dir)
+                if normalized != download_dir:
+                    cfg.set_download_dir(normalized)
+
+    # queue 表可能在 history.db；另拷贝 queue 相关若有独立文件则无
+
+    marker.write_text("ok\n", encoding="utf-8")
+    details["copied"] = copied_files
+    if not copied_files:
+        return {
+            "status": "skipped",
+            "message": "VideoDownloader 目录存在但无可复制文件（目标已有数据）",
+            "details": details,
+        }
+    return {
+        "status": "migrated",
+        "message": "已从 VideoDownloader 复制应用数据",
+        "details": details,
+    }
+
+
 def run_migration(
     paths: AppPaths,
     *,
@@ -152,26 +216,35 @@ def run_migration(
       message, details
     """
     paths.ensure()
-    marker = paths.data_dir / MIGRATION_MARKER
-    if marker.is_file():
-        return {
-            "status": "skipped",
-            "message": "迁移已完成，跳过",
-            "details": {"marker": str(marker)},
-        }
-
-    plist_path = old_plist or default_old_plist_path(home)
-    history_path = old_history or default_old_history_path(home)
-    details: Dict[str, Any] = {
-        "plist": str(plist_path),
-        "history": str(history_path),
-    }
+    details: Dict[str, Any] = {}
 
     try:
+        vd = _migrate_videodownloader_tree(paths, home=home)
+        details["videodownloader"] = vd
+
+        marker = paths.data_dir / MIGRATION_MARKER
+        if marker.is_file():
+            # Trae 已迁过；若 VideoDownloader 迁入则整体算 migrated
+            if vd.get("status") == "migrated":
+                return {
+                    "status": "migrated",
+                    "message": vd.get("message") or "已迁移",
+                    "details": details,
+                }
+            return {
+                "status": "skipped",
+                "message": "迁移已完成，跳过",
+                "details": {**details, "marker": str(marker)},
+            }
+
+        plist_path = old_plist or default_old_plist_path(home)
+        history_path = old_history or default_old_history_path(home)
+        details["plist"] = str(plist_path)
+        details["history"] = str(history_path)
+
         backup_dir = paths.data_dir / "migration_backup"
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        # 配置
         plist = _read_plist(plist_path)
         mapped = _map_plist_to_config(plist)
         details["config_keys"] = sorted(mapped.keys())
@@ -181,7 +254,6 @@ def run_migration(
             cfg = JsonConfig(str(paths.config_path))
             cfg.update_from_dict(mapped)
 
-        # 历史
         history_copied = 0
         if history_path.is_file():
             shutil.copy2(history_path, backup_dir / "old_history.db")
@@ -190,12 +262,17 @@ def run_migration(
             history_copied = _copy_history(history_path, paths.history_db_path)
         details["history_copied"] = history_copied
 
-        # 无任何旧数据也算成功完成（标记，避免反复扫）
         marker.write_text("ok\n", encoding="utf-8")
-        if not mapped and history_copied == 0 and not plist_path.is_file() and not history_path.is_file():
+        if (
+            not mapped
+            and history_copied == 0
+            and not plist_path.is_file()
+            and not history_path.is_file()
+            and vd.get("status") != "migrated"
+        ):
             return {
                 "status": "skipped",
-                "message": "未发现旧 Trae 数据",
+                "message": "未发现旧 Trae / VideoDownloader 数据",
                 "details": details,
             }
         return {

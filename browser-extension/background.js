@@ -1,4 +1,4 @@
-/** Chrome MV3：媒体嗅探 + 有效性验证 + HTTP 桥入队，失败再回退 videodl://。 */
+/** Chrome MV3：媒体嗅探 + 有效性验证 + HTTP 桥入队，失败再回退 downany://。 */
 
 importScripts("shared.js", "sniff-core.js");
 
@@ -26,10 +26,10 @@ const {
 } = globalThis.VideoDlSniffCore;
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
-const MENU_PAGE = "videodl-download-page";
-const MENU_LINK = "videodl-download-link";
-const MENU_SELECTION = "videodl-download-selection";
-const MENU_MEDIA = "videodl-download-media";
+const MENU_PAGE = "downany-download-page";
+const MENU_LINK = "downany-download-link";
+const MENU_SELECTION = "downany-download-selection";
+const MENU_MEDIA = "downany-download-media";
 
 /** 小于该体积的音视频文件视为装饰性内容（头像/emoji/广告碎片） */
 const MIN_FILE_SIZE = 100 * 1024;
@@ -927,22 +927,22 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: MENU_PAGE,
-      title: "用视频下载器下载此页面",
+      title: "用百纳下载此页面",
       contexts: ["page"],
     });
     chrome.contextMenus.create({
       id: MENU_LINK,
-      title: "用视频下载器下载此链接",
+      title: "用百纳下载此链接",
       contexts: ["link"],
     });
     chrome.contextMenus.create({
       id: MENU_SELECTION,
-      title: "用视频下载器下载选中链接",
+      title: "用百纳下载选中链接",
       contexts: ["selection"],
     });
     chrome.contextMenus.create({
       id: MENU_MEDIA,
-      title: "用视频下载器下载此媒体",
+      title: "用百纳下载此媒体",
       contexts: ["video", "audio"],
     });
   });

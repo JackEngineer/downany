@@ -1,4 +1,4 @@
-/** redirect.html：把 ?url= 转成 videodl:// 深链打开本机下载器。 */
+/** redirect.html：把 ?url= 转成 downany:// 深链打开本机下载器。 */
 (function () {
   "use strict";
   var params = new URLSearchParams(location.search);
@@ -7,5 +7,5 @@
     document.body.textContent = "无效链接";
     return;
   }
-  location.href = "videodl://add?url=" + encodeURIComponent(pageUrl);
+  location.href = "downany://add?url=" + encodeURIComponent(pageUrl);
 })();

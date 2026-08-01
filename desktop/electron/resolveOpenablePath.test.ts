@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("resolveOpenablePath", () => {
   it("prefers merged mp4 when fragment path is recorded", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "videodl-open-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-open-"));
     tmpDirs.push(dir);
     const finalPath = path.join(dir, "demo.mp4");
     fs.writeFileSync(finalPath, "x");

@@ -66,7 +66,7 @@ def test_migration_copies_config_and_history(tmp_path):
     )
     _write_old_history(history)
 
-    paths = AppPaths(data_dir=tmp_path / "VideoDownloader", log_dir=tmp_path / "logs")
+    paths = AppPaths(data_dir=tmp_path / "Downany", log_dir=tmp_path / "logs")
     result = run_migration(paths, home=home, old_plist=plist, old_history=history)
     assert result["status"] == "migrated"
 
@@ -88,12 +88,40 @@ def test_migration_copies_config_and_history(tmp_path):
     assert again["status"] == "skipped"
 
 
+def test_migration_from_videodownloader_app_support(tmp_path):
+    home = tmp_path / "home"
+    old = home / "Library" / "Application Support" / "VideoDownloader"
+    old.mkdir(parents=True)
+    (old / "config.json").write_text(
+        '{"download_dir": "/tmp/VideoDownloader", "concurrent_downloads": 4}',
+        encoding="utf-8",
+    )
+    _write_old_history(old / "history.db")
+
+    paths = AppPaths(data_dir=tmp_path / "Downany", log_dir=tmp_path / "logs")
+    result = run_migration(
+        paths,
+        home=home,
+        old_plist=tmp_path / "missing.plist",
+        old_history=tmp_path / "missing.db",
+    )
+    assert result["status"] == "migrated"
+    assert paths.config_path.is_file()
+    cfg = JsonConfig(str(paths.config_path))
+    assert cfg.get_concurrent_downloads() == 4
+    assert "Downany" in cfg.get_download_dir()
+    with sqlite3.connect(paths.history_db_path) as conn:
+        row = conn.execute("SELECT id FROM download_history WHERE id='r1'").fetchone()
+        assert row is not None
+
+
 def test_migration_no_old_data(tmp_path):
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
     missing_plist = tmp_path / "no.plist"
     missing_hist = tmp_path / "no.db"
     result = run_migration(
         paths,
+        home=tmp_path / "empty-home",
         old_plist=missing_plist,
         old_history=missing_hist,
     )
