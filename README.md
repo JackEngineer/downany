@@ -1,6 +1,6 @@
 # 视频下载器（VideoDownloader）
 
-macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。PyQt6 / SwiftUI 已冻结于 [`legacy/`](legacy/)，不再新增功能。
+macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
 ## 功能
 
@@ -14,9 +14,9 @@ macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desk
 - **浏览器抓取窗口**：登录墙 / 纯 HLS 页可用内置浏览器嗅探入队
 - **CLI**：`./scripts/videodl add <url> [--audio] [--quality 1080p] [--detach]`
 
-> 站内搜索 / 应用内预览仍在冻结的 PyQt 线（`legacy/`）；Electron 主线聚焦下载命令中心，路线见 [docs/roadmap.md](docs/roadmap.md)。
+路线图见 [docs/roadmap.md](docs/roadmap.md)。
 
-## 快速开始（Electron 主线）
+## 快速开始
 
 ```bash
 ./scripts/install_env.sh
@@ -56,24 +56,13 @@ python -m src.sidecar
 
 会打开已预装扩展的独立 Chrome 窗口，或重启主 Chrome 加载扩展；点工具栏图标可查看嗅探到的媒体并勾选下载。细节见 [browser-extension/README.md](browser-extension/README.md)。
 
-## 冻结的旁线（legacy）
-
-PyQt / Swift 代码在 [`legacy/`](legacy/)。日常请用 Electron 主线。若需启动旧 PyQt：
-
-```bash
-./scripts/start_app.sh --pyqt
-# 或：python legacy/main.py
-```
-
-
 ## 架构
 
 ```
 desktop/           # Electron Main / Preload / React 命令中心
 src/sidecar/       # JSON Lines Sidecar（无 Qt）
 src/core/          # 下载调度、yt-dlp、解析、平台识别
-src/data/          # SQLite、JsonConfig / 旧 QSettings
-legacy/            # 已冻结：PyQt UI、SwiftUI、旧 UI 测试
+src/data/          # SQLite、JsonConfig
 packaging/         # Sidecar PyInstaller 规格
 ```
 

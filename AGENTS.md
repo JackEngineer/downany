@@ -5,7 +5,6 @@
 macOS 视频下载器（产品名 **视频下载器** / `VideoDownloader`）：
 
 - **唯一产品主线**：`desktop/` + `src/sidecar/`（JSON Lines）+ yt-dlp
-- **已冻结**：`legacy/`（原 PyQt `src/ui`、SwiftUI `swift-app`、`tests/ui`）——勿新增功能
 
 ## 开发命令
 

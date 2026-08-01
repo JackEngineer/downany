@@ -46,7 +46,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 
 | # | 任务 | 落点 |
 |---|---|---|
-| 0.1 | 冻结 PyQt 与 Swift 线：移入 `legacy/` 或独立分支，README / AGENTS.md 声明主线唯一 | `src/ui/`、`swift-app/`、`tests/ui/` |
+| 0.1 | 移除 PyQt / Swift 旁线，README / AGENTS.md 声明 Electron 主线唯一 | 已删除 `legacy/` |
 | 0.2 | CI 覆盖主线：`tsc --noEmit`、`npm test`、`npm run build`、扩展 `shared.test.js`；pytest 收窄到 `tests/core tests/data tests/sidecar` | `.github/workflows/ci.yml` |
 | 0.3 | 签名 + 公证走通，产出可分发 DMG | `scripts/notarize_macos.sh`、`desktop/electron-builder.yml` |
 | 0.4 | 应用自更新通道（electron-updater + 更新 feed），设置页可查看/触发 | `desktop/electron/`、`SettingsApp.tsx` |
