@@ -718,6 +718,7 @@ async function sendItemsToDownloader(
       url: finalUrl,
       title: raw.title || "",
       pageUrl,
+      thumbnail_url: raw.thumbnail_url || raw.thumbnailUrl || "",
       type: raw.type || "",
       viaPage,
       headers,

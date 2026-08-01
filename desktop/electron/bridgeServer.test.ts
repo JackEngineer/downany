@@ -47,6 +47,36 @@ describe("parseEnqueueBody", () => {
     ]);
   });
 
+  it("parses pageUrl and thumbnail_url", () => {
+    expect(
+      parseEnqueueBody(
+        JSON.stringify({
+          items: [
+            {
+              url: "https://sns-video-bd.xhscdn.com/a.mp4",
+              title: "笔记 - 小红书",
+              pageUrl: "https://www.xiaohongshu.com/explore/abc",
+              thumbnail_url: "https://sns-webpic-qc.xhscdn.com/cover.jpg",
+              headers: {
+                Referer: "https://www.xiaohongshu.com/explore/abc",
+              },
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        url: "https://sns-video-bd.xhscdn.com/a.mp4",
+        title: "笔记 - 小红书",
+        pageUrl: "https://www.xiaohongshu.com/explore/abc",
+        thumbnail_url: "https://sns-webpic-qc.xhscdn.com/cover.jpg",
+        headers: {
+          Referer: "https://www.xiaohongshu.com/explore/abc",
+        },
+      },
+    ]);
+  });
+
   it("dedupes url across items and legacy fields", () => {
     expect(
       parseEnqueueBody(

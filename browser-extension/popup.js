@@ -487,6 +487,17 @@ enqueueBtn.addEventListener("click", async () => {
   const pageCanonical = preferPage
     ? normalizeYtdlpPageUrl(currentUrl)
     : currentUrl;
+  let pageThumb = "";
+  try {
+    const thumbInfo = await chrome.tabs.sendMessage(currentTabId, {
+      type: "pageThumbnail",
+    });
+    if (thumbInfo && thumbInfo.thumbnail_url) {
+      pageThumb = String(thumbInfo.thumbnail_url);
+    }
+  } catch {
+    // content script 未就绪时忽略
+  }
   const items = mediaItems
     .filter((m) => selected.has(m.url))
     .map((m) => ({
@@ -494,6 +505,7 @@ enqueueBtn.addEventListener("click", async () => {
       type: m.type || "",
       title: m.title || m.pageTitle || currentTitle,
       pageUrl: preferPage ? pageCanonical : m.pageUrl || currentUrl,
+      thumbnail_url: pageThumb || m.thumbnail_url || "",
       detectedAt: m.detectedAt || 0,
       forcePage: !!m.nowPlaying || preferPage,
     }));
@@ -547,12 +559,30 @@ enqueuePageBtn.addEventListener("click", async () => {
   setStatus("", "");
 
   try {
+    let pageThumb = "";
+    try {
+      const thumbInfo = await chrome.tabs.sendMessage(currentTabId, {
+        type: "pageThumbnail",
+      });
+      if (thumbInfo && thumbInfo.thumbnail_url) {
+        pageThumb = String(thumbInfo.thumbnail_url);
+      }
+    } catch {
+      // ignore
+    }
     const result = await chrome.runtime.sendMessage({
       type: "enqueue",
       url: pageUrl,
       pageUrl,
       skipVerify: true,
-      items: [{ url: pageUrl, title: currentTitle, pageUrl }],
+      items: [
+        {
+          url: pageUrl,
+          title: currentTitle,
+          pageUrl,
+          thumbnail_url: pageThumb,
+        },
+      ],
     });
     if (result && result.ok) {
       enqueuePageBtn.textContent = "已发送";

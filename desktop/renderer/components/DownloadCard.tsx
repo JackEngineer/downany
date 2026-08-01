@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getLocale, t } from "../i18n";
 import { openExtractWindow, openPath, openSettings, request } from "../lib/api";
-import { formatBytes, statusLabel } from "../lib/format";
+import { formatBytes, platformLabel, statusLabel } from "../lib/format";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 
@@ -15,7 +15,7 @@ const POSTPROCESSING_OPTIONS = [
 
 function Thumbnail({ task }: { task: TaskSnapshot }) {
   const [broken, setBroken] = useState(false);
-  const initial = (task.platform || task.title || "视").slice(0, 1);
+  const initial = (platformLabel(task.platform) || task.title || "视").slice(0, 1);
   if (task.thumbnail_url && !broken) {
     return (
       <img
@@ -322,7 +322,7 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
           </strong>
         )}
         <div className="muted card-subtitle">
-          {task.platform || "未知平台"} · {statusLabel(task.status)}
+          {platformLabel(task.platform)} · {statusLabel(task.status)}
           {task.error_message ? ` · ${task.error_message}` : ""}
         </div>
         {(qBadge || pBadge || (task.priority ?? 0) > 0) && (

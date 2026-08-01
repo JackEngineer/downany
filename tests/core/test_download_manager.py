@@ -494,6 +494,46 @@ def test_page_task_with_title_still_prefills_missing_thumbnail(manager):
     assert task.video_info.thumbnail_url.endswith("a.jpg")
 
 
+def test_xiaohongshu_cdn_uses_referer_page_for_thumbnail(manager):
+    """小红书 CDN 直链：用 Referer 页面补封面/平台，但保留 CDN 下载 URL。"""
+    from src.core.download_task import Platform
+
+    task = _make_task(
+        url="https://sns-video-bd.xhscdn.com/stream/abc.mp4",
+        title="每天从这里醒来该有多快乐 - 小红书",
+    )
+    task.options.http_headers = {
+        "Referer": "https://www.xiaohongshu.com/explore/6411cf99000000001300b6d9",
+    }
+    extracted = VideoInfo(
+        url="https://www.xiaohongshu.com/explore/6411cf99000000001300b6d9",
+        title="页面真实标题",
+        thumbnail_url="https://sns-webpic-qc.xhscdn.com/cover.jpg",
+        uploader="5c31698d0000000007018a31",
+        platform=Platform.XIAOHONGSHU,
+    )
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract",
+        return_value=extracted,
+    ) as mock_extract:
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = None
+        instance.download.return_value = "/tmp/xhs.mp4"
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    mock_extract.assert_called()
+    assert mock_extract.call_args.args[0].startswith(
+        "https://www.xiaohongshu.com/explore/"
+    )
+    assert task.video_info.url.startswith("https://sns-video-bd.xhscdn.com/")
+    assert task.video_info.thumbnail_url.endswith("cover.jpg")
+    assert task.video_info.platform == Platform.XIAOHONGSHU
+    assert task.video_info.title == "每天从这里醒来该有多快乐 - 小红书"
+
+
 def test_instagram_weak_title_backfilled_from_description(manager):
     """Instagram 的 Video by / 站点名标题应被 description 文案替换。"""
     from src.core.download_task import Platform

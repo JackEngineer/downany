@@ -30,6 +30,14 @@ describe("thumbnailReferrer", () => {
     expect(out["User-Agent"]).toBe("test");
   });
 
+  it("injects Xiaohongshu Referer for xhscdn", () => {
+    const out = patchThumbnailRequestHeaders(
+      "https://sns-webpic-qc.xhscdn.com/cover.jpg",
+      { referer: "http://localhost:5173/" },
+    );
+    expect(out.Referer).toBe("https://www.xiaohongshu.com/");
+  });
+
   it("leaves other hosts unchanged", () => {
     const input = { Referer: "https://www.bilibili.com/" };
     expect(

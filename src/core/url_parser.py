@@ -190,7 +190,13 @@ class ParseSession:
             title=info.get("title") or "未命名视频",
             duration=int(duration) if duration else 0,
             thumbnail_url=info.get("thumbnail") or "",
-            uploader=info.get("uploader") or "未知",
+            uploader=(
+                info.get("uploader")
+                or info.get("channel")
+                or info.get("creator")
+                or info.get("uploader_id")
+                or "未知"
+            ),
             platform=PlatformDetector.detect(self.url),
             file_size=info.get("filesize", 0) or info.get("filesize_approx", 0) or 0,
             formats=summarize_formats(info.get("formats")),

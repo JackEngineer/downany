@@ -73,13 +73,20 @@ class VideoInfoExtractor:
             if duration is None:
                 duration = 0
 
+            uploader = (
+                info.get("uploader")
+                or info.get("channel")
+                or info.get("creator")
+                or info.get("uploader_id")
+                or "未知"
+            )
             video_info = VideoInfo(
                 url=url,
                 title=pick_title_from_ydl_info(info),
                 duration=int(duration) if duration else 0,
                 thumbnail_url=pick_thumbnail_from_ydl_info(info)
                 or normalize_thumbnail_url(info.get("thumbnail") or ""),
-                uploader=info.get("uploader") or "未知",
+                uploader=str(uploader),
                 platform=platform,
                 file_size=info.get("filesize", 0) or info.get("filesize_approx", 0) or 0,
                 formats=formats,

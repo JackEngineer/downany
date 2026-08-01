@@ -191,4 +191,24 @@ assert.ok(
   "status page may keep CDN (will collapse to 页面解析)",
 );
 
+const { pickPageThumbnail } = globalThis.VideoDlShared;
+const thumbDoc = {
+  querySelectorAll(sel) {
+    if (sel === "video") {
+      return [
+        { poster: "https://sns-webpic-qc.xhscdn.com/note/cover.jpg" },
+      ];
+    }
+    if (sel === "img[src]") return [];
+    return [];
+  },
+  querySelector() {
+    return null;
+  },
+};
+assert.strictEqual(
+  pickPageThumbnail(thumbDoc),
+  "https://sns-webpic-qc.xhscdn.com/note/cover.jpg",
+);
+
 console.log("shared.js title tests passed");

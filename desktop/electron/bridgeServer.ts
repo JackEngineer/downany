@@ -18,6 +18,8 @@ export type BridgeEnqueueItem = {
   quality?: string;
   audio_only?: boolean;
   download_subtitles?: boolean;
+  pageUrl?: string;
+  thumbnail_url?: string;
 };
 
 export type BridgeHandlers = {
@@ -72,6 +74,7 @@ function pushItem(
   url: string,
   title?: string,
   headers?: Record<string, string>,
+  extras?: { pageUrl?: string; thumbnail_url?: string },
 ): void {
   const trimmed = url.trim();
   if (!trimmed || seen.has(trimmed)) return;
@@ -79,6 +82,12 @@ function pushItem(
   const item: BridgeEnqueueItem = { url: trimmed };
   if (title && title.trim()) item.title = title.trim();
   if (headers) item.headers = headers;
+  if (extras?.pageUrl && extras.pageUrl.trim()) {
+    item.pageUrl = extras.pageUrl.trim();
+  }
+  if (extras?.thumbnail_url && extras.thumbnail_url.trim()) {
+    item.thumbnail_url = extras.thumbnail_url.trim();
+  }
   items.push(item);
 }
 
@@ -110,6 +119,20 @@ export function parseEnqueueBody(raw: string): BridgeEnqueueItem[] {
         rec.url,
         typeof rec.title === "string" ? rec.title : undefined,
         normalizeHeaders(rec.headers),
+        {
+          pageUrl:
+            typeof rec.pageUrl === "string"
+              ? rec.pageUrl
+              : typeof rec.page_url === "string"
+                ? rec.page_url
+                : undefined,
+          thumbnail_url:
+            typeof rec.thumbnail_url === "string"
+              ? rec.thumbnail_url
+              : typeof rec.thumbnailUrl === "string"
+                ? rec.thumbnailUrl
+                : undefined,
+        },
       );
     }
   }

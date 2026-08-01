@@ -28,6 +28,7 @@ class Platform(Enum):
     TWITTER = "twitter"
     INSTAGRAM = "instagram"
     PORNHUB = "pornhub"
+    XIAOHONGSHU = "xiaohongshu"
     UNKNOWN = "unknown"
 
 

@@ -3,9 +3,11 @@
  * 否则返回 403。Electron 页面源是 localhost/file，默认 Referer 无效；
  * 且 UI 对 B 站封面使用 no-referrer，会一并去掉 Referer。
  * 在 webRequest 里对 phncdn 强制注入 Referer。
+ * 小红书封面 CDN（*.xhscdn.com）同理需要 xiaohongshu.com Referer。
  */
 
 const PORNHUB_REFERRER = "https://www.pornhub.com/";
+const XIAOHONGSHU_REFERRER = "https://www.xiaohongshu.com/";
 
 export function needsPornhubThumbnailReferrer(url: string): boolean {
   try {
@@ -16,11 +18,25 @@ export function needsPornhubThumbnailReferrer(url: string): boolean {
   }
 }
 
+export function needsXiaohongshuThumbnailReferrer(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "xhscdn.com" || host.endsWith(".xhscdn.com");
+  } catch {
+    return false;
+  }
+}
+
 export function patchThumbnailRequestHeaders(
   url: string,
   requestHeaders: Record<string, string>,
 ): Record<string, string> {
-  if (!needsPornhubThumbnailReferrer(url)) {
+  let referer = "";
+  if (needsPornhubThumbnailReferrer(url)) {
+    referer = PORNHUB_REFERRER;
+  } else if (needsXiaohongshuThumbnailReferrer(url)) {
+    referer = XIAOHONGSHU_REFERRER;
+  } else {
     return requestHeaders;
   }
   const headers: Record<string, string> = { ...requestHeaders };
@@ -30,6 +46,6 @@ export function patchThumbnailRequestHeaders(
       delete headers[key];
     }
   }
-  headers.Referer = PORNHUB_REFERRER;
+  headers.Referer = referer;
   return headers;
 }

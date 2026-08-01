@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "./ConfirmDialog";
 import { openPath, request } from "../lib/api";
+import { platformLabel } from "../lib/format";
 import type { HistoryItem } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 
@@ -138,7 +139,7 @@ export function HistorySection() {
                 <div className="grow">
                   <strong>{item.title}</strong>
                   <div className="muted">
-                    {item.platform} · {item.status}
+                    {platformLabel(item.platform)} · {item.status}
                   </div>
                 </div>
                 <div className="card-actions">

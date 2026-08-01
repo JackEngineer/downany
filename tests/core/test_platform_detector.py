@@ -30,6 +30,35 @@ def test_detect_with_referer_for_cdn():
     )
 
 
+def test_xiaohongshu_page_cdn_and_title():
+    assert (
+        PlatformDetector.detect(
+            "https://www.xiaohongshu.com/explore/6411cf99000000001300b6d9"
+        )
+        == Platform.XIAOHONGSHU
+    )
+    assert (
+        PlatformDetector.detect(
+            "https://sns-video-bd.xhscdn.com/stream/110/258/01e48.mp4"
+        )
+        == Platform.XIAOHONGSHU
+    )
+    assert (
+        PlatformDetector.detect_with_context(
+            "https://sns-video-bd.xhscdn.com/a.mp4",
+            referer="https://www.xiaohongshu.com/explore/abc",
+        )
+        == Platform.XIAOHONGSHU
+    )
+    assert (
+        PlatformDetector.detect_with_context(
+            "https://cdn.example/a.mp4",
+            title="每天从这里醒来该有多快乐 - 小红书",
+        )
+        == Platform.XIAOHONGSHU
+    )
+
+
 def test_normalize_thumbnail_upgrades_http():
     assert (
         normalize_thumbnail_url("http://i0.hdslb.com/bfs/archive/abc.jpg")

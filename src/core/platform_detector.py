@@ -95,6 +95,12 @@ class PlatformDetector:
             # 直链 CDN（扩展嗅探常落到这里）
             r"(?:https?://)?(?:[\w.-]+\.)?phncdn\.com/",
         ],
+        Platform.XIAOHONGSHU: [
+            r"(?:https?://)?(?:www\.)?xiaohongshu\.com/",
+            r"(?:https?://)?(?:www\.)?xhslink\.com/",
+            # 视频 / 封面 CDN（扩展嗅探常落到这里）
+            r"(?:https?://)?(?:[\w.-]+\.)?xhscdn\.com/",
+        ],
     }
 
     # 平台图标 (emoji)
@@ -106,6 +112,7 @@ class PlatformDetector:
         Platform.TWITTER: "🐦",
         Platform.INSTAGRAM: "📷",
         Platform.PORNHUB: "🔞",
+        Platform.XIAOHONGSHU: "📕",
         Platform.UNKNOWN: "🌐",
     }
 
@@ -118,6 +125,7 @@ class PlatformDetector:
         Platform.TWITTER: "#1DA1F2",
         Platform.INSTAGRAM: "#E4405F",
         Platform.PORNHUB: "#FF9900",
+        Platform.XIAOHONGSHU: "#FF2442",
         Platform.UNKNOWN: "#808080",
     }
 
@@ -162,6 +170,8 @@ class PlatformDetector:
             return Platform.PORNHUB
         if "bilibili" in text or "b23.tv" in text:
             return Platform.BILIBILI
+        if "小红书" in (title or "") or "xiaohongshu" in text or "xhslink" in text:
+            return Platform.XIAOHONGSHU
         return Platform.UNKNOWN
 
     @classmethod

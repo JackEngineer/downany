@@ -26,6 +26,7 @@ from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.interfaces import DownloadConfig, HistoryWriter
+from src.core.local_thumbnail import ensure_local_thumbnail
 from src.core.platform_detector import (
     PlatformDetector,
     normalize_thumbnail_url,
@@ -46,6 +47,29 @@ _MEDIA_URL_RE = re.compile(
     r"\.(m3u8|mpd|mp4|webm|mkv|mov|m4v|mp3|m4a|aac|flac|ogg|wav)(?:[?#]|$)",
     re.IGNORECASE,
 )
+
+
+def _referer_page_url(task: DownloadTask) -> str:
+    """扩展嗅探直链时，从 Referer 取可解析的页面 URL（用于补封面/平台）。"""
+    headers = task.options.http_headers or {}
+    if not isinstance(headers, dict):
+        return ""
+    referer = str(headers.get("Referer") or headers.get("referer") or "").strip()
+    if not referer or _MEDIA_URL_RE.search(referer):
+        return ""
+    if PlatformDetector.detect(referer) == Platform.UNKNOWN:
+        return ""
+    return referer
+
+
+def _pick_uploader_from_ydl_info(info: dict) -> str:
+    return str(
+        info.get("uploader")
+        or info.get("channel")
+        or info.get("creator")
+        or info.get("uploader_id")
+        or ""
+    ).strip()
 
 
 def sanitize_filename(name: str, fallback: str = "video") -> str:
@@ -411,23 +435,34 @@ class DownloadManager:
                     self._persist(task)
 
             # 补齐元数据（失败不阻断下载；X 失败时 VideoInfoExtractor 内会走 FxTwitter）
-            # 扩展常带真实标题但无封面：页面链接仍需预拉 thumbnail
+            # 扩展常带真实标题但无封面：页面链接仍需预拉 thumbnail；
+            # CDN 直链（小红书等）则用 Referer 页面补封面，且不改写下载 URL。
             needs_full_meta = is_weak_title(task.video_info.title)
             needs_thumb = not (task.video_info.thumbnail_url or "").strip()
             is_direct_media = bool(_MEDIA_URL_RE.search(task.video_info.url))
-            if needs_full_meta or (needs_thumb and not is_direct_media):
+            page_for_meta = _referer_page_url(task) if is_direct_media else ""
+            extract_url = ""
+            if is_direct_media and page_for_meta and (needs_full_meta or needs_thumb):
+                extract_url = page_for_meta
+            elif needs_full_meta or (needs_thumb and not is_direct_media):
+                extract_url = task.video_info.url
+            if extract_url:
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
-                    task.video_info.url,
+                    extract_url,
                     proxy=proxy,
                     http_headers=task.options.http_headers,
                 )
                 if info:
                     with self._lock:
+                        media_url = task.video_info.url
                         if needs_full_meta:
                             if task.video_info.thumbnail_url and not info.thumbnail_url:
                                 info.thumbnail_url = task.video_info.thumbnail_url
                             task.video_info = info
+                            # 直链任务用页面补元数据时，保留 CDN URL 供下载
+                            if is_direct_media and extract_url != media_url:
+                                task.video_info.url = media_url
                         else:
                             if info.thumbnail_url:
                                 task.video_info.thumbnail_url = info.thumbnail_url
@@ -441,6 +476,11 @@ class DownloadManager:
                                 info.title
                             ):
                                 task.video_info.title = info.title
+                            if (
+                                task.video_info.platform == Platform.UNKNOWN
+                                and info.platform != Platform.UNKNOWN
+                            ):
+                                task.video_info.platform = info.platform
                     self._persist(task)
                     self.events.emit("task_updated", {"task_id": task.id})
 
@@ -695,7 +735,7 @@ class DownloadManager:
             # 页面链接：用挑选后的标题；直链：仅在当前标题很弱时覆盖
             if title and (not is_direct or is_weak_title(task.video_info.title)):
                 task.video_info.title = title
-            uploader = str(ydl_info.get("uploader") or ydl_info.get("channel") or "").strip()
+            uploader = _pick_uploader_from_ydl_info(ydl_info)
             if uploader and (not is_direct or not task.video_info.uploader):
                 task.video_info.uploader = uploader
             thumb = pick_thumbnail_from_ydl_info(ydl_info)
@@ -721,6 +761,12 @@ class DownloadManager:
                 referer=referer or None,
                 title=task.video_info.title,
             )
+
+        # CDN 直链（小红书等）常无远端封面：从已下载文件抽帧
+        if not (task.video_info.thumbnail_url or "").strip() and file_path:
+            local_thumb = ensure_local_thumbnail(task.id, file_path)
+            if local_thumb:
+                task.video_info.thumbnail_url = local_thumb
 
         if task.video_info.title in _PLACEHOLDER_TITLES:
             fallback_info = getattr(downloader, "last_info", None)

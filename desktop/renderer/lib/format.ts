@@ -28,3 +28,30 @@ export function statusLabel(status: string): string {
       return status;
   }
 }
+
+export function platformLabel(platform: string | undefined | null): string {
+  const key = String(platform || "").trim().toLowerCase();
+  switch (key) {
+    case "youtube":
+      return "YouTube";
+    case "bilibili":
+      return "Bilibili";
+    case "douyin":
+      return "抖音";
+    case "tiktok":
+      return "TikTok";
+    case "twitter":
+      return "X";
+    case "instagram":
+      return "Instagram";
+    case "pornhub":
+      return "Pornhub";
+    case "xiaohongshu":
+      return "小红书";
+    case "unknown":
+    case "":
+      return "未知平台";
+    default:
+      return key;
+  }
+}

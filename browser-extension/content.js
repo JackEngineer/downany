@@ -11,6 +11,7 @@
     extractVisibleTitle,
     isWeakPageTitle,
     isInstagramPostUrl,
+    pickPageThumbnail,
   } = globalThis.VideoDlShared;
 
   let debounceTimer = null;
@@ -269,10 +270,20 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== "rescan") return false;
+    if (!message) return false;
+    if (message.type === "pageThumbnail") {
+      sendResponse({
+        thumbnail_url: pickPageThumbnail(document) || "",
+        pageUrl: location.href,
+        pageTitle: currentTitle(),
+      });
+      return false;
+    }
+    if (message.type !== "rescan") return false;
     sendResponse({
       pageUrl: location.href,
       pageTitle: currentTitle(),
+      thumbnail_url: pickPageThumbnail(document) || "",
       items: scanDom(document),
     });
     return false;

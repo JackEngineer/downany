@@ -23,7 +23,7 @@
 
   /** yt-dlp 有 extractor 的站点（空态提示用，范围比页面规则宽） */
   const YTDLP_FRIENDLY_HOST_RE =
-    /(^|\.)(x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|b23\.tv|douyin\.com|tiktok\.com|weibo\.com|weibo\.cn|instagram\.com|weixin\.qq\.com|pornhub\.com)$/i;
+    /(^|\.)(x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|b23\.tv|douyin\.com|tiktok\.com|weibo\.com|weibo\.cn|instagram\.com|weixin\.qq\.com|pornhub\.com|xiaohongshu\.com|xhslink\.com)$/i;
 
   const HTTP_RE = /^https?:\/\//i;
 
@@ -395,6 +395,58 @@
     return out;
   }
 
+  /**
+   * 从当前文档挑一张可用封面（video.poster / 站点 CDN 图 / 非占位 og:image）。
+   * 小红书等站 yt-dlp 页面解析常失败时，扩展侧封面是主要来源。
+   * @param {Document} doc
+   * @returns {string}
+   */
+  function pickPageThumbnail(doc) {
+    if (!doc) return "";
+    try {
+      const videos = doc.querySelectorAll("video");
+      for (const v of videos) {
+        const poster = String(v.poster || "").trim();
+        if (poster && HTTP_RE.test(poster)) return poster;
+      }
+
+      let best = "";
+      let bestArea = -1;
+      for (const img of doc.querySelectorAll("img[src]")) {
+        const src = String(img.currentSrc || img.src || "").trim();
+        if (!src || !HTTP_RE.test(src)) continue;
+        if (!/(xhscdn|sns-webpic|xiaohongshu\.com\/.*\.(jpg|jpeg|png|webp))/i.test(src)) {
+          continue;
+        }
+        if (/avatar|icon|logo|emoji|picasso-static|fe-platform/i.test(src)) continue;
+        const w = Number(img.naturalWidth || img.width || 0) || 0;
+        const h = Number(img.naturalHeight || img.height || 0) || 0;
+        const area = w * h;
+        if (area >= bestArea) {
+          bestArea = area;
+          best = src;
+        }
+      }
+      if (best) return best;
+
+      const og = doc.querySelector(
+        'meta[property="og:image"], meta[name="og:image"]',
+      );
+      let ogUrl = og ? String(og.getAttribute("content") || "").trim() : "";
+      if (ogUrl.startsWith("//")) ogUrl = "https:" + ogUrl;
+      if (
+        ogUrl &&
+        HTTP_RE.test(ogUrl) &&
+        !/picasso-static|fe-platform/i.test(ogUrl)
+      ) {
+        return ogUrl;
+      }
+    } catch {
+      // ignore
+    }
+    return "";
+  }
+
   globalThis.VideoDlShared = {
     YTDLP_PAGE_RES,
     YTDLP_FRIENDLY_HOST_RE,
@@ -412,5 +464,6 @@
     isOrphanTwitterCdn,
     classifyUrl,
     scanDom,
+    pickPageThumbnail,
   };
 })();

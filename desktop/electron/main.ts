@@ -7,11 +7,14 @@ import {
   Menu,
   Notification,
   nativeTheme,
+  net,
+  protocol,
   session,
   shell,
 } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type * as http from "node:http";
 
@@ -54,9 +57,69 @@ import {
   openExtractWindow,
 } from "./extractWindow";
 
+/** 本地抽帧封面：sidecar 写入 Downany 数据目录 thumbnails/{taskId}.jpg */
+const LOCAL_THUMB_SCHEME = "downany-thumb";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: LOCAL_THUMB_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
+]);
+
+/** 与 sidecar paths.py 对齐（Electron package name 是 downany-desktop，勿用 userData）。 */
+function resolveDownanyDataDir(): string {
+  const override = (
+    process.env.DOWNANY_DATA_DIR ||
+    process.env.VIDEODL_DATA_DIR ||
+    ""
+  ).trim();
+  if (override) return path.resolve(override);
+  return path.join(app.getPath("home"), "Library", "Application Support", "Downany");
+}
+
+function installLocalThumbnailProtocol(): void {
+  protocol.handle(LOCAL_THUMB_SCHEME, (request) => {
+    try {
+      const parsed = new URL(request.url);
+      const taskId = decodeURIComponent(
+        (parsed.hostname || parsed.pathname.replace(/^\/+/, "") || "").trim(),
+      );
+      if (!taskId || taskId.includes("..") || taskId.includes("/") || taskId.includes("\\")) {
+        return new Response("bad request", { status: 400 });
+      }
+      const filePath = path.join(
+        resolveDownanyDataDir(),
+        "thumbnails",
+        `${taskId}.jpg`,
+      );
+      if (!fs.existsSync(filePath)) {
+        return new Response("not found", { status: 404 });
+      }
+      return net.fetch(pathToFileURL(filePath).href);
+    } catch {
+      return new Response("error", { status: 500 });
+    }
+  });
+}
+
 function installThumbnailReferrerFix(): void {
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["*://*.phncdn.com/*", "*://phncdn.com/*"] },
+    {
+      urls: [
+        "*://*.phncdn.com/*",
+        "*://phncdn.com/*",
+        "*://*.xhscdn.com/*",
+        "*://xhscdn.com/*",
+      ],
+    },
     (details, callback) => {
       callback({
         requestHeaders: patchThumbnailRequestHeaders(
@@ -137,6 +200,8 @@ function dedupeItems(items: BridgeEnqueueItem[]): BridgeEnqueueItem[] {
       ...(item.quality ? { quality: item.quality } : {}),
       ...(item.audio_only ? { audio_only: item.audio_only } : {}),
       ...(item.download_subtitles ? { download_subtitles: item.download_subtitles } : {}),
+      ...(item.pageUrl ? { pageUrl: item.pageUrl } : {}),
+      ...(item.thumbnail_url ? { thumbnail_url: item.thumbnail_url } : {}),
     });
   }
   return unique;
@@ -200,6 +265,8 @@ async function flushEnqueueItems(
         quality: item.quality || undefined,
         audio_only: item.audio_only || undefined,
         download_subtitles: item.download_subtitles || undefined,
+        pageUrl: item.pageUrl || undefined,
+        thumbnail_url: item.thumbnail_url || undefined,
       })),
     });
     mainWindow?.webContents.send("app:navigate", "queue");
@@ -677,6 +744,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  installLocalThumbnailProtocol();
   installThumbnailReferrerFix();
   registerIpc();
   installMenu();
