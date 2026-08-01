@@ -4,7 +4,24 @@
 
 macOS 视频下载器（产品名 **视频下载器** / `VideoDownloader`）：
 
-- **唯一产品主线**：`desktop/` + `src/sidecar/`（JSON Lines）+ yt-dlp
+- **唯一产品主线**：Electron（`desktop/`）+ Python Sidecar（`src/sidecar/`，JSON Lines）+ yt-dlp
+- **旁线已删除**：无 PyQt / SwiftUI / `legacy/`；勿再引入
+- **附属**：`browser-extension/`（Chrome 嗅探入队）、`scripts/videodl`（CLI）
+
+## 仓库结构
+
+```
+desktop/             # Electron Main / Preload / React 命令中心
+src/sidecar/         # 协议循环、handlers、迁移、健康检查、更新
+src/core/            # 下载调度、yt-dlp、解析、平台识别
+src/data/            # SQLite、JsonConfig、queue_store
+src/cli/             # ./scripts/videodl 入口
+browser-extension/   # MV3 扩展 + sniff-core
+packaging/           # Sidecar PyInstaller（onedir）
+scripts/             # 环境、打包、公证、扩展加载
+docs/                # roadmap / BRANCHING / RELEASE / COMMERCIAL
+tests/{core,data,sidecar}/
+```
 
 ## 开发命令
 
@@ -12,34 +29,41 @@ macOS 视频下载器（产品名 **视频下载器** / `VideoDownloader`）：
 ./scripts/install_env.sh
 source venv/bin/activate
 
-# Electron
+# Electron（推荐）
 cd desktop && npm install && npm run dev
-# 或仓库根：npm run desktop
+# 仓库根：npm run desktop  或  ./scripts/start_app.sh
 
-# Sidecar 单独跑
+# Sidecar 单独跑（开发态 python -m，非打包二进制）
 python -m src.sidecar
 
-# 打包
-./scripts/build_macos_dmg.sh
+# 测试
+pytest tests/core tests/data tests/sidecar -q
+cd desktop && npm test && npm run build
+node browser-extension/shared.test.js
+
+# 打包（Sidecar 为 onedir，勿改回 onefile）
+./scripts/fetch_release_binaries.sh
+./scripts/build_sidecar.sh
+./scripts/build_macos_dmg.sh   # FETCH_BINS=0 BUILD_SIDECAR=0 可跳过前置步骤
 ```
 
 ## 架构要点
 
-- `src/sidecar/`：协议、handlers、迁移、yt-dlp 更新；stdout 仅协议行，日志走 stderr
-- `src/core/download_manager.py`：队列、并发、暂停/取消状态机（带锁）
-- `src/core/downloader.py`：yt-dlp 封装；失败必须向上抛出；`VIDEODL_BIN_DIR` 解析 ffmpeg
-- `src/data/json_config.py` / `database.py` / `queue_store.py`：Sidecar 持久化
-- `desktop/electron/`：Main、菜单、通知、Dock、窗口几何、打包态 Sidecar 启动
-
-数据目录：`~/Library/Application Support/VideoDownloader/`（可用 `VIDEODL_DATA_DIR` 覆盖）。
+- **进程模型**：Electron Main 拉起并监护 Sidecar；Renderer 只经 preload IPC；stdout 仅协议行，日志走 stderr
+- **Sidecar 握手**：启动后尽早 `hello`，再做迁移/恢复队列；打包态路径为 `resources/sidecar/VideoDownloaderSidecar/VideoDownloaderSidecar`
+- **下载核心**：`src/core/download_manager.py` 队列与状态机（带锁）；失败必须向上抛出
+- **ffmpeg**：`VIDEODL_BIN_DIR`；开发可用仓库/`install_ffmpeg`，发布用 `desktop/resources/bin`
+- **持久化**：`json_config.py` / `database.py` / `queue_store.py`；数据目录 `~/Library/Application Support/VideoDownloader/`（`VIDEODL_DATA_DIR` 可覆盖）
+- **迁移**：`migration.py` 可读旧 Trae plist / `~/.trae_downloader`；**新路径与发布产物不得出现 Trae 标识**
 
 ## 约定
 
-- UI 文案中文，标识符英文；发布产物无 Trae 标识
-- 默认 `noplaylist: True`
-- 暂停为中断下载 + 恢复入队（依赖 yt-dlp 续传），非流式 pause API
-- 不要内联 import；TS 对 enum/union 做 exhaustive switch
-- 提交时勿夹带无关 WIP
-- 分支：`feat/m{N}-{slug}` / `chore/{slug}`；见 [docs/BRANCHING.md](docs/BRANCHING.md)
+- UI 文案中文，标识符英文
+- 默认 `noplaylist: True`（播放列表能力按 roadmap 演进，勿擅自改默认语义）
+- 暂停 = 中断下载 + 恢复入队（yt-dlp 续传），非流式 pause API
+- 不要内联 import；TypeScript 对 enum/union 做 exhaustive `never` switch
+- 提交勿夹带无关 WIP；勿提交 `desktop/release/`、`venv/`、`bin/`、下载成品
+- 分支：`feat/m{N}-{slug}` / `chore/{slug}` / `fix/{slug}`；见 [docs/BRANCHING.md](docs/BRANCHING.md)
+- 产品差距与优先级：见 [docs/roadmap.md](docs/roadmap.md)
 
-更完整说明见 [README.md](README.md)、[docs/roadmap.md](docs/roadmap.md)。
+更完整说明见 [README.md](README.md)。
