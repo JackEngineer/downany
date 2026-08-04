@@ -31,6 +31,9 @@ def _make_task():
 
 def test_to_snapshot_copies_fields():
     task = _make_task()
+    task.group_id = "g1"
+    task.group_title = "合集"
+    task.playlist_index = 3
     snap = task.to_snapshot()
     assert snap.id == task.id
     assert snap.url == "https://example.com/v"
@@ -40,6 +43,9 @@ def test_to_snapshot_copies_fields():
     assert snap.progress == 42.5
     assert snap.downloaded_bytes == 1000
     assert snap.total_bytes == 2000
+    assert snap.group_id == "g1"
+    assert snap.group_title == "合集"
+    assert snap.playlist_index == 3
 
 
 def test_snapshot_is_immutable():

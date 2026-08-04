@@ -59,6 +59,9 @@ export interface TaskSnapshot {
   postprocessing?: string;
   priority?: number;
   queue_order?: number;
+  group_id?: string;
+  group_title?: string;
+  playlist_index?: number;
 }
 
 export interface AppSettings {
@@ -118,6 +121,16 @@ export interface PlaylistEntry {
   id?: string;
   title?: string;
   url: string;
+  index?: number | string;
+  thumbnail_url?: string;
+  /** "0" / false 表示 flat 解析判定不可用（已下架等） */
+  available?: boolean | string;
+}
+
+export interface PlaylistMeta {
+  id?: string;
+  title?: string;
+  count?: number;
 }
 
 export interface ParseResultEvent {
@@ -128,6 +141,7 @@ export interface ParseResultEvent {
   cancelled?: boolean;
   error?: string;
   entries?: PlaylistEntry[];
+  playlist?: PlaylistMeta;
   info?: {
     title: string;
     duration: number;

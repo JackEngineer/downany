@@ -34,6 +34,10 @@ _IG_ON_INSTAGRAM_RE = re.compile(
     r"^.+?\s+on\s+Instagram:\s*(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
+# B 站 flat 合集常把 BV 号当成标题，应在下载前/后用真实标题覆盖
+_BILIBILI_BVID_RE = re.compile(r"^BV[0-9A-Za-z]+$")
+# 旧版 av 号
+_BILIBILI_AVID_RE = re.compile(r"^av\d+$", re.IGNORECASE)
 
 
 def is_weak_title(title: str) -> bool:
@@ -46,6 +50,8 @@ def is_weak_title(title: str) -> bool:
     if _VIDEO_BY_RE.match(text):
         return True
     if _TEMPORARY_TITLE_RE.match(text):
+        return True
+    if _BILIBILI_BVID_RE.match(text) or _BILIBILI_AVID_RE.match(text):
         return True
     if _TAB_SUFFIX_X_RE.search(text) and len(text) <= 48:
         # 浏览器标签常见 "… / X"，不是推文正文

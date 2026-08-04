@@ -16,6 +16,7 @@ export const Methods = [
   "download.cancel",
   "download.retry",
   "download.remove",
+  "download.removeGroup",
   "download.clearFinished",
   "download.updateTask",
   "download.reorder",

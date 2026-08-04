@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractUrls } from "./urls";
+import { extractUrls, looksLikePlaylistUrl } from "./urls";
 
 describe("extractUrls", () => {
   it("extracts multiple urls and dedupes", () => {
@@ -16,5 +16,27 @@ describe("extractUrls", () => {
 
   it("returns empty for plain text", () => {
     expect(extractUrls("没有链接")).toEqual([]);
+  });
+});
+
+describe("looksLikePlaylistUrl", () => {
+  it("detects youtube playlist urls", () => {
+    expect(
+      looksLikePlaylistUrl(
+        "https://www.youtube.com/playlist?list=PLvAJTuxHphYqM-4WPDlnQduRE_Be3ZElw",
+      ),
+    ).toBe(true);
+    expect(
+      looksLikePlaylistUrl(
+        "https://www.youtube.com/watch?v=abc&list=PLxxxx",
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores plain single video urls", () => {
+    expect(looksLikePlaylistUrl("https://www.youtube.com/watch?v=abc")).toBe(
+      false,
+    );
+    expect(looksLikePlaylistUrl("https://youtu.be/abc")).toBe(false);
   });
 });

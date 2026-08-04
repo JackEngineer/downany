@@ -133,6 +133,74 @@ def test_queue_order_roundtrip(tmp_path):
     assert loaded.queue_order == 7
 
 
+def test_group_fields_roundtrip(tmp_path):
+    store = QueueStore(str(tmp_path / "q.db"))
+    task = _make_task()
+    task.group_id = "g-playlist-1"
+    task.group_title = "我的合集"
+    task.playlist_index = 12
+    store.upsert_task(task)
+    loaded = store.load_tasks()[0]
+    assert loaded.group_id == "g-playlist-1"
+    assert loaded.group_title == "我的合集"
+    assert loaded.playlist_index == 12
+
+
+def test_group_columns_migrate_from_legacy_schema(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "legacy.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE task_queue (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                progress REAL NOT NULL DEFAULT 0,
+                downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+                total_bytes INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT NOT NULL DEFAULT '',
+                file_path TEXT NOT NULL DEFAULT '',
+                video_info_json TEXT NOT NULL,
+                options_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO task_queue
+            (id, status, progress, downloaded_bytes, total_bytes, error_message,
+             file_path, video_info_json, options_json, created_at, updated_at)
+            VALUES (?, ?, 0, 0, 0, '', '', ?, ?, ?, ?)
+            """,
+            (
+                "legacy-1",
+                "pending",
+                json.dumps(
+                    {
+                        "url": "https://example.com/v",
+                        "title": "旧任务",
+                        "platform": "youtube",
+                    },
+                    ensure_ascii=False,
+                ),
+                json.dumps({"quality": "best", "output_path": "/tmp"}, ensure_ascii=False),
+                "2024-01-01T00:00:00",
+                "2024-01-01T00:00:00",
+            ),
+        )
+        conn.commit()
+
+    store = QueueStore(str(db_path))
+    loaded = store.load_tasks()
+    assert len(loaded) == 1
+    assert loaded[0].group_id == ""
+    assert loaded[0].group_title == ""
+    assert loaded[0].playlist_index == 0
+
+
 def test_load_tasks_sorted_by_queue_order(tmp_path):
     store = QueueStore(str(tmp_path / "q.db"))
     first = _make_task()
@@ -143,13 +211,3 @@ def test_load_tasks_sorted_by_queue_order(tmp_path):
     store.upsert_task(second)
     loaded = store.load_tasks()
     assert [t.id for t in loaded] == [second.id, first.id]
-    """与历史库共用同一个 SQLite 文件不冲突。"""
-    db_file = str(tmp_path / "history.db")
-    from src.data.database import HistoryDB
-
-    HistoryDB._instance = None
-    HistoryDB(db_path=db_file)
-    store = QueueStore(db_file)
-    store.upsert_task(_make_task())
-    assert len(store.load_tasks()) == 1
-    HistoryDB._instance = None

@@ -4,7 +4,7 @@ import types
 import pytest
 
 from src.core.download_manager import DownloadManager
-from src.core.download_task import Platform, VideoInfo
+from src.core.download_task import DownloadTask, Platform, TaskStatus, VideoInfo
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
@@ -60,6 +60,119 @@ def test_get_snapshot_and_create_tasks(tmp_path):
     snap = dispatch(ctx, Method.APP_GET_SNAPSHOT.value, {})
     assert len(snap["tasks"]) == 2
     assert "settings" in snap
+
+
+def test_create_tasks_accepts_playlist_group_fields(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {
+            "urls": [
+                "https://www.youtube.com/watch?v=a1",
+                "https://www.youtube.com/watch?v=a2",
+            ],
+            "items": [
+                {
+                    "url": "https://www.youtube.com/watch?v=a1",
+                    "title": "第一集",
+                    "group_id": "g-pl",
+                    "group_title": "周末合集",
+                    "playlist_index": 1,
+                },
+                {
+                    "url": "https://www.youtube.com/watch?v=a2",
+                    "title": "第二集",
+                    "group_id": "g-pl",
+                    "group_title": "周末合集",
+                    "playlist_index": 2,
+                },
+            ],
+        },
+    )
+    assert len(result["taskIds"]) == 2
+    snap = dispatch(ctx, Method.APP_GET_SNAPSHOT.value, {})
+    tasks = {t["url"]: t for t in snap["tasks"]}
+    assert tasks["https://www.youtube.com/watch?v=a1"]["group_id"] == "g-pl"
+    assert tasks["https://www.youtube.com/watch?v=a1"]["group_title"] == "周末合集"
+    assert tasks["https://www.youtube.com/watch?v=a1"]["playlist_index"] == 1
+    assert tasks["https://www.youtube.com/watch?v=a2"]["playlist_index"] == 2
+
+
+def test_create_tasks_auto_expands_playlist_url(tmp_path, monkeypatch):
+    from src.core.download_task import Platform, VideoInfo
+    from src.core.url_parser import ParseResult
+    import src.sidecar.handlers as handlers
+
+    class FakeSession:
+        def __init__(self, url, proxy=None, timeout=30.0, *, allow_playlist=False):
+            self.url = url
+            self.allow_playlist = allow_playlist
+
+        def run(self):
+            assert self.allow_playlist is True
+            return ParseResult(
+                info=VideoInfo(
+                    url=self.url,
+                    title="測試合集",
+                    platform=Platform.YOUTUBE,
+                ),
+                entries=[
+                    {"id": "a1", "title": "第一集", "url": "https://www.youtube.com/watch?v=a1", "index": "1"},
+                    {"id": "a2", "title": "", "url": "https://www.youtube.com/watch?v=5Bq0nj2RVu0", "index": "2"},
+                    {"id": "a3", "title": "第三集", "url": "https://www.youtube.com/watch?v=a3", "index": "3"},
+                ],
+                playlist={"id": "PLxxx", "title": "測試合集", "count": 3},
+            )
+
+    monkeypatch.setattr(handlers, "ParseSession", FakeSession)
+    ctx, _ = _ctx(tmp_path)
+    playlist = "https://www.youtube.com/playlist?list=PLxxx"
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": [playlist]},
+    )
+    assert len(result["taskIds"]) == 3
+    snap = dispatch(ctx, Method.APP_GET_SNAPSHOT.value, {})
+    tasks = snap["tasks"]
+    assert len(tasks) == 3
+    assert all(t["group_id"] for t in tasks)
+    assert all(t["group_title"] == "測試合集" for t in tasks)
+    assert {t["playlist_index"] for t in tasks} == {1, 2, 3}
+    untitled = next(t for t in tasks if "5Bq0nj2RVu0" in t["url"])
+    assert untitled["title"] == "a2"
+
+
+def test_create_tasks_skips_expand_when_client_already_grouped(tmp_path, monkeypatch):
+    import src.sidecar.handlers as handlers
+
+    def boom(*_a, **_k):
+        raise AssertionError("should not expand already-grouped items")
+
+    monkeypatch.setattr(handlers, "ParseSession", boom)
+    ctx, _ = _ctx(tmp_path)
+    playlist = "https://www.youtube.com/playlist?list=PLxxx"
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {
+            "urls": [playlist],
+            "items": [
+                {
+                    "url": playlist,
+                    "title": "整表",
+                    "group_id": "g-keep",
+                    "group_title": "保留",
+                    "playlist_index": 1,
+                }
+            ],
+        },
+    )
+    assert len(result["taskIds"]) == 1
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task.group_id == "g-keep"
+    assert task.video_info.url == playlist
 
 
 def test_create_tasks_normalizes_douyin_modal_id(tmp_path):
@@ -243,3 +356,33 @@ def test_download_reorder(tmp_path):
     by_id = {tid: tasks[tid].queue_order for tid in ids}
     assert by_id[ids[0]] == 1
     assert by_id[ids[1]] == 0
+
+
+def test_download_remove_group(tmp_path):
+    ctx, events = _ctx(tmp_path)
+    t1 = DownloadTask(
+        video_info=VideoInfo(url="https://example.com/1", title="一", platform=Platform.YOUTUBE),
+        group_id="g-del",
+        group_title="要删的合集",
+        playlist_index=1,
+    )
+    t1.status = TaskStatus.COMPLETED
+    t2 = DownloadTask(
+        video_info=VideoInfo(url="https://example.com/2", title="二", platform=Platform.YOUTUBE),
+        group_id="g-del",
+        group_title="要删的合集",
+        playlist_index=2,
+    )
+    t2.status = TaskStatus.PENDING
+    ctx.manager.add_task(t1)
+    ctx.manager.add_task(t2)
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_REMOVE_GROUP.value,
+        {"groupId": "g-del", "delete_files": False},
+    )
+    assert result["ok"] is True
+    assert set(result["removed"]) == {t1.id, t2.id}
+    assert ctx.manager.get_all_tasks() == {}
+    removed_events = [e for e in events if e[0] == "task.removed"]
+    assert len(removed_events) == 2

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getLocale, t } from "../i18n";
 import { openExtractWindow, openPath, openSettings, request } from "../lib/api";
-import { formatBytes, platformLabel, statusLabel } from "../lib/format";
+import { formatBytes, friendlyErrorMessage, platformLabel, statusLabel } from "../lib/format";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 
@@ -184,7 +184,7 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
   };
 
   const buildContextTemplate = () => {
-    const items: Array<{ id: string; label: string; enabled?: boolean; type?: string }> = [];
+    const items: Array<{ id: string; label: string; enabled?: boolean; type?: "separator" }> = [];
     items.push({ id: "rename", label: "重命名" });
     items.push({ id: "extract", label: t("menu.extract", locale) });
     if (showDownloadOptions) {
@@ -321,9 +321,9 @@ export function DownloadCard({ task }: { task: TaskSnapshot }) {
             {task.title || task.url}
           </strong>
         )}
-        <div className="muted card-subtitle">
+        <div className="muted card-subtitle" title={task.error_message || undefined}>
           {platformLabel(task.platform)} · {statusLabel(task.status)}
-          {task.error_message ? ` · ${task.error_message}` : ""}
+          {task.error_message ? ` · ${friendlyErrorMessage(task.error_message)}` : ""}
         </div>
         {(qBadge || pBadge || (task.priority ?? 0) > 0) && (
           <div className="card-badges">

@@ -87,10 +87,12 @@ class DownloadManager:
         config: DownloadConfig,
         db: HistoryWriter,
         queue_store: Optional[QueueStore] = None,
+        temp_dir: Optional[str] = None,
     ):
         self.config = config
         self.db = db
         self.queue_store = queue_store
+        self.temp_dir = (temp_dir or "").strip()
         self.events = EventEmitter()
         self._last_progress_persist: Dict[str, float] = {}
 
@@ -159,6 +161,10 @@ class DownloadManager:
         """把任务当前状态写入队列存储；失败只记日志，不影响下载。"""
         if self.queue_store is None:
             return
+        # 已被 force 移除的任务：下载线程收尾时可能仍会调用 _persist，勿写回库
+        with self._lock:
+            if task.id not in self.tasks:
+                return
         try:
             self.queue_store.upsert_task(task)
         except Exception as exc:
@@ -171,6 +177,86 @@ class DownloadManager:
             self.queue_store.remove_task(task_id)
         except Exception as exc:
             logger.error(f"删除持久化任务失败 {task_id}: {exc}")
+
+    def _delete_task_file(self, file_path: str) -> bool:
+        path = (file_path or "").strip()
+        if not path or not os.path.isfile(path):
+            return False
+        try:
+            os.remove(path)
+            parent = os.path.dirname(path)
+            # 合集子文件夹若已空则一并去掉，避免留下空目录
+            if parent and os.path.isdir(parent) and not os.listdir(parent):
+                try:
+                    os.rmdir(parent)
+                except OSError:
+                    pass
+            return True
+        except OSError as exc:
+            logger.warning("删除本地文件失败 %s: %s", path, exc)
+            return False
+
+    def remove_task(
+        self,
+        task_id: str,
+        *,
+        delete_files: bool = False,
+        force: bool = False,
+    ) -> bool:
+        """从列表移除任务。
+
+        默认只移除已结束任务。force=True 时会先标为取消并从队列摘除
+        （进行中线程收尾不再写回）。delete_files 仅删除该任务 file_path。
+        """
+        file_path = ""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return False
+            if not force:
+                if task.status in (
+                    TaskStatus.DOWNLOADING,
+                    TaskStatus.PENDING,
+                    TaskStatus.PAUSED,
+                ):
+                    return False
+                if task_id in self.active_tasks:
+                    return False
+            else:
+                if task.status not in (
+                    TaskStatus.COMPLETED,
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELLED,
+                ):
+                    task.status = TaskStatus.CANCELLED
+            file_path = task.file_path or ""
+            self.tasks.pop(task_id, None)
+        self._persist_remove(task_id)
+        if delete_files and file_path:
+            self._delete_task_file(file_path)
+        return True
+
+    def remove_group(
+        self,
+        group_id: str,
+        *,
+        delete_files: bool = False,
+    ) -> List[str]:
+        """移除同一 group_id 下全部任务，返回成功移除的 id 列表。"""
+        gid = (group_id or "").strip()
+        if not gid:
+            return []
+        with self._lock:
+            ids = [
+                task.id
+                for task in self.tasks.values()
+                if (task.group_id or "").strip() == gid
+            ]
+        removed: List[str] = []
+        for task_id in ids:
+            if self.remove_task(task_id, delete_files=delete_files, force=True):
+                removed.append(task_id)
+        return removed
 
     def add_task(self, task: DownloadTask):
         """添加任务到队列"""
@@ -251,20 +337,6 @@ class DownloadManager:
         """所有任务的不可变快照（锁内构建，锁外安全使用）。"""
         with self._lock:
             return [task.to_snapshot() for task in self.tasks.values()]
-
-    def remove_task(self, task_id: str) -> bool:
-        """从列表移除已结束任务（不中断进行中的下载）。"""
-        with self._lock:
-            task = self.tasks.get(task_id)
-            if not task:
-                return False
-            if task.status in (TaskStatus.DOWNLOADING, TaskStatus.PENDING, TaskStatus.PAUSED):
-                return False
-            if task_id in self.active_tasks:
-                return False
-            self.tasks.pop(task_id, None)
-        self._persist_remove(task_id)
-        return True
 
     def update_task(
         self,
@@ -633,7 +705,17 @@ class DownloadManager:
             # 直链任务：yt-dlp generic extractor 的 title 是 URL 文件名（hash/
             # manifest/index），输出文件无法分辨；用任务标题固定输出文件名。
             # 页面链接任务不设，让 yt-dlp 用其解析到的真实标题。
-            if (
+            # 播放列表分组：落到「列表名/序号 - 标题」子文件夹。
+            if task.group_title:
+                folder = sanitize_filename(task.group_title, fallback="playlist")
+                index = max(int(task.playlist_index or 0), 0)
+                prefix = f"{index:03d} - " if index > 0 else ""
+                opts["outtmpl"] = os.path.join(
+                    options.output_path,
+                    folder,
+                    f"{prefix}%(title)s.%(ext)s",
+                )
+            elif (
                 task.video_info.title not in _PLACEHOLDER_TITLES
                 and _MEDIA_URL_RE.search(task.video_info.url)
             ):
@@ -645,6 +727,10 @@ class DownloadManager:
                 opts["outtmpl"] = os.path.join(
                     options.output_path, options.filename_template
                 )
+
+            if self.temp_dir:
+                os.makedirs(self.temp_dir, exist_ok=True)
+                opts["paths"] = {"temp": self.temp_dir}
 
             file_path = downloader.download(task.video_info.url, opts)
 

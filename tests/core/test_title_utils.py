@@ -60,3 +60,17 @@ def test_x_tab_title_is_weak():
     assert is_weak_title("X")
     assert is_weak_title("Home / X")
     assert is_weak_title("Someone / X")
+
+
+def test_bilibili_bvid_is_weak_title():
+    assert is_weak_title("BV1AB6bBHEM4")
+    assert is_weak_title("av123456")
+    assert not is_weak_title("珍珠港：太平洋战争是怎么爆发的？【曼施坦因 新秩序】")
+
+
+def test_pick_title_replaces_bvid_with_real_title():
+    picked = pick_title_from_ydl_info(
+        {"title": "珍珠港：太平洋战争是怎么爆发的？【曼施坦因 新秩序】"},
+        current="BV1AB6bBHEM4",
+    )
+    assert "珍珠港" in picked

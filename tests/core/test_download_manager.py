@@ -287,6 +287,35 @@ def test_filename_template_used_as_outtmpl(manager):
     assert opts["outtmpl"].endswith("%(uploader)s-%(title)s.%(ext)s")
 
 
+def test_playlist_group_uses_subfolder_outtmpl(manager):
+    task = _make_task(url="https://www.youtube.com/watch?v=abc", title="第一集")
+    task.group_id = "g1"
+    task.group_title = "我的播放列表"
+    task.playlist_index = 5
+    opts = _run_one_task(manager, task)
+    outtmpl = opts["outtmpl"]
+    assert outtmpl.endswith("005 - %(title)s.%(ext)s")
+    assert "我的播放列表" in outtmpl
+
+
+def test_temp_dir_sets_paths_temp(tmp_path):
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+    mgr = DownloadManager(
+        config=config,
+        db=MagicMock(),
+        temp_dir=str(tmp_path / "tmpdir"),
+    )
+    mgr.start()
+    try:
+        task = _make_task(url="https://www.youtube.com/watch?v=abc")
+        opts = _run_one_task(mgr, task)
+        assert opts["paths"]["temp"] == str(tmp_path / "tmpdir")
+        assert (tmp_path / "tmpdir").is_dir()
+    finally:
+        mgr.stop(join_timeout=2)
+
+
 def test_script_postprocess_runs_after_completion(manager):
     task = _make_task()
     task.options.postprocessing = "script"
@@ -610,3 +639,45 @@ def test_concurrent_fragments_zero_omits_option(manager):
     task.options.concurrent_fragments = 0
     opts = _run_one_task(manager, task)
     assert "concurrent_fragment_downloads" not in opts
+
+
+def test_remove_group_force_and_optional_files(tmp_path):
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+    mgr = DownloadManager(config=config, db=MagicMock())
+    file_a = tmp_path / "合集名" / "001 - a.mp4"
+    file_b = tmp_path / "合集名" / "002 - b.mp4"
+    file_a.parent.mkdir(parents=True)
+    file_a.write_text("a")
+    file_b.write_text("b")
+
+    t1 = _make_task(url="https://example.com/1", title="a")
+    t1.group_id = "g1"
+    t1.group_title = "合集名"
+    t1.status = TaskStatus.COMPLETED
+    t1.file_path = str(file_a)
+    t2 = _make_task(url="https://example.com/2", title="b")
+    t2.group_id = "g1"
+    t2.group_title = "合集名"
+    t2.status = TaskStatus.PENDING
+    t2.file_path = str(file_b)
+    with mgr._lock:
+        mgr.tasks[t1.id] = t1
+        mgr.tasks[t2.id] = t2
+
+    # 默认不删文件也能强制清队列（含 pending）
+    removed = mgr.remove_group("g1", delete_files=False)
+    assert set(removed) == {t1.id, t2.id}
+    assert mgr.get_all_tasks() == {}
+    assert file_a.is_file() and file_b.is_file()
+
+    t3 = _make_task(url="https://example.com/3", title="c")
+    t3.group_id = "g2"
+    t3.status = TaskStatus.COMPLETED
+    t3.file_path = str(file_a)
+    with mgr._lock:
+        mgr.tasks[t3.id] = t3
+    removed = mgr.remove_group("g2", delete_files=True)
+    assert removed == [t3.id]
+    assert not file_a.exists()
+    assert file_b.is_file()

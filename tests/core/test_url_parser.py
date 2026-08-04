@@ -42,6 +42,7 @@ def test_build_parse_command_includes_proxy():
 def test_build_parse_command_allows_playlist_when_requested():
     cmd = build_parse_command("https://example.com/playlist", allow_playlist=True)
     assert "--no-playlist" not in cmd
+    assert "--flat-playlist" in cmd
 
 
 def test_successful_parse(monkeypatch):
@@ -155,10 +156,12 @@ def test_twitter_parse_falls_back_to_fxtwitter(monkeypatch):
 
 def test_playlist_parse_returns_entries_summary(monkeypatch):
     payload = {
+        "id": "PL123",
         "title": "播放列表",
+        "playlist_title": "播放列表",
         "duration": 0,
         "entries": [
-            {"id": "a1", "title": "第一集", "url": "https://example.com/a1"},
+            {"id": "a1", "title": "第一集", "url": "https://example.com/a1", "playlist_index": 1},
             {"id": "a2", "title": "第二集", "webpage_url": "https://example.com/a2"},
         ],
     }
@@ -174,4 +177,93 @@ def test_playlist_parse_returns_entries_summary(monkeypatch):
     assert result.info.title == "播放列表"
     assert len(result.entries) == 2
     assert result.entries[0]["id"] == "a1"
+    assert result.entries[0]["index"] == "1"
+    assert result.entries[0]["available"] == "1"
     assert result.entries[1]["url"] == "https://example.com/a2"
+    assert result.entries[1]["index"] == "2"
+    assert result.playlist == {"id": "PL123", "title": "播放列表", "count": 2}
+
+
+def test_flat_playlist_synthesizes_youtube_watch_url(monkeypatch):
+    payload = {
+        "id": "PLabc",
+        "title": "合集",
+        "entries": [
+            {"id": "vid1", "title": "只有 id"},
+        ],
+    }
+    monkeypatch.setattr(
+        url_parser, "build_parse_command", lambda url, proxy=None, allow_playlist=False: _fake_command(payload)
+    )
+    session = ParseSession(
+        "https://www.youtube.com/playlist?list=PLabc",
+        timeout=10,
+        allow_playlist=True,
+    )
+    result = session.run()
+    assert result.entries[0]["url"] == "https://www.youtube.com/watch?v=vid1"
+    assert result.playlist["count"] == 1
+
+
+def test_flat_playlist_empty_title_still_available_for_bilibili(monkeypatch):
+    payload = {
+        "id": "season1",
+        "title": "合集",
+        "entries": [
+            {
+                "id": "BV1AB6bBHEM4",
+                "ie_key": "BiliBili",
+                "_type": "url",
+                "url": "https://www.bilibili.com/video/BV1AB6bBHEM4",
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None, allow_playlist=False: _fake_command(payload),
+    )
+    monkeypatch.setattr(
+        url_parser,
+        "fetch_bilibili_view",
+        lambda bvid, proxy=None: ("新秩序·第一集", "https://i0.hdslb.com/bfs/x.jpg"),
+    )
+    session = ParseSession(
+        "https://space.bilibili.com/1/lists/2?type=season",
+        timeout=10,
+        allow_playlist=True,
+    )
+    result = session.run()
+    assert result.entries[0]["available"] == "1"
+    assert result.entries[0]["title"] == "新秩序·第一集"
+    assert result.entries[0]["thumbnail_url"].endswith("x.jpg")
+    assert result.entries[0]["url"].endswith("BV1AB6bBHEM4")
+
+
+def test_enrich_bilibili_skips_non_empty_titles(monkeypatch):
+    called = []
+
+    def _fake(bvid, proxy=None):
+        called.append(bvid)
+        return ("补全", "")
+
+    monkeypatch.setattr(url_parser, "fetch_bilibili_view", _fake)
+    entries = [
+        {"id": "BV1AB6bBHEM4", "title": "已有", "url": "https://www.bilibili.com/video/BV1AB6bBHEM4"},
+        {"id": "BV1KfoABfEF4", "title": "", "url": "https://www.bilibili.com/video/BV1KfoABfEF4"},
+    ]
+    url_parser.enrich_bilibili_entry_titles(entries)
+    assert called == ["BV1KfoABfEF4"]
+    assert entries[0]["title"] == "已有"
+    assert entries[1]["title"] == "补全"
+
+
+def test_looks_like_playlist_url():
+    from src.core.url_parser import looks_like_playlist_url
+
+    assert looks_like_playlist_url(
+        "https://www.youtube.com/playlist?list=PLvAJTuxHphYqM-4WPDlnQduRE_Be3ZElw"
+    )
+    assert looks_like_playlist_url("https://www.youtube.com/watch?v=abc&list=PLxxx")
+    assert not looks_like_playlist_url("https://www.youtube.com/watch?v=abc")
+    assert not looks_like_playlist_url("https://youtu.be/abc")

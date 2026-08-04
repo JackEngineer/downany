@@ -29,6 +29,25 @@ export function statusLabel(status: string): string {
   }
 }
 
+/** 把 yt-dlp 长英文错误收成卡片可用的短中文。 */
+export function friendlyErrorMessage(message: string | undefined | null): string {
+  const raw = String(message || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("video unavailable") || lower.includes("removed by the uploader")) {
+    return "视频已下架或不可用";
+  }
+  if (lower.includes("private video") || lower.includes("private")) {
+    return "视频为私密，需要登录";
+  }
+  if (lower.includes("sign in") || lower.includes("login")) {
+    return "需要登录后才能下载";
+  }
+  // 去掉常见前缀，再截断
+  const cleaned = raw.replace(/^ERROR:\s*\[[^\]]+\]\s*/i, "").trim();
+  return cleaned.length > 80 ? `${cleaned.slice(0, 80)}…` : cleaned;
+}
+
 export function platformLabel(platform: string | undefined | null): string {
   const key = String(platform || "").trim().toLowerCase();
   switch (key) {

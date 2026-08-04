@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState, isOnboardingDismissed } from "./EmptyState";
+import { PlaylistGroupCard } from "./PlaylistGroupCard";
 import { isActiveStatus } from "../lib/format";
 import { getLocale, t } from "../i18n";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { DownloadCard } from "./DownloadCard";
+
+type QueueItem =
+  | { kind: "task"; task: TaskSnapshot }
+  | { kind: "group"; groupId: string; tasks: TaskSnapshot[] };
 
 function sortTasks(tasks: TaskSnapshot[]): TaskSnapshot[] {
   const rank = (t: TaskSnapshot): number => {
@@ -25,6 +30,23 @@ function sortTasks(tasks: TaskSnapshot[]): TaskSnapshot[] {
       const tb = b.completed_at || b.created_at;
       return tb.localeCompare(ta);
     });
+}
+
+function groupVisibleTasks(tasks: TaskSnapshot[]): QueueItem[] {
+  const items: QueueItem[] = [];
+  const seenGroups = new Set<string>();
+  for (const task of tasks) {
+    const groupId = (task.group_id || "").trim();
+    if (!groupId) {
+      items.push({ kind: "task", task });
+      continue;
+    }
+    if (seenGroups.has(groupId)) continue;
+    seenGroups.add(groupId);
+    const groupTasks = tasks.filter((t) => (t.group_id || "").trim() === groupId);
+    items.push({ kind: "group", groupId, tasks: groupTasks });
+  }
+  return items;
 }
 
 export function TaskList() {
@@ -55,10 +77,11 @@ export function TaskList() {
         (t) =>
           t.title.toLowerCase().includes(q) ||
           t.url.toLowerCase().includes(q) ||
-          t.platform.toLowerCase().includes(q),
+          t.platform.toLowerCase().includes(q) ||
+          (t.group_title || "").toLowerCase().includes(q),
       );
     }
-    return list;
+    return groupVisibleTasks(list);
   }, [tasks, filter, searchQuery, searchMode]);
 
   if (tasks.length === 0) {
@@ -82,9 +105,13 @@ export function TaskList() {
 
   return (
     <ul className="download-list">
-      {visible.map((task) => (
-        <DownloadCard key={task.id} task={task} />
-      ))}
+      {visible.map((item) =>
+        item.kind === "group" ? (
+          <PlaylistGroupCard key={item.groupId} tasks={item.tasks} />
+        ) : (
+          <DownloadCard key={item.task.id} task={item.task} />
+        ),
+      )}
     </ul>
   );
 }

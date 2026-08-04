@@ -34,6 +34,10 @@ class AppPaths:
     def history_db_path(self) -> Path:
         return self.data_dir / "history.db"
 
+    @property
+    def temp_dir(self) -> Path:
+        return self.data_dir / "tmp"
+
     @classmethod
     def default(cls) -> "AppPaths":
         override = _env_with_legacy("DOWNANY_DATA_DIR", "VIDEODL_DATA_DIR")
@@ -50,4 +54,5 @@ class AppPaths:
     def ensure(self) -> "AppPaths":
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
         return self

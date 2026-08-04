@@ -31,6 +31,7 @@ class Method(str, Enum):
     DOWNLOAD_CANCEL = "download.cancel"
     DOWNLOAD_RETRY = "download.retry"
     DOWNLOAD_REMOVE = "download.remove"
+    DOWNLOAD_REMOVE_GROUP = "download.removeGroup"
     DOWNLOAD_CLEAR_FINISHED = "download.clearFinished"
     DOWNLOAD_UPDATE_TASK = "download.updateTask"
     DOWNLOAD_REORDER = "download.reorder"

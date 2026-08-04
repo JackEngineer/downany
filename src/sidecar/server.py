@@ -52,7 +52,12 @@ class SidecarServer:
         config = JsonConfig(str(paths.config_path))
         db = HistoryDB(db_path=str(paths.history_db_path))
         store = QueueStore(str(paths.history_db_path))
-        manager = DownloadManager(config=config, db=db, queue_store=store)
+        manager = DownloadManager(
+            config=config,
+            db=db,
+            queue_store=store,
+            temp_dir=str(paths.temp_dir),
+        )
         manager.restore_tasks()
         manager.start()
 

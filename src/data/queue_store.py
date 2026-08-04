@@ -71,6 +71,24 @@ class QueueStore:
                 )
             except sqlite3.OperationalError:
                 pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN group_id TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN group_title TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN playlist_index INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
             conn.commit()
 
     def upsert_task(self, task: DownloadTask) -> None:
@@ -112,8 +130,8 @@ class QueueStore:
                 INSERT OR REPLACE INTO task_queue
                 (id, status, progress, downloaded_bytes, total_bytes, error_message,
                  error_code, file_path, video_info_json, options_json, created_at, updated_at,
-                 priority, queue_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 priority, queue_order, group_id, group_title, playlist_index)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task.id,
@@ -130,6 +148,9 @@ class QueueStore:
                     datetime.now().isoformat(),
                     task.priority,
                     task.queue_order,
+                    task.group_id,
+                    task.group_title,
+                    task.playlist_index,
                 ),
             )
             conn.commit()
@@ -234,5 +255,10 @@ class QueueStore:
             error_code=str(row["error_code"]) if "error_code" in row.keys() else "",
             priority=int(row["priority"]) if "priority" in row.keys() else 0,
             queue_order=int(row["queue_order"]) if "queue_order" in row.keys() else 0,
+            group_id=str(row["group_id"]) if "group_id" in row.keys() else "",
+            group_title=str(row["group_title"]) if "group_title" in row.keys() else "",
+            playlist_index=(
+                int(row["playlist_index"]) if "playlist_index" in row.keys() else 0
+            ),
             created_at=datetime.fromisoformat(row["created_at"]),
         )

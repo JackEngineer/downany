@@ -328,6 +328,185 @@ select {
   padding: 0;
 }
 
+.playlist-group {
+  margin: 10px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.playlist-group-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  flex-wrap: wrap;
+}
+
+.playlist-group-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  flex: 1;
+  min-width: min(100%, 220px);
+  padding: 0;
+  cursor: pointer;
+}
+
+.playlist-group-chevron {
+  width: 1em;
+  color: var(--muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.playlist-group-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.playlist-group-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.playlist-group-meta {
+  font-size: 12px;
+}
+
+.playlist-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.playlist-group-actions button,
+button.ghost-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  line-height: 1.3;
+}
+
+button.ghost-btn {
+  background: transparent;
+}
+
+button.ghost-btn:hover {
+  background: var(--hover);
+}
+
+.playlist-group-delete {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 16px;
+  align-items: end;
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+}
+
+.playlist-group-delete-copy {
+  min-width: 0;
+}
+
+.playlist-group-delete-copy strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.playlist-group-delete-copy p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.playlist-group-delete-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.playlist-group-delete-option em {
+  font-style: normal;
+  margin-left: 4px;
+}
+
+.playlist-group-delete-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+button.danger-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+}
+
+button.danger-btn:hover {
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+}
+
+button.solid-danger {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+}
+
+.playlist-group-progress {
+  height: 3px;
+  margin: 0;
+  border-radius: 0;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.playlist-group-progress > div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.playlist-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.playlist-group-list .download-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.playlist-group-list .card-thumb {
+  width: 80px;
+  height: 45px;
+}
+
+@media (max-width: 640px) {
+  .playlist-group-delete {
+    grid-template-columns: 1fr;
+  }
+
+  .playlist-group-delete-actions {
+    justify-content: flex-end;
+  }
+}
+
 .download-card {
   display: flex;
   gap: 12px;
@@ -385,6 +564,10 @@ select {
 .card-subtitle {
   font-size: 12px;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .card-meta {
@@ -498,9 +681,9 @@ select {
 
 .confirm-options {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
 }
 
@@ -517,6 +700,7 @@ select {
   align-items: center;
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 /* ── 空态 / 拖拽提示 ─────────────────────── */
@@ -852,6 +1036,7 @@ button.danger {
   display: grid;
   place-items: center;
   z-index: 60;
+  -webkit-app-region: no-drag;
 }
 
 .dialog {
@@ -860,30 +1045,78 @@ button.danger {
   border-radius: 14px;
   padding: 20px;
   border: 1px solid var(--line);
+  -webkit-app-region: no-drag;
 }
 
 .dialog-wide {
-  width: min(640px, calc(100vw - 32px));
+  width: min(680px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  max-height: min(86vh, 820px);
 }
 
 .dialog h2 {
   margin: 0 0 8px;
 }
 
+.dialog-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 .confirm-list {
   list-style: none;
-  margin: 12px 0 16px;
+  margin: 8px 0 0;
   padding: 0;
-  max-height: 50vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(50vh, 420px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .confirm-row {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 8px 0;
+  padding: 8px 2px;
   border-top: 1px solid var(--line);
+}
+
+.confirm-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.confirm-row-main:disabled {
+  cursor: default;
+}
+
+.confirm-row-main .muted {
+  font-size: 12px;
+}
+
+.confirm-row.confirm-row-compact {
+  padding: 7px 0;
+  gap: 8px;
+}
+
+.confirm-row.confirm-row-compact .card-thumb {
+  display: none;
 }
 
 .confirm-row strong {
@@ -891,6 +1124,111 @@ button.danger {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+}
+
+.confirm-row-unavailable {
+  opacity: 0.7;
+}
+
+.confirm-row-unavailable strong {
+  color: var(--muted);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.confirm-index {
+  min-width: 1.75em;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.confirm-playlist {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  overflow: hidden;
+}
+
+.confirm-playlist-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-solid) 70%, transparent);
+}
+
+.confirm-playlist-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.confirm-playlist-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.confirm-playlist-title .muted {
+  font-size: 12px;
+}
+
+.confirm-playlist-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.confirm-playlist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.confirm-playlist-actions button,
+.confirm-range button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.confirm-range {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.confirm-range-input {
+  width: 72px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.confirm-playlist-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+}
+
+.confirm-playlist-items .confirm-row {
+  border-top-color: color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.confirm-playlist-items .confirm-row:first-child {
+  border-top: 0;
 }
 
 .gate {

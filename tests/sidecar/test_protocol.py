@@ -23,6 +23,7 @@ def test_required_methods_exist():
         "download.cancel",
         "download.retry",
         "download.remove",
+        "download.removeGroup",
         "download.clearFinished",
         "download.updateTask",
         "download.reorder",

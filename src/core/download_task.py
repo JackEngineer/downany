@@ -96,6 +96,9 @@ class TaskSnapshot:
     postprocessing: str = "none"
     priority: int = 0
     queue_order: int = 0
+    group_id: str = ""
+    group_title: str = ""
+    playlist_index: int = 0
 
 
 @dataclass
@@ -115,6 +118,9 @@ class DownloadTask:
     error_code: str = ""  # 结构化失败码（见 error_codes）
     priority: int = 0  # 队列优先级，大的先下载
     queue_order: int = 0  # 队列顺序，小的先调度
+    group_id: str = ""  # 播放列表/合集分组；空表示独立任务
+    group_title: str = ""  # 分组显示名与落盘子文件夹名
+    playlist_index: int = 0  # 列表内序号（1-based）；0 表示非列表任务
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -170,4 +176,7 @@ class DownloadTask:
             postprocessing=self.options.postprocessing,
             priority=self.priority,
             queue_order=self.queue_order,
+            group_id=self.group_id,
+            group_title=self.group_title,
+            playlist_index=self.playlist_index,
         )

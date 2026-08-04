@@ -18,7 +18,13 @@ from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
 from src.core.twitter_fallback import is_twitter_url, normalize_twitter_url
-from src.core.url_parser import ParseCancelled, ParseFailed, ParseSession, ParseTimeout
+from src.core.url_parser import (
+    ParseCancelled,
+    ParseFailed,
+    ParseSession,
+    ParseTimeout,
+    looks_like_playlist_url,
+)
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.sidecar import ytdlp_updater
@@ -142,6 +148,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_CANCEL.value: _cancel,
         Method.DOWNLOAD_RETRY.value: _retry,
         Method.DOWNLOAD_REMOVE.value: _remove,
+        Method.DOWNLOAD_REMOVE_GROUP.value: _remove_group,
         Method.DOWNLOAD_CLEAR_FINISHED.value: _clear_finished,
         Method.DOWNLOAD_UPDATE_TASK.value: _update_task,
         Method.DOWNLOAD_REORDER.value: _reorder,
@@ -253,46 +260,179 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
     return opts
 
 
+def _find_item_for_url(
+    items: Any, original: str, url: str
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_raw = str(item.get("url") or "").strip()
+        item_norm = _normalize_inbound_url(item_raw)
+        if item_raw == original or item_raw == url or item_norm == url:
+            return item
+    return None
+
+
+def _expand_playlist_specs(
+    url: str,
+    *,
+    proxy: Optional[str],
+    base_options: DownloadOptions,
+    seed_item: Optional[Dict[str, Any]] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """把播放列表 URL 展成多条入队规格；失败或不足以展开时返回 None。"""
+    try:
+        result = ParseSession(
+            url,
+            proxy=proxy,
+            timeout=90.0,
+            allow_playlist=True,
+        ).run()
+    except (ParseCancelled, ParseTimeout, ParseFailed, Exception) as exc:
+        logger.warning("播放列表展开失败，回退单任务: %s (%s)", url, exc)
+        return None
+
+    entries = [e for e in result.entries if str(e.get("url") or "").strip()]
+    if len(entries) <= 1:
+        return None
+
+    group_id = str(uuid.uuid4())
+    group_title = str(
+        (result.playlist or {}).get("title")
+        or result.info.title
+        or "播放列表"
+    ).strip() or "播放列表"
+    seed_options = (
+        _build_item_options(base_options, seed_item)
+        if seed_item
+        else base_options
+    )
+    specs: List[Dict[str, Any]] = []
+    for entry in entries:
+        entry_url = str(entry.get("url") or "").strip()
+        entry_id = str(entry.get("id") or "").strip()
+        title = str(entry.get("title") or "").strip()
+        available = str(entry.get("available") or "1").strip() != "0"
+        if not available:
+            # 显式不可用（私密/下架标记）才跳过；无标题仍可入队（B 站 flat 常见）
+            continue
+        if not title:
+            title = entry_id or entry_url or "未命名视频"
+        try:
+            playlist_index = int(entry.get("index") or 0)
+        except (TypeError, ValueError):
+            playlist_index = 0
+        specs.append(
+            {
+                "url": entry_url,
+                "title": title,
+                "thumbnail_url": "",
+                "page_url": url,
+                "group_id": group_id,
+                "group_title": group_title,
+                "playlist_index": playlist_index,
+                "options": seed_options,
+            }
+        )
+    if len(specs) <= 1:
+        return None
+    return specs
+
+
 def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     urls = payload.get("urls") or []
     if not isinstance(urls, list) or not urls:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "urls 必须是非空数组")
     options = ctx.config.build_download_options()
-    task_ids: List[str] = []
+    proxy = ctx.config.get_proxy_for_download()
     items = payload.get("items")
+    expand_playlists = payload.get("expand_playlists")
+    if expand_playlists is None:
+        expand_playlists = payload.get("expandPlaylists")
+    # 默认开启：播放列表 URL 未经客户端展开时自动拆成多任务
+    should_expand = True if expand_playlists is None else bool(expand_playlists)
+
+    work: List[Dict[str, Any]] = []
     for raw in urls:
         original = str(raw or "").strip()
         url = _normalize_inbound_url(original)
         if not url:
             continue
+        item = _find_item_for_url(items, original, url)
+        already_grouped = bool(
+            item
+            and (
+                str(item.get("group_id") or "").strip()
+                or item.get("playlist_index") not in (None, "", 0, "0")
+            )
+        )
+        if (
+            should_expand
+            and not already_grouped
+            and looks_like_playlist_url(url)
+        ):
+            expanded = _expand_playlist_specs(
+                url,
+                proxy=proxy,
+                base_options=options,
+                seed_item=item,
+            )
+            if expanded:
+                work.extend(expanded)
+                continue
+
         title = "未命名视频"
         thumbnail_url = ""
         page_url = ""
-        # optional richer items: [{url, title, headers, thumbnail_url, format_id, ...}]
+        group_id = ""
+        group_title = ""
+        playlist_index = 0
         task_options = options
-        if isinstance(items, list):
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                item_raw = str(item.get("url") or "").strip()
-                item_norm = _normalize_inbound_url(item_raw)
-                if (
-                    item_raw != original
-                    and item_raw != url
-                    and item_norm != url
-                ):
-                    continue
-                if item.get("title"):
-                    title = str(item["title"])
-                if item.get("thumbnail_url"):
-                    thumbnail_url = normalize_thumbnail_url(str(item["thumbnail_url"]))
-                if item.get("pageUrl"):
-                    page_url = str(item["pageUrl"]).strip()
-                elif item.get("page_url"):
-                    page_url = str(item["page_url"]).strip()
-                task_options = _build_item_options(options, item)
-                break
+        if item:
+            if item.get("title"):
+                title = str(item["title"])
+            if item.get("thumbnail_url"):
+                thumbnail_url = normalize_thumbnail_url(str(item["thumbnail_url"]))
+            if item.get("pageUrl"):
+                page_url = str(item["pageUrl"]).strip()
+            elif item.get("page_url"):
+                page_url = str(item["page_url"]).strip()
+            if item.get("group_id"):
+                group_id = str(item["group_id"]).strip()
+            if item.get("group_title"):
+                group_title = str(item["group_title"]).strip()
+            raw_index = item.get("playlist_index")
+            if raw_index is not None and str(raw_index).strip() != "":
+                try:
+                    playlist_index = int(raw_index)
+                except (TypeError, ValueError):
+                    playlist_index = 0
+            task_options = _build_item_options(options, item)
+        work.append(
+            {
+                "url": url,
+                "title": title,
+                "thumbnail_url": thumbnail_url,
+                "page_url": page_url,
+                "group_id": group_id,
+                "group_title": group_title,
+                "playlist_index": playlist_index,
+                "options": task_options,
+            }
+        )
 
+    task_ids: List[str] = []
+    for spec in work:
+        url = str(spec["url"])
+        title = str(spec.get("title") or "未命名视频")
+        thumbnail_url = str(spec.get("thumbnail_url") or "")
+        page_url = str(spec.get("page_url") or "")
+        group_id = str(spec.get("group_id") or "")
+        group_title = str(spec.get("group_title") or "")
+        playlist_index = int(spec.get("playlist_index") or 0)
+        task_options = spec.get("options") or options
         referer = ""
         if task_options.http_headers and isinstance(task_options.http_headers, dict):
             referer = str(
@@ -314,6 +454,9 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
                 platform=platform,
             ),
             options=task_options,
+            group_id=group_id,
+            group_title=group_title,
+            playlist_index=playlist_index,
         )
         ctx.manager.add_task(task)
         task_ids.append(task.id)
@@ -351,10 +494,23 @@ def _retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _remove(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     task_id = _require_task_id(payload)
-    ok = ctx.manager.remove_task(task_id)
+    delete_files = bool(payload.get("delete_files") or payload.get("deleteFiles"))
+    force = bool(payload.get("force"))
+    ok = ctx.manager.remove_task(task_id, delete_files=delete_files, force=force)
     if ok:
         ctx.emit_event(EventName.TASK_REMOVED.value, {"taskId": task_id})
     return {"ok": ok}
+
+
+def _remove_group(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    group_id = str(payload.get("groupId") or payload.get("group_id") or "").strip()
+    if not group_id:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少 groupId")
+    delete_files = bool(payload.get("delete_files") or payload.get("deleteFiles"))
+    removed = ctx.manager.remove_group(group_id, delete_files=delete_files)
+    for task_id in removed:
+        ctx.emit_event(EventName.TASK_REMOVED.value, {"taskId": task_id})
+    return {"ok": True, "removed": removed}
 
 
 def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -480,6 +636,8 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
                     }
                     if result.entries:
                         event_payload["entries"] = result.entries
+                    if result.playlist:
+                        event_payload["playlist"] = result.playlist
                     ctx.emit_event(EventName.PARSE_RESULT.value, event_payload)
                 except ParseCancelled:
                     ctx.emit_event(
