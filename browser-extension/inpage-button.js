@@ -9,9 +9,11 @@
   const STORAGE_KEY = "inpageButtonEnabled";
   const MIN_W = 200;
   const MIN_H = 120;
-  const HIDE_DELAY_MS = 300;
+  const HIDE_DELAY_MS = 400;
   const DEDUPE_MS = 3000;
   const SUCCESS_RESET_MS = 2000;
+  const BTN_W = 88;
+  const BTN_OFFSET = 8;
 
   let enabled = true;
   /** @type {HTMLElement|null} */
@@ -22,11 +24,16 @@
   let btn = null;
   /** @type {HTMLElement|null} */
   let currentVideo = null;
+  /** @type {HTMLElement|null} */
+  let attachRoot = null;
+  /** @type {HTMLElement|null} */
+  let positionedByUs = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   let hideTimer = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   let resetTimer = null;
   let busy = false;
+  let pointerOnButton = false;
   /** @type {{key: string, at: number}|null} */
   let lastSend = null;
 
@@ -43,6 +50,73 @@
     return rect.width < MIN_W || rect.height < MIN_H;
   }
 
+  function isOurHost(node) {
+    return Boolean(
+      node &&
+        hostEl &&
+        (node === hostEl ||
+          (typeof hostEl.contains === "function" && hostEl.contains(node))),
+    );
+  }
+
+  /**
+   * 把按钮挂进视频祖先节点，才能让预览卡片的 :hover 在指针移到按钮时仍生效。
+   * 挂在 documentElement（fixed）会导致卡片失焦 → 预览缩回 → 闪烁。
+   */
+  function findAttachRoot(video) {
+    if (!video || !video.parentElement) return null;
+    const article = typeof video.closest === "function" ? video.closest("article") : null;
+    if (article) return article;
+
+    const vRect = video.getBoundingClientRect();
+    let node = video.parentElement;
+    let best = video.parentElement;
+    for (let i = 0; i < 10 && node && node !== document.body; i++) {
+      if (node === document.documentElement) break;
+      const r = node.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) {
+        node = node.parentElement;
+        continue;
+      }
+      const containsVideo =
+        r.left <= vRect.left + 1 &&
+        r.top <= vRect.top + 1 &&
+        r.right >= vRect.right - 1 &&
+        r.bottom >= vRect.bottom - 1;
+      if (!containsVideo) break;
+
+      best = node;
+      // 紧贴播放器外壳：足够盖住 video，又不会胀成整页卡片的外围空白
+      const tight =
+        r.width <= vRect.width * 1.35 && r.height <= vRect.height * 1.35;
+      if (tight) return node;
+      // 再大就容易碰到 overflow:hidden 裁切；停在上一个合适节点
+      if (r.width > vRect.width * 2.5 || r.height > vRect.height * 2.5) {
+        break;
+      }
+      node = node.parentElement;
+    }
+    return best;
+  }
+
+  function ensurePositioned(root) {
+    if (!root || !(root instanceof Element)) return;
+    const cs = window.getComputedStyle(root);
+    if (cs.position === "static") {
+      root.style.position = "relative";
+      positionedByUs = root;
+      root.setAttribute("data-downany-pos", "1");
+    }
+  }
+
+  function clearPositionedByUs() {
+    if (positionedByUs && positionedByUs.getAttribute("data-downany-pos") === "1") {
+      positionedByUs.style.position = "";
+      positionedByUs.removeAttribute("data-downany-pos");
+    }
+    positionedByUs = null;
+  }
+
   function ensureUi() {
     if (hostEl && btn) return;
     hostEl = document.createElement("div");
@@ -50,7 +124,7 @@
     hostEl.setAttribute("data-downany", "inpage");
     Object.assign(hostEl.style, {
       all: "initial",
-      position: "fixed",
+      position: "absolute",
       zIndex: "2147483646",
       top: "0",
       left: "0",
@@ -58,6 +132,10 @@
       height: "0",
       pointerEvents: "none",
       display: "none",
+      margin: "0",
+      padding: "0",
+      border: "0",
+      overflow: "visible",
     });
     shadow = hostEl.attachShadow({ mode: "closed" });
     shadow.innerHTML = `
@@ -121,10 +199,15 @@
       </button>
     `;
     btn = shadow.querySelector("button");
-    btn.addEventListener("mouseenter", cancelHide);
-    btn.addEventListener("mouseleave", scheduleHide);
+    btn.addEventListener("mouseenter", () => {
+      pointerOnButton = true;
+      cancelHide();
+    });
+    btn.addEventListener("mouseleave", () => {
+      pointerOnButton = false;
+      scheduleHide();
+    });
     btn.addEventListener("click", onClick);
-    document.documentElement.appendChild(hostEl);
   }
 
   function destroyUi() {
@@ -136,11 +219,14 @@
     if (hostEl && hostEl.parentNode) {
       hostEl.parentNode.removeChild(hostEl);
     }
+    clearPositionedByUs();
     hostEl = null;
     shadow = null;
     btn = null;
     currentVideo = null;
+    attachRoot = null;
     busy = false;
+    pointerOnButton = false;
   }
 
   function setLabel(text) {
@@ -198,25 +284,54 @@
     }, SUCCESS_RESET_MS);
   }
 
+  function mountOn(video) {
+    ensureUi();
+    const root = findAttachRoot(video);
+    if (!root || !hostEl) return false;
+
+    if (attachRoot !== root) {
+      clearPositionedByUs();
+      ensurePositioned(root);
+      root.appendChild(hostEl);
+      attachRoot = root;
+    } else if (hostEl.parentNode !== root) {
+      ensurePositioned(root);
+      root.appendChild(hostEl);
+    }
+    return true;
+  }
+
   function positionOver(video) {
-    if (!hostEl || !btn || !video) return;
-    const rect = video.getBoundingClientRect();
-    const top = Math.max(8, rect.top + 8);
-    const left = Math.min(
-      window.innerWidth - 110,
-      Math.max(8, rect.right - 96),
-    );
+    if (!hostEl || !btn || !video || !attachRoot) return;
+    const vRect = video.getBoundingClientRect();
+    const rRect = attachRoot.getBoundingClientRect();
+    // 绝对定位相对 attachRoot；保持在视频右上角内侧，避免 overflow 裁切
+    let top = vRect.top - rRect.top + BTN_OFFSET;
+    let left = vRect.right - rRect.left - BTN_W - BTN_OFFSET;
+    top = Math.max(0, top);
+    left = Math.max(0, Math.min(left, Math.max(0, rRect.width - BTN_W)));
+
     hostEl.style.display = "block";
-    hostEl.style.transform = `translate(${left}px, ${top}px)`;
+    hostEl.style.top = `${top}px`;
+    hostEl.style.left = `${left}px`;
+    hostEl.style.transform = "none";
     btn.classList.add("visible");
   }
 
   function showFor(video) {
-    if (!enabled || isFullscreen() || videoTooSmall(video)) {
+    if (!enabled || isFullscreen()) {
       hideNow();
       return;
     }
-    ensureUi();
+    // 指针已在按钮上时，忽略短暂尺寸抖动（预览缩放/失焦恢复帧）
+    if (videoTooSmall(video) && !pointerOnButton) {
+      hideNow();
+      return;
+    }
+    if (!mountOn(video)) {
+      hideNow();
+      return;
+    }
     currentVideo = video;
     if (!busy) {
       setState("idle", "下载", "用百纳下载");
@@ -229,6 +344,7 @@
     if (btn) btn.classList.remove("visible");
     if (hostEl) hostEl.style.display = "none";
     currentVideo = null;
+    pointerOnButton = false;
   }
 
   function cancelHide() {
@@ -242,18 +358,20 @@
     cancelHide();
     hideTimer = setTimeout(() => {
       hideTimer = null;
-      if (busy) return;
+      if (busy || pointerOnButton) return;
       hideNow();
     }, HIDE_DELAY_MS);
   }
 
   function findVideoFromTarget(target) {
     if (!target || typeof target.closest !== "function") return null;
+    if (isOurHost(target)) return currentVideo;
     const video = target.closest("video");
     if (video) return video;
     // 部分站点把控件放在 video 兄弟节点上：向上找最近 video
     let node = target;
     for (let i = 0; i < 5 && node; i++) {
+      if (isOurHost(node)) return currentVideo;
       if (typeof node.querySelector === "function") {
         const v = node.querySelector("video");
         if (v) return v;
@@ -265,6 +383,11 @@
 
   function onPointerOver(e) {
     if (!enabled || busy) return;
+    if (isOurHost(e.target)) {
+      pointerOnButton = true;
+      cancelHide();
+      return;
+    }
     const video = findVideoFromTarget(e.target);
     if (!video) return;
     cancelHide();
@@ -274,20 +397,41 @@
   function onPointerOut(e) {
     if (!enabled) return;
     const related = e.relatedTarget;
-    if (related && hostEl && (related === hostEl || hostEl.contains(related))) {
+    if (isOurHost(related) || (related && shadow && shadow.contains(related))) {
+      pointerOnButton = true;
+      cancelHide();
       return;
     }
-    if (related && shadow && shadow.contains(related)) {
-      return;
+    if (isOurHost(e.target)) {
+      pointerOnButton = false;
     }
     const nextVideo = findVideoFromTarget(related);
     if (nextVideo && nextVideo === currentVideo) return;
+    // 仍在同一挂载卡片内移动（预览控件 / 标题），不要藏按钮、也不要拆掉 hover
+    if (
+      currentVideo &&
+      attachRoot &&
+      related &&
+      typeof attachRoot.contains === "function" &&
+      attachRoot.contains(related)
+    ) {
+      cancelHide();
+      return;
+    }
     scheduleHide();
   }
 
   function onScrollOrResize() {
     if (currentVideo && hostEl && hostEl.style.display !== "none") {
-      if (videoTooSmall(currentVideo) || isFullscreen()) {
+      if (isFullscreen()) {
+        hideNow();
+        return;
+      }
+      if (videoTooSmall(currentVideo) && !pointerOnButton) {
+        hideNow();
+        return;
+      }
+      if (attachRoot && !attachRoot.isConnected) {
         hideNow();
         return;
       }
