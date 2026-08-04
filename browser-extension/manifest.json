@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "百纳",
-  "version": "0.5.10",
+  "version": "0.6.0",
   "description": "识别页面媒体后一键发送到本机百纳",
   "minimum_chrome_version": "102",
   "permissions": [
@@ -25,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["shared.js", "content.js"],
+      "js": ["shared.js", "content.js", "inpage-button.js"],
       "run_at": "document_idle"
     }
   ],

@@ -304,3 +304,21 @@ body {
   color: var(--muted);
   text-align: center;
 }
+
+.pref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pref input {
+  margin: 0;
+  accent-color: var(--primary);
+}

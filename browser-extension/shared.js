@@ -1,4 +1,4 @@
-/** 共享常量与纯函数：background(importScripts) / content.js / popup 三端复用。 */
+/** 共享常量与纯函数：background(importScripts) / content / inpage-button / popup 复用。 */
 (function () {
   "use strict";
   // 幂等：content script 重复注入 / executeScript 兜底时不重复声明
@@ -447,9 +447,164 @@
     return "";
   }
 
+  const VIDEO_PAGE_LINK_PATTERNS = [
+    /\/status\/\d+/, // X / Twitter
+    /\/watch\?v=/, // YouTube
+    /\/video\/(BV\w+|\d+)/i, // Bilibili / 抖音
+    /\/(p|reel|reels)\/[\w-]+/i, // Instagram
+  ];
+
+  const VIDEO_PAGE_HOST_RE =
+    /(^|\.)(x\.com|twitter\.com|youtube\.com|bilibili\.com|douyin\.com|instagram\.com)$/i;
+
+  /**
+   * 找到 video 所属的卡片，返回详情页链接与卡片内可读标题。
+   * @param {Element} video
+   * @param {{
+   *   hostname?: string,
+   *   href?: string,
+   *   origin?: string,
+   *   pathname?: string,
+   * }} [loc]
+   * @param {() => string} [getTitle]
+   * @returns {{pageUrl: string, title: string}|null}
+   */
+  function findVideoCard(video, loc, getTitle) {
+    if (!video) return null;
+    const locationLike = loc || {
+      hostname: "",
+      href: "",
+      origin: "",
+      pathname: "",
+    };
+    const hostname = String(locationLike.hostname || "");
+    const href = String(locationLike.href || "");
+    const origin = String(locationLike.origin || "");
+    const pathname = String(locationLike.pathname || "");
+    const resolveTitle =
+      typeof getTitle === "function" ? getTitle : () => String(getTitle || "");
+
+    if (!VIDEO_PAGE_HOST_RE.test(hostname)) return null;
+
+    // 抖音精选/发现 modal：URL 上的 modal_id 即当前视频
+    const douyinId = extractDouyinVideoId(href);
+    if (douyinId) {
+      return {
+        pageUrl: normalizeYtdlpPageUrl(href),
+        title: resolveTitle(),
+      };
+    }
+
+    let container = typeof video.closest === "function" ? video.closest("article") : null;
+    if (!container) {
+      // 向上找包含详情链接的祖先（最多 6 层）
+      let node = video.parentElement;
+      for (let i = 0; i < 6 && node; i++) {
+        if (
+          typeof node.querySelector === "function" &&
+          node.querySelector(
+            "a[href*='/status/'], a[href*='/watch'], a[href*='/video/'], a[href*='/reel/'], a[href*='/p/']",
+          )
+        ) {
+          container = node;
+          break;
+        }
+        node = node.parentElement;
+      }
+    }
+    if (!container) {
+      // 全屏 gallery 模式：X 点开视频后 URL 即变为 /status/{id}/photo/n，
+      // 去掉媒体序号尾巴，还原成可解析的详情页地址
+      if (/\/status\/\d+/.test(pathname)) {
+        const cleanPath = pathname.replace(/\/(photo|video)\/\d+$/, "");
+        return {
+          pageUrl: origin + cleanPath,
+          title: resolveTitle(),
+        };
+      }
+      return null;
+    }
+
+    let pageUrl = null;
+    // 只取属于本层卡片的链接，排除嵌套引用推文里的 /status/ 链接
+    const anchors = Array.from(
+      typeof container.querySelectorAll === "function"
+        ? container.querySelectorAll("a[href]")
+        : [],
+    ).filter(
+      (a) =>
+        typeof a.closest !== "function" ||
+        !a.closest("article") ||
+        a.closest("article") === container,
+    );
+    // 优先时间戳链接（指向本推文本身），再退回第一个匹配的链接
+    const tsLink = anchors.find(
+      (a) =>
+        typeof a.querySelector === "function" &&
+        a.querySelector("time") &&
+        /\/status\/\d+/.test(a.getAttribute("href") || ""),
+    );
+    const firstMatch = anchors.find((a) =>
+      VIDEO_PAGE_LINK_PATTERNS.some((re) => re.test(a.getAttribute("href") || "")),
+    );
+    const chosen = tsLink || firstMatch;
+    if (chosen) {
+      try {
+        const abs = new URL(chosen.getAttribute("href"), origin || href);
+        // /watch?v= 身份在 query；其余站点 id 在 path，去掉 query 即可
+        pageUrl = /\/watch/i.test(abs.pathname)
+          ? `${abs.origin}${abs.pathname}${abs.search || ""}`
+          : abs.href.split("?")[0];
+      } catch {
+        pageUrl = null;
+      }
+    }
+    if (!pageUrl) return null;
+
+    // 卡片内可读标题：X 推文文本 → YouTube 标题 → 链接 title 属性
+    // 同样排除嵌套引用块，避免与 pageUrl 错配
+    let title = "";
+    const ownTweetText = Array.from(
+      typeof container.querySelectorAll === "function"
+        ? container.querySelectorAll('[data-testid="tweetText"]')
+        : [],
+    ).find(
+      (t) =>
+        typeof t.closest !== "function" ||
+        !t.closest("article") ||
+        t.closest("article") === container,
+    );
+    if (ownTweetText && ownTweetText.textContent && ownTweetText.textContent.trim()) {
+      title = ownTweetText.textContent.trim();
+    }
+    if (!title) {
+      const heading =
+        typeof container.querySelector === "function"
+          ? container.querySelector("#video-title, h3, h2")
+          : null;
+      if (heading && heading.textContent && heading.textContent.trim()) {
+        title = heading.textContent.trim();
+      }
+    }
+    if (!title) {
+      const titled =
+        typeof container.querySelector === "function"
+          ? container.querySelector("a[title]")
+          : null;
+      if (titled && titled.getAttribute("title") && titled.getAttribute("title").trim()) {
+        title = titled.getAttribute("title").trim();
+      }
+    }
+    if (!title) title = resolveTitle();
+
+    return { pageUrl, title: title.slice(0, 160) };
+  }
+
   globalThis.VideoDlShared = {
     YTDLP_PAGE_RES,
     YTDLP_FRIENDLY_HOST_RE,
+    VIDEO_PAGE_LINK_PATTERNS,
+    VIDEO_PAGE_HOST_RE,
     extractDouyinVideoId,
     normalizeYtdlpPageUrl,
     videoIdentityKey,
@@ -465,5 +620,6 @@
     classifyUrl,
     scanDom,
     pickPageThumbnail,
+    findVideoCard,
   };
 })();

@@ -211,4 +211,168 @@ assert.strictEqual(
   "https://sns-webpic-qc.xhscdn.com/note/cover.jpg",
 );
 
+const { findVideoCard } = globalThis.VideoDlShared;
+
+function makeAnchor(href, opts = {}) {
+  return {
+    getAttribute(name) {
+      if (name === "href") return href;
+      if (name === "title") return opts.title || "";
+      return null;
+    },
+    querySelector(sel) {
+      if (sel === "time" && opts.hasTime) return { tagName: "TIME" };
+      return null;
+    },
+    closest(sel) {
+      if (sel === "article") return opts.article || null;
+      return null;
+    },
+  };
+}
+
+// 抖音 modal：不依赖 DOM，直接用 location
+{
+  const video = { closest() { return null; }, parentElement: null };
+  const card = findVideoCard(
+    video,
+    {
+      hostname: "www.douyin.com",
+      href: "https://www.douyin.com/jingxuan?modal_id=1234567890123456789",
+      origin: "https://www.douyin.com",
+      pathname: "/jingxuan",
+    },
+    () => "抖音标题",
+  );
+  assert.ok(card);
+  assert.strictEqual(
+    card.pageUrl,
+    "https://www.douyin.com/video/1234567890123456789",
+  );
+  assert.strictEqual(card.title, "抖音标题");
+}
+
+// X 卡片：从 article 内 /status/ 链接取详情页
+{
+  const article = {
+    querySelectorAll(sel) {
+      if (sel === "a[href]") {
+        return [
+          makeAnchor("/other/status/111", { article }),
+          makeAnchor("/user/status/2222222222222222222", {
+            article,
+            hasTime: true,
+          }),
+        ];
+      }
+      if (sel === '[data-testid="tweetText"]') {
+        return [
+          {
+            textContent: "  推文正文  ",
+            closest(s) {
+              return s === "article" ? article : null;
+            },
+          },
+        ];
+      }
+      return [];
+    },
+    querySelector() {
+      return null;
+    },
+  };
+  const video = {
+    closest(sel) {
+      return sel === "article" ? article : null;
+    },
+    parentElement: article,
+  };
+  const card = findVideoCard(
+    video,
+    {
+      hostname: "x.com",
+      href: "https://x.com/home",
+      origin: "https://x.com",
+      pathname: "/home",
+    },
+    () => "fallback",
+  );
+  assert.ok(card);
+  assert.strictEqual(
+    card.pageUrl,
+    "https://x.com/user/status/2222222222222222222",
+  );
+  assert.strictEqual(card.title, "推文正文");
+}
+
+// YouTube watch：无卡片时不硬猜，需有容器链接；模拟 watch 页容器
+{
+  const container = {
+    querySelectorAll(sel) {
+      if (sel === "a[href]") {
+        return [makeAnchor("/watch?v=dQw4w9WgXcQ")];
+      }
+      if (sel === '[data-testid="tweetText"]') return [];
+      return [];
+    },
+    querySelector(sel) {
+      if (sel === "#video-title, h3, h2") {
+        return { textContent: "  Never Gonna Give You Up  " };
+      }
+      return null;
+    },
+  };
+  const video = {
+    closest() {
+      return null;
+    },
+    parentElement: container,
+  };
+  container.querySelector = function (sel) {
+    if (
+      sel ===
+      "a[href*='/status/'], a[href*='/watch'], a[href*='/video/'], a[href*='/reel/'], a[href*='/p/']"
+    ) {
+      return makeAnchor("/watch?v=dQw4w9WgXcQ");
+    }
+    if (sel === "#video-title, h3, h2") {
+      return { textContent: "  Never Gonna Give You Up  " };
+    }
+    if (sel === "a[title]") return null;
+    return null;
+  };
+  const card = findVideoCard(
+    video,
+    {
+      hostname: "www.youtube.com",
+      href: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      origin: "https://www.youtube.com",
+      pathname: "/watch",
+    },
+    () => "YT fallback",
+  );
+  assert.ok(card);
+  assert.strictEqual(
+    card.pageUrl,
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  );
+  assert.strictEqual(card.title, "Never Gonna Give You Up");
+}
+
+// 无匹配主机：返回 null
+{
+  const video = { closest() { return null; }, parentElement: null };
+  const card = findVideoCard(
+    video,
+    {
+      hostname: "example.com",
+      href: "https://example.com/player",
+      origin: "https://example.com",
+      pathname: "/player",
+    },
+    () => "x",
+  );
+  assert.strictEqual(card, null);
+}
+
 console.log("shared.js title tests passed");

@@ -1029,6 +1029,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "quickDownload") {
+    const tabId =
+      typeof message.tabId === "number" ? message.tabId : sender.tab?.id;
+    void (async () => {
+      if (typeof tabId !== "number" || tabId < 0) {
+        sendResponse({ ok: false, error: "无法定位当前标签页" });
+        return;
+      }
+      const pageUrl = normalizeYtdlpPageUrl(
+        String(message.pageUrl || "").trim(),
+      );
+      const title = String(message.title || "");
+
+      if (pageUrl && isYtdlpPreferredPage(pageUrl)) {
+        sendResponse(
+          await sendItemsToDownloader(
+            [{ url: pageUrl, pageUrl, title }],
+            { silent: true, skipVerify: true, tabId },
+          ),
+        );
+        return;
+      }
+
+      const media = await listTabMedia(tabId);
+      if (media.length > 0) {
+        const best = media[0];
+        sendResponse(
+          await sendItemsToDownloader(
+            [
+              {
+                url: best.url,
+                type: best.type || "",
+                title: title || best.title || best.pageTitle || "",
+                pageUrl: pageUrl || best.pageUrl || "",
+                detectedAt: best.detectedAt || 0,
+              },
+            ],
+            { silent: true, tabId },
+          ),
+        );
+        return;
+      }
+
+      sendResponse({
+        ok: false,
+        error: "未识别到可下载媒体，试试播放视频后再点",
+      });
+    })();
+    return true;
+  }
+
   return false;
 });
 

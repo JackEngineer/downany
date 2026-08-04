@@ -600,4 +600,30 @@ enqueuePageBtn.addEventListener("click", async () => {
   }
 });
 
+const INPAGE_BUTTON_KEY = "inpageButtonEnabled";
+const inpageButtonToggle = document.getElementById("inpageButtonToggle");
+
+function loadInpageButtonPref() {
+  if (!inpageButtonToggle) return;
+  try {
+    chrome.storage.sync.get({ [INPAGE_BUTTON_KEY]: true }, (data) => {
+      inpageButtonToggle.checked = data[INPAGE_BUTTON_KEY] !== false;
+    });
+  } catch {
+    inpageButtonToggle.checked = true;
+  }
+}
+
+if (inpageButtonToggle) {
+  inpageButtonToggle.addEventListener("change", () => {
+    const enabled = !!inpageButtonToggle.checked;
+    try {
+      chrome.storage.sync.set({ [INPAGE_BUTTON_KEY]: enabled });
+    } catch {
+      // ignore
+    }
+  });
+  loadInpageButtonPref();
+}
+
 void loadActiveTab();
