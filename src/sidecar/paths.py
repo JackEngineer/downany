@@ -47,8 +47,14 @@ class AppPaths:
             return cls(data_dir=data_dir, log_dir=log_dir)
 
         home = Path.home()
-        data_dir = home / "Library" / "Application Support" / "Downany"
-        log_dir = home / "Library" / "Logs" / "Downany"
+        if sys.platform == "win32":
+            local = (os.environ.get("LOCALAPPDATA") or "").strip()
+            base = Path(local) if local else home / "AppData" / "Local"
+            data_dir = base / "Downany"
+            log_dir = data_dir / "logs"
+        else:
+            data_dir = home / "Library" / "Application Support" / "Downany"
+            log_dir = home / "Library" / "Logs" / "Downany"
         return cls(data_dir=data_dir, log_dir=log_dir)
 
     def ensure(self) -> "AppPaths":
