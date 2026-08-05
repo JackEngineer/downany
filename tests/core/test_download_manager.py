@@ -1,11 +1,12 @@
 """DownloadManager 状态机与并发安全测试（Qt 无关）。"""
+import sys
 import threading
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.core.download_manager import DownloadManager
+from src.core.download_manager import DownloadManager, format_postprocess_command
 from src.core.download_task import DownloadOptions, DownloadTask, TaskStatus, VideoInfo
 from src.core.downloader import DownloadCancelled, DownloadError
 from src.core import error_codes as ec
@@ -316,7 +317,21 @@ def test_temp_dir_sets_paths_temp(tmp_path):
         mgr.stop(join_timeout=2)
 
 
-def test_script_postprocess_runs_after_completion(manager):
+def test_format_postprocess_posix(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    cmd = format_postprocess_command("echo {file}", "/tmp/my file.mp4")
+    assert "'/tmp/my file.mp4'" in cmd
+
+
+def test_format_postprocess_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    cmd = format_postprocess_command("echo {file}", r"C:\Users\a\my file.mp4")
+    assert "my file.mp4" in cmd
+    assert "'" not in cmd or '"' in cmd  # list2cmdline 用双引号
+
+
+def test_script_postprocess_runs_after_completion(manager, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
     task = _make_task()
     task.options.postprocessing = "script"
     task.options.postprocess_script = "process-video {file}"
@@ -325,8 +340,8 @@ def test_script_postprocess_runs_after_completion(manager):
         _run_one_task(manager, task, "/tmp/my file.mp4")
         assert _wait_until(lambda: mock_run.called)
     command = mock_run.call_args[0][0]
-    assert command.startswith("process-video ")
-    assert "'/tmp/my file.mp4'" in command  # shlex.quote 处理空格
+    expected = format_postprocess_command("process-video {file}", "/tmp/my file.mp4")
+    assert command == expected
 
 
 def test_queue_order_picks_lower_first():
