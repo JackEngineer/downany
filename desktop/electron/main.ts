@@ -53,6 +53,7 @@ import {
   saveWindowState,
 } from "./windowState";
 import { checkForAppUpdates } from "./appUpdater";
+import { resolveDownanyDataDir, resolveDownanyLogDir } from "./appDataDir";
 import {
   buildExtractEnqueueItems,
   getExtractSession,
@@ -76,15 +77,8 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-/** 与 sidecar paths.py 对齐（Electron package name 是 downany-desktop，勿用 userData）。 */
-function resolveDownanyDataDir(): string {
-  const override = (
-    process.env.DOWNANY_DATA_DIR ||
-    process.env.VIDEODL_DATA_DIR ||
-    ""
-  ).trim();
-  if (override) return path.resolve(override);
-  return path.join(app.getPath("home"), "Library", "Application Support", "Downany");
+function downanyDataDir(): string {
+  return resolveDownanyDataDir(process.env, process.platform, app.getPath("home"));
 }
 
 function installLocalThumbnailProtocol(): void {
@@ -98,7 +92,7 @@ function installLocalThumbnailProtocol(): void {
         return new Response("bad request", { status: 400 });
       }
       const filePath = path.join(
-        resolveDownanyDataDir(),
+        downanyDataDir(),
         "thumbnails",
         `${taskId}.jpg`,
       );
@@ -709,8 +703,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("sidecar:getLogDir", async () => {
-    const home = app.getPath("home");
-    return path.join(home, "Library", "Logs", "Downany");
+    return resolveDownanyLogDir(process.env, process.platform, app.getPath("home"));
   });
 
   ipcMain.handle("app:openPath", async (_evt, target: string) => {
