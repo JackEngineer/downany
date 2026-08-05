@@ -565,14 +565,24 @@ function updateDockUi(rebuildMenu = true): void {
 
 function syncMenuBarMode(enabled: boolean): void {
   menuBarMode = enabled;
-  if (process.platform !== "darwin") return;
-  if (enabled) {
-    tray.enable();
-    tray.update(taskTracker.activeCount(), taskTracker.recent());
-    app.dock.hide();
-  } else {
-    tray.disable();
-    app.dock.show();
+  if (process.platform === "darwin") {
+    if (enabled) {
+      tray.enable();
+      tray.update(taskTracker.activeCount(), taskTracker.recent());
+      app.dock.hide();
+    } else {
+      tray.disable();
+      app.dock.show();
+    }
+    return;
+  }
+  if (process.platform === "win32" || process.platform === "linux") {
+    if (enabled) {
+      tray.enable();
+      tray.update(taskTracker.activeCount(), taskTracker.recent());
+    } else {
+      tray.disable();
+    }
   }
 }
 
