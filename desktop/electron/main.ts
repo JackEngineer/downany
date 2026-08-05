@@ -755,6 +755,14 @@ function registerIpc(): void {
     return checkForAppUpdates(app.getVersion());
   });
 
+  ipcMain.handle("app:openExternal", async (_evt, target: string) => {
+    const url = String(target || "").trim();
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error("仅允许打开 http(s) 链接");
+    }
+    await shell.openExternal(url);
+  });
+
   ipcMain.handle("app:openExtractWindow", async (_evt, url: string) => {
     openExtractWindow(String(url || ""));
   });

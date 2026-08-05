@@ -63,8 +63,12 @@ const api = {
     currentVersion: string;
     latestVersion?: string;
     message: string;
+    downloadUrl?: string;
   }> {
     return ipcRenderer.invoke("app:checkUpdate");
+  },
+  openExternal(url: string): Promise<void> {
+    return ipcRenderer.invoke("app:openExternal", url);
   },
   onEvent(handler: (event: ProtocolEvent) => void): () => void {
     const listener = (_: Electron.IpcRendererEvent, event: ProtocolEvent) => handler(event);

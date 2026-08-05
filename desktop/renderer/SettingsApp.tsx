@@ -246,6 +246,46 @@ function QualityTab({ draft, disabled, update }: TabProps) {
           onChange={(e) => update({ download_subtitles: e.target.checked })}
         />
       </label>
+
+      <label className="settings-row">
+        <span>字幕语言</span>
+        <input
+          value={draft.subtitle_langs || ""}
+          disabled={disabled}
+          placeholder="如 zh-Hans,en（空=跟随站点默认）"
+          onChange={(e) => update({ subtitle_langs: e.target.value })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>内嵌字幕</span>
+        <input
+          type="checkbox"
+          checked={Boolean(draft.embed_subs)}
+          disabled={disabled}
+          onChange={(e) => update({ embed_subs: e.target.checked })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>片段裁剪</span>
+        <input
+          value={draft.download_sections || ""}
+          disabled={disabled}
+          placeholder="如 *00:10:00-00:15:00（空=完整）"
+          onChange={(e) => update({ download_sections: e.target.value })}
+        />
+      </label>
+
+      <label className="settings-row">
+        <span>SponsorBlock 去除</span>
+        <input
+          value={draft.sponsorblock_remove || ""}
+          disabled={disabled}
+          placeholder="如 sponsor,intro,outro（空=不启用）"
+          onChange={(e) => update({ sponsorblock_remove: e.target.value })}
+        />
+      </label>
     </div>
   );
 }
@@ -360,6 +400,9 @@ export function SettingsApp() {
   const [migration, setMigration] = useState<MigrationResult | null>(null);
   const [diagBusy, setDiagBusy] = useState(false);
   const [diagPath, setDiagPath] = useState("");
+  const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateMsg, setAppUpdateMsg] = useState("");
+  const [appUpdateUrl, setAppUpdateUrl] = useState("");
 
   useEffect(() => {
     setDraft(settings);
@@ -583,22 +626,42 @@ export function SettingsApp() {
           <section className="settings-section">
             <h2>应用更新</h2>
             <p className="muted">
-              需签名公证与更新 feed 后启用，详见 docs/RELEASE.md。
+              通过 GitHub Releases 检查新版本。当前为未签名分发：有更新时请前往下载页手动安装。
+              自动替换需签名公证后接入 electron-updater，见 docs/RELEASE.md。
             </p>
+            {appUpdateMsg && <p className="muted small">{appUpdateMsg}</p>}
             <div className="settings-control">
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || appUpdateBusy}
                 onClick={() => {
-                  void window.api.checkAppUpdate().then((info) => {
-                    pushToast({
-                      kind: info.status === "disabled" ? "info" : "success",
-                      title: info.message,
-                    });
-                  });
+                  setAppUpdateBusy(true);
+                  void window.api
+                    .checkAppUpdate()
+                    .then((info) => {
+                      setAppUpdateMsg(info.message);
+                      setAppUpdateUrl(info.downloadUrl || "");
+                      const kind =
+                        info.status === "available"
+                          ? "success"
+                          : info.status === "error"
+                            ? "error"
+                            : "info";
+                      pushToast({ kind, title: info.message });
+                    })
+                    .finally(() => setAppUpdateBusy(false));
                 }}
               >
-                检查应用更新
+                {appUpdateBusy ? "检查中…" : "检查应用更新"}
+              </button>
+              <button
+                type="button"
+                disabled={disabled || !appUpdateUrl}
+                onClick={() => {
+                  void window.api.openExternal(appUpdateUrl);
+                }}
+              >
+                前往下载
               </button>
             </div>
           </section>

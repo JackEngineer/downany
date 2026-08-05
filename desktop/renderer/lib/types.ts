@@ -72,6 +72,10 @@ export interface AppSettings {
   proxy_url: string;
   default_quality: string;
   download_subtitles: boolean;
+  subtitle_langs?: string;
+  embed_subs?: boolean;
+  download_sections?: string;
+  sponsorblock_remove?: string;
   theme_mode: "system" | "light" | "dark";
   auto_start_downloads?: boolean;
   clipboard_monitor?: boolean;

@@ -31,12 +31,27 @@ ALL_ERROR_CODES = frozenset(
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (NEED_PO_TOKEN, re.compile(r"po[\s_-]?token|gvs[\s_-]?po", re.I)),
     (YTDLP_OUTDATED, re.compile(r"outdated|please update|no longer supported|update yt-dlp", re.I)),
-    (NEED_LOGIN, re.compile(r"sign in|login required|cookies|use --cookies|authentication|members only|age.?restricted", re.I)),
+    # members.?only 优先归 need_login（可导入 Cookie），早于 private
+    (NEED_LOGIN, re.compile(
+        r"sign in|login required|cookies|use --cookies|authentication|members.?only|age.?restricted",
+        re.I,
+    )),
     (GEO_BLOCKED, re.compile(r"not available in your country|unavailable in your country|geo.?restrict|region.?block|country.?block", re.I)),
-    (PRIVATE, re.compile(r"\bprivate video\b|video is private|members.?only", re.I)),
-    (NETWORK, re.compile(r"timeout|timed out|connection|network|errno|http error 5|ssl:|certificate", re.I)),
-    (REMOVED, re.compile(r"unavailable|has been removed|video has been deleted|no longer available|404|not found", re.I)),
-    (UNSUPPORTED, re.compile(r"unsupported url|no suitable extractor|unsupported site|unable to extract", re.I)),
+    (PRIVATE, re.compile(r"\bprivate video\b|video is private", re.I)),
+    # generic 抽取器失败 = 站点/链接不受支持，须早于 404→removed
+    (UNSUPPORTED, re.compile(
+        r"unsupported url|no suitable extractor|unsupported site|unable to extract|\[generic\]",
+        re.I,
+    )),
+    (NETWORK, re.compile(
+        r"timeout|timed out|connection|network|errno|http error 403|http error 429|http error 5|forbidden|ssl:|certificate",
+        re.I,
+    )),
+    (REMOVED, re.compile(
+        r"unavailable|has been removed|video has been deleted|no longer available|"
+        r"404|not found|closed their|account.*(terminated|closed)|uploader.*(terminated|closed)",
+        re.I,
+    )),
 )
 
 
