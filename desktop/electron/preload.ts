@@ -25,6 +25,7 @@ export type ContextMenuTemplateItem = {
 };
 
 const api = {
+  platform: process.platform as NodeJS.Platform,
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
   },

@@ -122,7 +122,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
         >
           <option value="">不导入</option>
           <option value="chrome">Chrome</option>
-          <option value="safari">Safari</option>
+          {window.api?.platform === "darwin" && <option value="safari">Safari</option>}
           <option value="firefox">Firefox</option>
           <option value="edge">Edge</option>
         </select>
@@ -391,15 +391,17 @@ function AppearanceTab({ draft, disabled, update }: TabProps) {
       </label>
       <p className="muted small">{menuBarMode.hint}</p>
 
-      <label className="settings-row">
-        <span>Dock 进度条</span>
-        <input
-          type="checkbox"
-          checked={draft.dock_progress !== false}
-          disabled={disabled}
-          onChange={(e) => update({ dock_progress: e.target.checked })}
-        />
-      </label>
+      {window.api?.platform === "darwin" && (
+        <label className="settings-row">
+          <span>Dock 进度条</span>
+          <input
+            type="checkbox"
+            checked={draft.dock_progress !== false}
+            disabled={disabled}
+            onChange={(e) => update({ dock_progress: e.target.checked })}
+          />
+        </label>
+      )}
     </div>
   );
 }
