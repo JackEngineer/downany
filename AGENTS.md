@@ -45,6 +45,9 @@ node browser-extension/shared.test.js
 ./scripts/fetch_release_binaries.sh
 ./scripts/build_sidecar.sh
 ./scripts/build_macos_dmg.sh   # FETCH_BINS=0 BUILD_SIDECAR=0 可跳过前置步骤
+# 扩展 zip 一并挂 Release，勿只发 DMG；版本看 browser-extension/manifest.json
+# (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-<ver>.zip . \
+#   -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
 ```
 
 ## 架构要点
@@ -55,6 +58,8 @@ node browser-extension/shared.test.js
 - **ffmpeg**：`DOWNANY_BIN_DIR`（兼容旧 `VIDEODL_BIN_DIR`）；开发可用仓库/`install_ffmpeg`，发布用 `desktop/resources/bin`
 - **持久化**：`json_config.py` / `database.py` / `queue_store.py`；数据目录 `~/Library/Application Support/Downany/`（`DOWNANY_DATA_DIR` 可覆盖）
 - **迁移**：`migration.py` 可读旧 Trae 与 `VideoDownloader` 数据；**新路径与发布产物使用 Downany / 百纳**
+- **分发**：默认未签名 DMG + Chrome 扩展 zip，经 GitHub Releases；应用内更新当前为「检查最新 Release → 前往下载」，自动替换待签名后启用；见 [docs/RELEASE.md](docs/RELEASE.md)
+- **扩展桥**：`127.0.0.1:17888`；桌面端须先运行，扩展才能入队
 
 ## 约定
 
@@ -65,5 +70,6 @@ node browser-extension/shared.test.js
 - 提交勿夹带无关 WIP；勿提交 `desktop/release/`、`venv/`、`bin/`、下载成品
 - 分支：`feat/m{N}-{slug}` / `chore/{slug}` / `fix/{slug}`；见 [docs/BRANCHING.md](docs/BRANCHING.md)
 - 产品差距与优先级：见 [docs/roadmap.md](docs/roadmap.md)
+- 发版清单：DMG + 扩展 zip 同挂一个 tag；步骤与 Gatekeeper 说明写在 [docs/RELEASE.md](docs/RELEASE.md)
 
 更完整说明见 [README.md](README.md)。
