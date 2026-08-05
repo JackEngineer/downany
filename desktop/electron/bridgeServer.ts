@@ -5,10 +5,14 @@ import * as http from "node:http";
 export const BRIDGE_PORT = 17888;
 export const BRIDGE_HOST = "127.0.0.1";
 
+/** 单次 /tasks 查询最多接受的 ids 数量。 */
+export const BRIDGE_TASKS_MAX_IDS = 50;
+
 export type BridgeEnqueueResult = {
   ok: boolean;
   error?: string;
   count?: number;
+  taskIds?: string[];
 };
 
 export type BridgeEnqueueItem = {
@@ -22,10 +26,20 @@ export type BridgeEnqueueItem = {
   thumbnail_url?: string;
 };
 
+export type BridgeTaskStatus = {
+  id: string;
+  status: string;
+  progress: number;
+  title: string;
+  error: string;
+};
+
 export type BridgeHandlers = {
   enqueue: (items: BridgeEnqueueItem[]) => Promise<BridgeEnqueueResult>;
   /** 可选：健康检查附带 Sidecar 是否可入队 */
   getStatus?: () => { sidecarReady: boolean };
+  /** 可选：按 taskId 批量查询状态（扩展轮询） */
+  getTasks?: (ids: string[]) => BridgeTaskStatus[];
 };
 
 function sendJson(
@@ -149,6 +163,21 @@ export function parseEnqueueBody(raw: string): BridgeEnqueueItem[] {
   return items;
 }
 
+/** 从 query `ids=a,b,c` 解析去重后的 id 列表（上限 BRIDGE_TASKS_MAX_IDS）。 */
+export function parseTaskIdsQuery(raw: string | null): string[] {
+  if (!raw || !raw.trim()) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= BRIDGE_TASKS_MAX_IDS) break;
+  }
+  return out;
+}
+
 export function startBridgeServer(handlers: BridgeHandlers): http.Server {
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -172,6 +201,21 @@ export function startBridgeServer(handlers: BridgeHandlers): http.Server {
           service: "downany-bridge",
           sidecarReady: status ? status.sidecarReady : true,
         });
+        return;
+      }
+
+      if (method === "GET" && url.pathname === "/tasks") {
+        const ids = parseTaskIdsQuery(url.searchParams.get("ids"));
+        if (ids.length === 0) {
+          sendJson(res, 400, { ok: false, error: "缺少 ids" });
+          return;
+        }
+        if (!handlers.getTasks) {
+          sendJson(res, 501, { ok: false, error: "任务查询未启用" });
+          return;
+        }
+        const tasks = handlers.getTasks(ids);
+        sendJson(res, 200, { ok: true, tasks });
         return;
       }
 

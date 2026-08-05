@@ -5,6 +5,7 @@ export interface TrackedTask {
   title: string;
   status: string;
   progress: number;
+  errorMessage: string;
 }
 
 interface SnapshotLike {
@@ -12,6 +13,19 @@ interface SnapshotLike {
   title?: string;
   status?: string;
   progress?: number;
+  error_message?: string;
+  errorMessage?: string;
+}
+
+function readErrorMessage(t: SnapshotLike | undefined): string {
+  if (!t) return "";
+  if (typeof t.error_message === "string" && t.error_message) {
+    return t.error_message;
+  }
+  if (typeof t.errorMessage === "string" && t.errorMessage) {
+    return t.errorMessage;
+  }
+  return "";
 }
 
 export class TaskTracker {
@@ -26,6 +40,7 @@ export class TaskTracker {
         title: t.title || "",
         status: t.status || "pending",
         progress: typeof t.progress === "number" ? t.progress : 0,
+        errorMessage: readErrorMessage(t),
       });
     }
   }
@@ -50,6 +65,7 @@ export class TaskTracker {
           typeof incoming.progress === "number"
             ? incoming.progress
             : prev?.progress ?? 0,
+        errorMessage: readErrorMessage(incoming) || prev?.errorMessage || "",
       };
       // 重新插入以把最近活跃的任务移到末尾
       this.tasks.delete(incoming.id);
@@ -67,6 +83,28 @@ export class TaskTracker {
           typeof progress.progress === "number" ? progress.progress : prev.progress,
       });
     }
+  }
+
+  /** 按 id 查询；未命中返回 status=unknown（扩展轮询可据此停止）。 */
+  getByIds(ids: string[]): TrackedTask[] {
+    const out: TrackedTask[] = [];
+    for (const raw of ids) {
+      const id = String(raw || "").trim();
+      if (!id) continue;
+      const found = this.tasks.get(id);
+      if (found) {
+        out.push({ ...found });
+      } else {
+        out.push({
+          id,
+          title: "",
+          status: "unknown",
+          progress: 0,
+          errorMessage: "",
+        });
+      }
+    }
+    return out;
   }
 
   activeCount(): number {

@@ -516,11 +516,17 @@ enqueueBtn.addEventListener("click", async () => {
   setStatus("", "");
 
   try {
+    // 客户端关闭时会走唤醒等待，可能较久
+    const wakeHint = setTimeout(() => {
+      setStatus("", "若下载器未运行，正在尝试打开百纳…");
+      enqueueBtn.textContent = "打开百纳…";
+    }, 2000);
     const result = await chrome.runtime.sendMessage({
       type: "enqueue",
       tabId: currentTabId,
       items,
     });
+    clearTimeout(wakeHint);
     if (result && result.ok) {
       // 已发送的条目移出列表并恢复按钮，避免重复发送
       const sentUrls = new Set(items.map((it) => it.url));
@@ -529,15 +535,22 @@ enqueueBtn.addEventListener("click", async () => {
       renderMediaList();
       const expiredNote =
         result.expired > 0 ? `，${result.expired} 条已过期被跳过` : "";
+      const wokeNote = result.woke ? "（已自动打开百纳）" : "";
       setStatus(
         "ok",
-        `已发送 ${result.count ?? items.length} 个任务到下载器${expiredNote}`,
+        `已发送 ${result.count ?? items.length} 个任务到下载器${expiredNote}${wokeNote}`,
       );
+      void refreshRecent();
       return;
     }
     const error = (result && result.error) || "发送失败";
     updateEnqueueButton();
-    setStatus("error", error);
+    if (result && result.needApp) {
+      setStatus("error", `${error}`);
+      void chrome.runtime.sendMessage({ type: "openInstallGuide" });
+    } else {
+      setStatus("error", error);
+    }
   } catch (err) {
     updateEnqueueButton();
     setStatus("error", String(err?.message || err));
@@ -559,6 +572,10 @@ enqueuePageBtn.addEventListener("click", async () => {
   setStatus("", "");
 
   try {
+    const wakeHint = setTimeout(() => {
+      setStatus("", "若下载器未运行，正在尝试打开百纳…");
+      enqueuePageBtn.textContent = "打开百纳…";
+    }, 2000);
     let pageThumb = "";
     try {
       const thumbInfo = await chrome.tabs.sendMessage(currentTabId, {
@@ -584,15 +601,25 @@ enqueuePageBtn.addEventListener("click", async () => {
         },
       ],
     });
+    clearTimeout(wakeHint);
     if (result && result.ok) {
       enqueuePageBtn.textContent = "已发送";
-      setStatus("ok", "已发送页面链接到下载器");
+      setStatus(
+        "ok",
+        result.woke
+          ? "已打开百纳并发送页面链接"
+          : "已发送页面链接到下载器",
+      );
+      void refreshRecent();
       return;
     }
     const error = (result && result.error) || "发送失败";
     enqueuePageBtn.disabled = false;
     enqueuePageBtn.textContent = pageEnqueueLabel();
     setStatus("error", error);
+    if (result && result.needApp) {
+      void chrome.runtime.sendMessage({ type: "openInstallGuide" });
+    }
   } catch (err) {
     enqueuePageBtn.disabled = false;
     enqueuePageBtn.textContent = pageEnqueueLabel();
@@ -602,6 +629,193 @@ enqueuePageBtn.addEventListener("click", async () => {
 
 const INPAGE_BUTTON_KEY = "inpageButtonEnabled";
 const inpageButtonToggle = document.getElementById("inpageButtonToggle");
+const recentSectionEl = document.getElementById("recentSection");
+const recentListEl = document.getElementById("recentList");
+const recentTitleEl = document.getElementById("recentTitle");
+const recentActiveEl = document.getElementById("recentActive");
+
+const RECENT_REFRESH_MS = 1000;
+/** @type {ReturnType<typeof setInterval>|null} */
+let recentTimer = null;
+/** @type {Array<Record<string, unknown>>} */
+let recentTasks = [];
+
+function statusLabel(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "pending":
+      return "排队";
+    case "downloading":
+      return "下载中";
+    case "paused":
+      return "已暂停";
+    case "completed":
+      return "完成";
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已取消";
+    case "unknown":
+      return "未知";
+    default:
+      return String(status || "");
+  }
+}
+
+function truncateTitle(title, url) {
+  const t = String(title || "").trim();
+  if (t) return t.slice(0, 48);
+  const u = String(url || "");
+  try {
+    return new URL(u).hostname || u.slice(0, 40);
+  } catch {
+    return u.slice(0, 40) || "未命名任务";
+  }
+}
+
+function renderRecent() {
+  if (!recentSectionEl || !recentListEl) return;
+  if (!recentTasks.length) {
+    recentSectionEl.hidden = true;
+    recentListEl.innerHTML = "";
+    if (recentTitleEl) recentTitleEl.textContent = "最近发送";
+    if (recentActiveEl) {
+      recentActiveEl.hidden = true;
+      recentActiveEl.textContent = "";
+    }
+    return;
+  }
+  const active = recentTasks.filter((t) => {
+    const s = String(t.status || "").toLowerCase();
+    return s === "downloading" || s === "pending" || s === "paused";
+  }).length;
+  if (recentTitleEl) recentTitleEl.textContent = "最近发送";
+  if (recentActiveEl) {
+    if (active > 0) {
+      recentActiveEl.hidden = false;
+      recentActiveEl.textContent = `${active} 个下载中`;
+    } else {
+      recentActiveEl.hidden = true;
+      recentActiveEl.textContent = "";
+    }
+  }
+  recentSectionEl.hidden = false;
+  recentListEl.innerHTML = "";
+  for (const task of recentTasks.slice(0, 8)) {
+    const status = String(task.status || "pending").toLowerCase();
+    const progress =
+      typeof task.progress === "number"
+        ? Math.max(0, Math.min(100, Math.round(task.progress)))
+        : 0;
+    const li = document.createElement("li");
+    li.className = "recent-item";
+    li.dataset.taskId = String(task.taskId || "");
+
+    const row = document.createElement("div");
+    row.className = "recent-row";
+    const name = document.createElement("span");
+    name.className = "recent-name";
+    name.textContent = truncateTitle(task.title, task.url);
+    name.title = String(task.title || task.url || "");
+    const badge = document.createElement("span");
+    badge.className = `recent-badge ${status}`;
+    badge.textContent =
+      status === "downloading" || status === "paused"
+        ? `${statusLabel(status)} ${progress}%`
+        : statusLabel(status);
+    row.appendChild(name);
+    row.appendChild(badge);
+    li.appendChild(row);
+
+    if (
+      status === "downloading" ||
+      status === "pending" ||
+      status === "paused"
+    ) {
+      const bar = document.createElement("div");
+      bar.className = "recent-bar";
+      const fill = document.createElement("span");
+      fill.style.width = `${status === "pending" ? 4 : progress}%`;
+      bar.appendChild(fill);
+      li.appendChild(bar);
+    }
+
+    const error = String(task.error || "").trim();
+    if (error && (status === "failed" || status === "unknown")) {
+      const err = document.createElement("p");
+      err.className = "recent-error";
+      err.textContent = error;
+      li.appendChild(err);
+    }
+
+    if (status === "failed" || status === "unknown") {
+      const actions = document.createElement("div");
+      actions.className = "recent-actions";
+      const retryBtn = document.createElement("button");
+      retryBtn.type = "button";
+      retryBtn.className = "recent-retry";
+      retryBtn.textContent = "重试";
+      retryBtn.addEventListener("click", () => {
+        void retryRecentTask(task, retryBtn);
+      });
+      actions.appendChild(retryBtn);
+      li.appendChild(actions);
+    }
+
+    recentListEl.appendChild(li);
+  }
+}
+
+async function retryRecentTask(task, button) {
+  if (!task || !task.taskId) return;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "重试中…";
+  }
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: "retrySend",
+      taskId: task.taskId,
+      url: task.retryUrl || task.url,
+      pageUrl: task.retryPageUrl || task.pageUrl,
+      title: task.retryTitle || task.title,
+      tabId: currentTabId,
+    });
+    if (result && result.ok) {
+      setStatus("ok", "已重新发送到下载器");
+      await refreshRecent();
+      return;
+    }
+    setStatus("error", (result && result.error) || "重试失败");
+  } catch (err) {
+    setStatus("error", String(err?.message || err));
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "重试";
+    }
+  }
+}
+
+async function refreshRecent() {
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "getSentTasks" });
+    if (result && result.ok && Array.isArray(result.tasks)) {
+      recentTasks = result.tasks;
+      renderRecent();
+      return;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function startRecentPolling() {
+  void refreshRecent();
+  if (recentTimer) clearInterval(recentTimer);
+  recentTimer = setInterval(() => {
+    void refreshRecent();
+  }, RECENT_REFRESH_MS);
+}
 
 function loadInpageButtonPref() {
   if (!inpageButtonToggle) return;
@@ -626,4 +840,5 @@ if (inpageButtonToggle) {
   loadInpageButtonPref();
 }
 
+startRecentPolling();
 void loadActiveTab();

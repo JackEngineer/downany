@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "百纳",
-  "version": "0.6.1",
-  "description": "识别页面媒体后一键发送到本机百纳",
+  "version": "0.8.1",
+  "description": "识别页面媒体后一键发送到本机百纳，并可查看下载进度",
   "minimum_chrome_version": "102",
   "permissions": [
     "activeTab",

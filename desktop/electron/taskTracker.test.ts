@@ -40,4 +40,45 @@ describe("TaskTracker", () => {
     ]);
     expect(tracker.recent(1)[0].title).toBe("new");
   });
+
+  it("tracks error_message and getByIds returns unknown for misses", () => {
+    const tracker = new TaskTracker();
+    tracker.hydrate([
+      {
+        id: "1",
+        title: "fail",
+        status: "failed",
+        progress: 0,
+        error_message: "需要登录 Cookie",
+      },
+    ]);
+    tracker.applyEvent({
+      event: "task.updated",
+      payload: {
+        task: {
+          id: "1",
+          title: "fail",
+          status: "failed",
+          progress: 0,
+          error_message: "登录已过期",
+        },
+      },
+    });
+    expect(tracker.getByIds(["1", "missing"])).toEqual([
+      {
+        id: "1",
+        title: "fail",
+        status: "failed",
+        progress: 0,
+        errorMessage: "登录已过期",
+      },
+      {
+        id: "missing",
+        title: "",
+        status: "unknown",
+        progress: 0,
+        errorMessage: "",
+      },
+    ]);
+  });
 });

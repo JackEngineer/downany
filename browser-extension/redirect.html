@@ -2,10 +2,24 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <title>正在打开下载器…</title>
+    <title>正在打开百纳…</title>
+    <style>
+      body {
+        margin: 40px auto;
+        max-width: 420px;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #0f172a;
+      }
+      .muted { color: #64748b; font-size: 13px; }
+    </style>
   </head>
   <body>
-    <p>正在发送到百纳…</p>
+    <p id="msg">正在打开百纳…</p>
+    <p class="muted">
+      若浏览器询问是否打开「百纳 / Downany」，请点允许。
+      若没有反应，请先安装并运行一次桌面端（开发：仓库里执行
+      <code>npm run desktop</code>）。
+    </p>
     <script src="redirect.js"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-/** 页内一键下载：悬停视频时显示悬浮按钮，点击后经 background 入队。 */
+/** 页内一键下载：只负责发送入队；进度看工具栏角标与弹窗「最近发送」。 */
 
 (function () {
   "use strict";
@@ -9,11 +9,13 @@
   const STORAGE_KEY = "inpageButtonEnabled";
   const MIN_W = 200;
   const MIN_H = 120;
-  const HIDE_DELAY_MS = 400;
+  /** 稍长一点，避开 Twitter 重绘导致的瞬时 out→over */
+  const HIDE_DELAY_MS = 450;
   const DEDUPE_MS = 3000;
   const SUCCESS_RESET_MS = 2000;
-  const BTN_W = 88;
-  const BTN_OFFSET = 8;
+  const APP_MISSING_RESET_MS = 5000;
+  /** 位置变化小于该像素时不改 transform，避免 transition 闪 */
+  const POS_EPSILON = 2;
 
   let enabled = true;
   /** @type {HTMLElement|null} */
@@ -24,18 +26,19 @@
   let btn = null;
   /** @type {HTMLElement|null} */
   let currentVideo = null;
-  /** @type {HTMLElement|null} */
-  let attachRoot = null;
-  /** @type {HTMLElement|null} */
-  let positionedByUs = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   let hideTimer = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   let resetTimer = null;
   let busy = false;
-  let pointerOnButton = false;
   /** @type {{key: string, at: number}|null} */
   let lastSend = null;
+  let lastPointerX = 0;
+  let lastPointerY = 0;
+  let lastTop = NaN;
+  let lastLeft = NaN;
+  /** 连续多少次“视频过小”才真正隐藏（抗 Twitter 布局抖动） */
+  let smallHitCount = 0;
 
   function isFullscreen() {
     return Boolean(
@@ -50,73 +53,6 @@
     return rect.width < MIN_W || rect.height < MIN_H;
   }
 
-  function isOurHost(node) {
-    return Boolean(
-      node &&
-        hostEl &&
-        (node === hostEl ||
-          (typeof hostEl.contains === "function" && hostEl.contains(node))),
-    );
-  }
-
-  /**
-   * 把按钮挂进视频祖先节点，才能让预览卡片的 :hover 在指针移到按钮时仍生效。
-   * 挂在 documentElement（fixed）会导致卡片失焦 → 预览缩回 → 闪烁。
-   */
-  function findAttachRoot(video) {
-    if (!video || !video.parentElement) return null;
-    const article = typeof video.closest === "function" ? video.closest("article") : null;
-    if (article) return article;
-
-    const vRect = video.getBoundingClientRect();
-    let node = video.parentElement;
-    let best = video.parentElement;
-    for (let i = 0; i < 10 && node && node !== document.body; i++) {
-      if (node === document.documentElement) break;
-      const r = node.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) {
-        node = node.parentElement;
-        continue;
-      }
-      const containsVideo =
-        r.left <= vRect.left + 1 &&
-        r.top <= vRect.top + 1 &&
-        r.right >= vRect.right - 1 &&
-        r.bottom >= vRect.bottom - 1;
-      if (!containsVideo) break;
-
-      best = node;
-      // 紧贴播放器外壳：足够盖住 video，又不会胀成整页卡片的外围空白
-      const tight =
-        r.width <= vRect.width * 1.35 && r.height <= vRect.height * 1.35;
-      if (tight) return node;
-      // 再大就容易碰到 overflow:hidden 裁切；停在上一个合适节点
-      if (r.width > vRect.width * 2.5 || r.height > vRect.height * 2.5) {
-        break;
-      }
-      node = node.parentElement;
-    }
-    return best;
-  }
-
-  function ensurePositioned(root) {
-    if (!root || !(root instanceof Element)) return;
-    const cs = window.getComputedStyle(root);
-    if (cs.position === "static") {
-      root.style.position = "relative";
-      positionedByUs = root;
-      root.setAttribute("data-downany-pos", "1");
-    }
-  }
-
-  function clearPositionedByUs() {
-    if (positionedByUs && positionedByUs.getAttribute("data-downany-pos") === "1") {
-      positionedByUs.style.position = "";
-      positionedByUs.removeAttribute("data-downany-pos");
-    }
-    positionedByUs = null;
-  }
-
   function ensureUi() {
     if (hostEl && btn) return;
     hostEl = document.createElement("div");
@@ -124,7 +60,7 @@
     hostEl.setAttribute("data-downany", "inpage");
     Object.assign(hostEl.style, {
       all: "initial",
-      position: "absolute",
+      position: "fixed",
       zIndex: "2147483646",
       top: "0",
       left: "0",
@@ -132,10 +68,6 @@
       height: "0",
       pointerEvents: "none",
       display: "none",
-      margin: "0",
-      padding: "0",
-      border: "0",
-      overflow: "visible",
     });
     shadow = hostEl.attachShadow({ mode: "closed" });
     shadow.innerHTML = `
@@ -157,7 +89,7 @@
           backdrop-filter: blur(8px);
           opacity: 0;
           transform: translateY(-4px);
-          transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+          transition: opacity 0.15s ease, background 0.15s ease;
           white-space: nowrap;
           user-select: none;
         }
@@ -199,15 +131,10 @@
       </button>
     `;
     btn = shadow.querySelector("button");
-    btn.addEventListener("mouseenter", () => {
-      pointerOnButton = true;
-      cancelHide();
-    });
-    btn.addEventListener("mouseleave", () => {
-      pointerOnButton = false;
-      scheduleHide();
-    });
+    btn.addEventListener("mouseenter", cancelHide);
+    btn.addEventListener("mouseleave", scheduleHide);
     btn.addEventListener("click", onClick);
+    document.documentElement.appendChild(hostEl);
   }
 
   function destroyUi() {
@@ -219,14 +146,14 @@
     if (hostEl && hostEl.parentNode) {
       hostEl.parentNode.removeChild(hostEl);
     }
-    clearPositionedByUs();
     hostEl = null;
     shadow = null;
     btn = null;
     currentVideo = null;
-    attachRoot = null;
     busy = false;
-    pointerOnButton = false;
+    lastTop = NaN;
+    lastLeft = NaN;
+    smallHitCount = 0;
   }
 
   function setLabel(text) {
@@ -271,70 +198,90 @@
     if (title != null) btn.title = title;
   }
 
-  function scheduleIdleReset() {
+  function scheduleIdleReset(delayMs) {
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(() => {
       resetTimer = null;
       busy = false;
       if (currentVideo) {
-        setState("idle", "下载", "用百纳下载");
+        setState("idle", "下载", "用百纳下载（进度见扩展图标 / 弹窗）");
       } else {
         hideNow();
       }
-    }, SUCCESS_RESET_MS);
+    }, delayMs);
   }
 
-  function mountOn(video) {
-    ensureUi();
-    const root = findAttachRoot(video);
-    if (!root || !hostEl) return false;
+  function pointerNearRect(rect, pad) {
+    return (
+      lastPointerX >= rect.left - pad &&
+      lastPointerX <= rect.right + pad &&
+      lastPointerY >= rect.top - pad &&
+      lastPointerY <= rect.bottom + pad
+    );
+  }
 
-    if (attachRoot !== root) {
-      clearPositionedByUs();
-      ensurePositioned(root);
-      root.appendChild(hostEl);
-      attachRoot = root;
-    } else if (hostEl.parentNode !== root) {
-      ensurePositioned(root);
-      root.appendChild(hostEl);
+  /** 指针是否仍在视频或其下载按钮附近（Shadow 的 relatedTarget 常为 null） */
+  function pointerStillOnTarget() {
+    if (btn) {
+      try {
+        if (btn.matches(":hover")) return true;
+      } catch {
+        // ignore
+      }
+      const br = btn.getBoundingClientRect();
+      if (br.width > 0 && pointerNearRect(br, 4)) return true;
     }
-    return true;
+    if (currentVideo && currentVideo.isConnected) {
+      const vr = currentVideo.getBoundingClientRect();
+      if (vr.width > 0 && pointerNearRect(vr, 8)) return true;
+    }
+    return false;
   }
 
   function positionOver(video) {
-    if (!hostEl || !btn || !video || !attachRoot) return;
-    const vRect = video.getBoundingClientRect();
-    const rRect = attachRoot.getBoundingClientRect();
-    // 绝对定位相对 attachRoot；保持在视频右上角内侧，避免 overflow 裁切
-    let top = vRect.top - rRect.top + BTN_OFFSET;
-    let left = vRect.right - rRect.left - BTN_W - BTN_OFFSET;
-    top = Math.max(0, top);
-    left = Math.max(0, Math.min(left, Math.max(0, rRect.width - BTN_W)));
+    if (!hostEl || !btn || !video) return;
+    const rect = video.getBoundingClientRect();
+    const top = Math.max(8, rect.top + 8);
+    const left = Math.min(
+      window.innerWidth - 110,
+      Math.max(8, rect.right - 96),
+    );
+    const samePos =
+      Number.isFinite(lastTop) &&
+      Number.isFinite(lastLeft) &&
+      Math.abs(top - lastTop) < POS_EPSILON &&
+      Math.abs(left - lastLeft) < POS_EPSILON;
 
-    hostEl.style.display = "block";
-    hostEl.style.top = `${top}px`;
-    hostEl.style.left = `${left}px`;
-    hostEl.style.transform = "none";
-    btn.classList.add("visible");
+    if (hostEl.style.display !== "block") {
+      hostEl.style.display = "block";
+    }
+    if (!samePos) {
+      lastTop = top;
+      lastLeft = left;
+      hostEl.style.transform = `translate(${left}px, ${top}px)`;
+    }
+    if (!btn.classList.contains("visible")) {
+      btn.classList.add("visible");
+    }
   }
 
   function showFor(video) {
-    if (!enabled || isFullscreen()) {
+    if (!enabled || isFullscreen() || videoTooSmall(video)) {
       hideNow();
       return;
     }
-    // 指针已在按钮上时，忽略短暂尺寸抖动（预览缩放/失焦恢复帧）
-    if (videoTooSmall(video) && !pointerOnButton) {
-      hideNow();
-      return;
-    }
-    if (!mountOn(video)) {
-      hideNow();
-      return;
-    }
+    ensureUi();
+    const sameVideo = currentVideo === video;
+    const wasVisible =
+      hostEl &&
+      hostEl.style.display === "block" &&
+      btn &&
+      btn.classList.contains("visible");
     currentVideo = video;
-    if (!busy) {
-      setState("idle", "下载", "用百纳下载");
+    smallHitCount = 0;
+    // 已在显示同一视频时不要反复 setState，避免图标/文案闪
+    if (!busy && !(sameVideo && wasVisible)) {
+      setState("idle", "下载", "用百纳下载（进度见扩展图标 / 弹窗）");
     }
     positionOver(video);
   }
@@ -344,7 +291,9 @@
     if (btn) btn.classList.remove("visible");
     if (hostEl) hostEl.style.display = "none";
     currentVideo = null;
-    pointerOnButton = false;
+    lastTop = NaN;
+    lastLeft = NaN;
+    smallHitCount = 0;
   }
 
   function cancelHide() {
@@ -358,20 +307,19 @@
     cancelHide();
     hideTimer = setTimeout(() => {
       hideTimer = null;
-      if (busy || pointerOnButton) return;
+      if (busy) return;
+      // Twitter / Shadow DOM：out 事件 relatedTarget 经常为空，真正离开再藏
+      if (pointerStillOnTarget()) return;
       hideNow();
     }, HIDE_DELAY_MS);
   }
 
   function findVideoFromTarget(target) {
     if (!target || typeof target.closest !== "function") return null;
-    if (isOurHost(target)) return currentVideo;
     const video = target.closest("video");
     if (video) return video;
-    // 部分站点把控件放在 video 兄弟节点上：向上找最近 video
     let node = target;
     for (let i = 0; i < 5 && node; i++) {
-      if (isOurHost(node)) return currentVideo;
       if (typeof node.querySelector === "function") {
         const v = node.querySelector("video");
         if (v) return v;
@@ -381,10 +329,19 @@
     return null;
   }
 
+  function onPointerMove(e) {
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+  }
+
   function onPointerOver(e) {
     if (!enabled || busy) return;
-    if (isOurHost(e.target)) {
-      pointerOnButton = true;
+    // 从按钮移回页面时不要重复处理
+    if (
+      e.target === hostEl ||
+      (hostEl && hostEl.contains(e.target)) ||
+      (shadow && shadow.contains(e.target))
+    ) {
       cancelHide();
       return;
     }
@@ -397,46 +354,32 @@
   function onPointerOut(e) {
     if (!enabled) return;
     const related = e.relatedTarget;
-    if (isOurHost(related) || (related && shadow && shadow.contains(related))) {
-      pointerOnButton = true;
-      cancelHide();
+    if (related && hostEl && (related === hostEl || hostEl.contains(related))) {
       return;
     }
-    if (isOurHost(e.target)) {
-      pointerOnButton = false;
+    if (related && shadow && shadow.contains(related)) {
+      return;
     }
+    // 移入 Shadow 按钮时 relatedTarget 常为 null：不要立刻判定离开
     const nextVideo = findVideoFromTarget(related);
     if (nextVideo && nextVideo === currentVideo) return;
-    // 仍在同一挂载卡片内移动（预览控件 / 标题），不要藏按钮、也不要拆掉 hover
-    if (
-      currentVideo &&
-      attachRoot &&
-      related &&
-      typeof attachRoot.contains === "function" &&
-      attachRoot.contains(related)
-    ) {
-      cancelHide();
-      return;
-    }
     scheduleHide();
   }
 
   function onScrollOrResize() {
-    if (currentVideo && hostEl && hostEl.style.display !== "none") {
-      if (isFullscreen()) {
-        hideNow();
-        return;
-      }
-      if (videoTooSmall(currentVideo) && !pointerOnButton) {
-        hideNow();
-        return;
-      }
-      if (attachRoot && !attachRoot.isConnected) {
-        hideNow();
-        return;
-      }
-      positionOver(currentVideo);
+    if (!currentVideo || !hostEl || hostEl.style.display === "none") return;
+    if (isFullscreen()) {
+      hideNow();
+      return;
     }
+    if (videoTooSmall(currentVideo) || !currentVideo.isConnected) {
+      smallHitCount += 1;
+      // Twitter 重绘时 rect 可能短暂为 0，连续几次再藏，避免闪
+      if (smallHitCount >= 3) hideNow();
+      return;
+    }
+    smallHitCount = 0;
+    positionOver(currentVideo);
   }
 
   function onFullscreenChange() {
@@ -475,21 +418,27 @@
       });
       if (result && result.ok) {
         lastSend = { key: dedupeKey, at: Date.now() };
-        setState("ok", "已入队", "已加入下载队列");
-        scheduleIdleReset();
+        setState("ok", "已入队", "进度请看扩展图标角标或弹窗「最近发送」");
+        scheduleIdleReset(SUCCESS_RESET_MS);
         return;
       }
       const error =
         (result && result.error) || "发送失败，请确认下载器已启动";
-      setState("err", "失败", error);
-      scheduleIdleReset();
+      setState("err", result && result.needApp ? "去安装" : "失败", error);
+      scheduleIdleReset(
+        result && result.needApp ? APP_MISSING_RESET_MS : SUCCESS_RESET_MS,
+      );
+      if (result && result.needApp) {
+        void chrome.runtime.sendMessage({ type: "openInstallGuide" });
+      }
     } catch (err) {
       setState("err", "失败", String(err?.message || err || "发送失败"));
-      scheduleIdleReset();
+      scheduleIdleReset(SUCCESS_RESET_MS);
     }
   }
 
   function bindEvents() {
+    document.addEventListener("mousemove", onPointerMove, true);
     document.addEventListener("mouseover", onPointerOver, true);
     document.addEventListener("mouseout", onPointerOut, true);
     window.addEventListener("scroll", onScrollOrResize, true);
@@ -522,6 +471,19 @@
       if (area !== "sync" && area !== "local") return;
       if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) return;
       applyEnabled(changes[STORAGE_KEY].newValue !== false);
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (!message || typeof message !== "object") return;
+      if (message.type === "wakeStatus") {
+        if (!busy || !btn) return;
+        const text = String(message.message || "正在打开百纳…");
+        setState("loading", text.length > 8 ? "打开中…" : text, text);
+      }
     });
   } catch {
     // ignore

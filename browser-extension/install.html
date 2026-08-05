@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>安装百纳桌面端</title>
+    <link rel="stylesheet" href="install.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <p class="brand">Downany · 百纳</p>
+      <h1>需要先安装桌面端</h1>
+      <p class="lead">
+        浏览器扩展只负责识别与入队，真正下载由本机「百纳」完成。
+        检测到本机尚未运行可用的桌面端。
+      </p>
+      <div class="actions">
+        <a
+          class="primary"
+          id="downloadLink"
+          href="https://downany.app/download"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          前往官网下载
+        </a>
+        <button type="button" class="secondary" id="recheck">
+          我已打开，重新检测
+        </button>
+      </div>
+      <p class="status" id="status" hidden></p>
+      <p class="hint">
+        开发联调：在仓库根目录执行
+        <code>npm run desktop</code>
+        ，成功启动一次后再回到网页点下载。
+      </p>
+      <p class="foot muted">
+        官网下载页：
+        <a
+          href="https://downany.app/download"
+          target="_blank"
+          rel="noopener noreferrer"
+          >downany.app/download</a
+        >
+        （占位，上线后即可用）
+      </p>
+    </main>
+    <script src="install.js"></script>
+  </body>
+</html>

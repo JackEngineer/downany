@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAddDeepLink,
+  buildOpenDeepLink,
   extractUrlsFromArgv,
+  isOpenDeepLink,
   parseDeepLinkAdd,
   parseDeepLinkCandidate,
 } from "./deepLink";
@@ -69,5 +71,19 @@ describe("parseDeepLinkAdd", () => {
       audioOnly: true,
       downloadSubtitles: true,
     });
+  });
+});
+
+describe("isOpenDeepLink", () => {
+  it("accepts open and wake", () => {
+    expect(isOpenDeepLink(buildOpenDeepLink())).toBe(true);
+    expect(isOpenDeepLink("downany://wake")).toBe(true);
+    expect(isOpenDeepLink("downany://open?source=ext")).toBe(true);
+  });
+
+  it("rejects add and unrelated", () => {
+    expect(isOpenDeepLink(buildAddDeepLink("https://youtu.be/a"))).toBe(false);
+    expect(isOpenDeepLink("https://example.com")).toBe(false);
+    expect(isOpenDeepLink("")).toBe(false);
   });
 });

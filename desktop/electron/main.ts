@@ -18,17 +18,19 @@ import { pathToFileURL } from "node:url";
 
 import type * as http from "node:http";
 
-import {
+  import {
   BRIDGE_HOST,
   BRIDGE_PORT,
   startBridgeServer,
   type BridgeEnqueueItem,
   type BridgeEnqueueResult,
+  type BridgeTaskStatus,
 } from "./bridgeServer";
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
 import {
   PROTOCOL_SCHEME,
   extractAddsFromArgv,
+  isOpenDeepLink,
   parseDeepLinkAdd,
   type DeepLinkAddPayload,
 } from "./deepLink";
@@ -247,6 +249,32 @@ function enqueueFromExternal(items: BridgeEnqueueItem[]): void {
   void flushEnqueueItems(unique);
 }
 
+function extractTaskIds(result: unknown): string[] {
+  if (!result || typeof result !== "object") return [];
+  const raw = (result as { taskIds?: unknown; task_ids?: unknown }).taskIds
+    ?? (result as { task_ids?: unknown }).task_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    .map((id) => id.trim());
+}
+
+function trackedToBridgeStatus(t: {
+  id: string;
+  title: string;
+  status: string;
+  progress: number;
+  errorMessage: string;
+}): BridgeTaskStatus {
+  return {
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    progress: t.progress,
+    error: t.errorMessage,
+  };
+}
+
 async function flushEnqueueItems(
   items: BridgeEnqueueItem[],
 ): Promise<BridgeEnqueueResult> {
@@ -256,7 +284,7 @@ async function flushEnqueueItems(
   focusMainWindow();
   const urls = urlsFromItems(items);
   try {
-    await sidecar.request("download.createTasks", {
+    const created = await sidecar.request("download.createTasks", {
       urls,
       items: items.map((item) => ({
         url: item.url,
@@ -269,13 +297,32 @@ async function flushEnqueueItems(
         thumbnail_url: item.thumbnail_url || undefined,
       })),
     });
+    const taskIds = extractTaskIds(created);
     mainWindow?.webContents.send("app:navigate", "queue");
     mainWindow?.webContents.send("app:externalEnqueue", {
       count: items.length,
       urls,
+      taskIds,
     });
-    void refreshDockFromSnapshot();
-    return { ok: true, count: items.length };
+    await refreshDockFromSnapshot();
+    // 快照尚未含新任务时，先种子化 pending，避免扩展立刻 /tasks 得到 unknown
+    for (let i = 0; i < taskIds.length; i++) {
+      const id = taskIds[i];
+      if (taskTracker.getByIds([id])[0]?.status === "unknown") {
+        taskTracker.applyEvent({
+          event: "task.updated",
+          payload: {
+            task: {
+              id,
+              title: items[i]?.title || items[0]?.title || "",
+              status: "pending",
+              progress: 0,
+            },
+          },
+        });
+      }
+    }
+    return { ok: true, count: items.length, taskIds };
   } catch (err) {
     process.stderr.write(`外部入队失败: ${String(err)}\n`);
     mainWindow?.webContents.send("app:externalEnqueue", {
@@ -299,8 +346,7 @@ async function enqueueFromBridge(
     isSidecarAcceptingEnqueue(sidecar!.getConnectionState());
   const decision = decideBridgeEnqueue(sidecarReady && connected);
   if (decision.kind === "defer") {
-    // 暂存，待 Sidecar 就绪后自动入队；但对扩展返回失败，避免「已发送」假象
-    queuePendingItems(unique);
+    // 不暂存：扩展会等桥就绪后自行重试，避免与 pending flush 重复入队
     focusMainWindow();
     return { ok: false, error: decision.error, count: 0 };
   }
@@ -314,7 +360,7 @@ async function flushPendingEnqueue(): Promise<void> {
   await flushEnqueueItems(items);
 }
 
-function startBridge(): void {
+  function startBridge(): void {
   if (bridgeServer) return;
   try {
     bridgeServer = startBridgeServer({
@@ -325,6 +371,7 @@ function startBridge(): void {
           Boolean(sidecar) &&
           isSidecarAcceptingEnqueue(sidecar!.getConnectionState()),
       }),
+      getTasks: (ids) => taskTracker.getByIds(ids).map(trackedToBridgeStatus),
     });
     process.stderr.write(
       `扩展桥已监听 http://${BRIDGE_HOST}:${BRIDGE_PORT}/enqueue\n`,
@@ -341,11 +388,27 @@ function stopBridge(): void {
 }
 
 function handleDeepLinkRaw(raw: string): void {
+  if (isOpenDeepLink(raw)) {
+    if (mainWindow) {
+      focusMainWindow();
+    } else if (app.isReady()) {
+      createWindow();
+      focusMainWindow();
+    }
+    // ready 之前由 open-url 触发：whenReady 里 createWindow 即可
+    return;
+  }
   const payload = parseDeepLinkAdd(raw);
   if (payload) enqueueFromExternal([payloadToItem(payload)]);
 }
 
 function handleArgv(argv: readonly string[]): void {
+  for (const arg of argv) {
+    if (isOpenDeepLink(arg)) {
+      if (mainWindow) focusMainWindow();
+      break;
+    }
+  }
   const adds = extractAddsFromArgv(argv);
   if (adds.length > 0) enqueueFromExternal(adds.map(payloadToItem));
 }

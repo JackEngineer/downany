@@ -26,6 +26,10 @@ const {
 } = globalThis.VideoDlSniffCore;
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
+/** 官网下载页（占位，见 docs/COMMERCIAL.md） */
+const DOWNLOAD_SITE_URL = "https://downany.app/download";
+const INSTALL_GUIDE_OPEN_KEY = "installGuideOpenedAt";
+const INSTALL_GUIDE_COOLDOWN_MS = 60_000;
 const MENU_PAGE = "downany-download-page";
 const MENU_LINK = "downany-download-link";
 const MENU_SELECTION = "downany-download-selection";
@@ -35,6 +39,27 @@ const MENU_MEDIA = "downany-download-media";
 const MIN_FILE_SIZE = 100 * 1024;
 /** 单 tab 最大入库条目，防止恶意页面刷爆 */
 const MAX_ITEMS_PER_TAB = 40;
+
+/** 已发送任务（扩展侧跟踪，供弹窗/页内按钮看进度） */
+const SENT_TASKS_KEY = "sentTasks";
+const SENT_TASKS_MAX = 20;
+const POLL_INTERVAL_MS = 1500;
+const POLL_BACKOFF_MS = 5000;
+const POLL_MAX_AGE_MS = 30 * 60 * 1000;
+const POLL_MAX_FAILS = 5;
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "unknown",
+]);
+
+/** @type {ReturnType<typeof setTimeout>|null} */
+let pollTimer = null;
+let pollFails = 0;
+let pollRunning = false;
+/** 工具栏角标：正在下载（pending+downloading）数量 */
+let activeDownloadCount = 0;
 
 /** @type {Map<number, Map<string, MediaItem>>} */
 const tabMedia = new Map();
@@ -502,7 +527,45 @@ async function listTabMedia(tabId) {
   });
 }
 
-async function updateBadge(tabId) {
+function countActiveDownloads(tasks) {
+  let n = 0;
+  for (const t of tasks || []) {
+    const s = String(t?.status || "").toLowerCase();
+    if (s === "downloading" || s === "pending" || s === "paused") n += 1;
+  }
+  return n;
+}
+
+/** 工具栏角标优先展示「正在下载数量」；无下载时再回落到当前页媒体数。 */
+async function updateDownloadBadge(tasks) {
+  const list = Array.isArray(tasks) ? tasks : await loadSentTasks();
+  const active = countActiveDownloads(list);
+  activeDownloadCount = active;
+  try {
+    if (active > 0) {
+      await chrome.action.setBadgeBackgroundColor({ color: "#2563eb" });
+      await chrome.action.setBadgeText({
+        text: String(Math.min(active, 99)),
+      });
+      await chrome.action.setTitle({
+        title: `百纳 · ${active} 个下载中（点开看进度）`,
+      });
+      return;
+    }
+    await chrome.action.setBadgeText({ text: "" });
+    await chrome.action.setTitle({ title: "用百纳下载" });
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    if (typeof tabId === "number" && tabId >= 0) {
+      await updateMediaBadge(tabId);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function updateMediaBadge(tabId) {
+  if (activeDownloadCount > 0) return;
   const items = await listTabMedia(tabId);
   const count = countDisplayMedia(items);
   try {
@@ -516,15 +579,32 @@ async function updateBadge(tabId) {
   }
 }
 
+async function updateBadge(tabId) {
+  if (activeDownloadCount > 0) {
+    await updateDownloadBadge();
+    return;
+  }
+  await updateMediaBadge(tabId);
+}
+
 async function flashBadge(text, color = "#2563eb", tabId = -1) {
   try {
     const target = tabId >= 0 ? { tabId } : {};
     await chrome.action.setBadgeBackgroundColor({ color, ...target });
     await chrome.action.setBadgeText({ text, ...target });
     setTimeout(() => {
-      void chrome.action
-        .setBadgeText({ text: "", ...target })
-        .catch(() => {});
+      void (async () => {
+        try {
+          if (activeDownloadCount > 0) {
+            await updateDownloadBadge();
+            return;
+          }
+          await chrome.action.setBadgeText({ text: "", ...target });
+          if (tabId >= 0) await updateMediaBadge(tabId);
+        } catch {
+          // ignore
+        }
+      })();
     }, 2000);
   } catch {
     // ignore
@@ -619,8 +699,229 @@ async function revalidateItems(prepared) {
   );
 }
 
+// ---- 已发送任务跟踪（桥返回 taskIds 后轮询 /tasks） ----
+
+function isTerminalStatus(status) {
+  return TERMINAL_STATUSES.has(String(status || "").toLowerCase());
+}
+
+function friendlyTaskError(error) {
+  const raw = String(error || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (
+    /cookie|login|登录|登陆|sign.?in|auth|通行证|未登录|需要登录/.test(
+      lower,
+    )
+  ) {
+    return "需要登录 / Cookie，请刷新页面后重试";
+  }
+  return raw;
+}
+
+async function loadSentTasks() {
+  try {
+    const data = await chrome.storage.session.get(SENT_TASKS_KEY);
+    const list = data?.[SENT_TASKS_KEY];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveSentTasks(list) {
+  try {
+    await chrome.storage.session.set({
+      [SENT_TASKS_KEY]: list.slice(0, SENT_TASKS_MAX),
+    });
+  } catch {
+    // ignore
+  }
+}
+
 /**
- * @param {{url: string, title?: string, headers?: Record<string,string>}[]} items
+ * @param {{taskIds: string[], items: Array<{url: string, title?: string, pageUrl?: string}>, tabId?: number}} params
+ */
+async function recordSentTasks({ taskIds, items, tabId = -1 }) {
+  if (!Array.isArray(taskIds) || taskIds.length === 0) return;
+  const now = Date.now();
+  const prev = await loadSentTasks();
+  const byId = new Map(prev.map((t) => [t.taskId, t]));
+  for (let i = 0; i < taskIds.length; i++) {
+    const taskId = String(taskIds[i] || "").trim();
+    if (!taskId) continue;
+    const item = items[i] || items[0] || {};
+    byId.set(taskId, {
+      taskId,
+      url: item.url || "",
+      title: item.title || "",
+      pageUrl: item.pageUrl || "",
+      tabId: typeof tabId === "number" ? tabId : -1,
+      sentAt: now,
+      status: "pending",
+      progress: 0,
+      error: "",
+      retryUrl: item.url || "",
+      retryTitle: item.title || "",
+      retryPageUrl: item.pageUrl || "",
+    });
+  }
+  const next = [...byId.values()]
+    .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0))
+    .slice(0, SENT_TASKS_MAX);
+  await saveSentTasks(next);
+  void updateDownloadBadge(next);
+  ensurePollRunning();
+}
+
+function pushTaskStatusToTab(entry) {
+  if (!entry || typeof entry.tabId !== "number" || entry.tabId < 0) return;
+  void chrome.tabs
+    .sendMessage(entry.tabId, {
+      type: "taskStatus",
+      taskId: entry.taskId,
+      status: entry.status,
+      progress: entry.progress,
+      title: entry.title,
+      error: friendlyTaskError(entry.error),
+      url: entry.url,
+      pageUrl: entry.pageUrl || entry.retryPageUrl || "",
+    })
+    .catch(() => {});
+}
+
+async function fetchTasksFromBridge(ids) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
+  try {
+    const qs = encodeURIComponent(ids.join(","));
+    const res = await fetch(`${BRIDGE_BASE}/tasks?ids=${qs}`, {
+      method: "GET",
+      signal: ctrl.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data || !data.ok || !Array.isArray(data.tasks)) {
+      return { ok: false, error: (data && data.error) || `HTTP ${res.status}` };
+    }
+    return { ok: true, tasks: data.tasks };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function pollSentTasksOnce() {
+  const list = await loadSentTasks();
+  const now = Date.now();
+  const active = list.filter(
+    (t) =>
+      t &&
+      t.taskId &&
+      !isTerminalStatus(t.status) &&
+      now - (t.sentAt || 0) < POLL_MAX_AGE_MS,
+  );
+  if (active.length === 0) {
+    // 过期非终态任务标记 unknown，避免永久占位
+    let aged = false;
+    for (const t of list) {
+      if (
+        t &&
+        !isTerminalStatus(t.status) &&
+        now - (t.sentAt || 0) >= POLL_MAX_AGE_MS
+      ) {
+        t.status = "unknown";
+        t.error = t.error || "状态已超时";
+        aged = true;
+      }
+    }
+    if (aged) await saveSentTasks(list);
+    void updateDownloadBadge(list);
+    return false;
+  }
+
+  const result = await fetchTasksFromBridge(active.map((t) => t.taskId));
+  if (!result.ok) {
+    pollFails += 1;
+    if (pollFails >= POLL_MAX_FAILS) {
+      for (const t of active) {
+        t.status = "unknown";
+        t.error = "无法获取进度（桥未连接）";
+        pushTaskStatusToTab(t);
+      }
+      await saveSentTasks(list);
+      pollFails = 0;
+      return false;
+    }
+    return true;
+  }
+
+  pollFails = 0;
+  const byId = new Map(result.tasks.map((t) => [t.id, t]));
+  let changed = false;
+  for (const entry of list) {
+    const remote = byId.get(entry.taskId);
+    if (!remote) continue;
+    const nextStatus = String(remote.status || entry.status || "pending");
+    const nextProgress =
+      typeof remote.progress === "number" ? remote.progress : entry.progress;
+    const nextTitle = remote.title || entry.title || "";
+    const nextError = remote.error || entry.error || "";
+    const didChange =
+      nextStatus !== entry.status ||
+      nextProgress !== entry.progress ||
+      nextTitle !== entry.title ||
+      nextError !== entry.error;
+    if (didChange) {
+      entry.status = nextStatus;
+      entry.progress = nextProgress;
+      entry.title = nextTitle;
+      entry.error = nextError;
+      changed = true;
+    }
+    // 非终态必须心跳推送：解析阶段可长时间停在 0%，若只在 changed 时推，
+    // 页内按钮短超时会丢掉跟踪，完成后也收不到。
+    if (didChange || !isTerminalStatus(entry.status)) {
+      pushTaskStatusToTab(entry);
+    }
+  }
+  if (changed) await saveSentTasks(list);
+  void updateDownloadBadge(list);
+
+  return list.some(
+    (t) =>
+      t &&
+      t.taskId &&
+      !isTerminalStatus(t.status) &&
+      now - (t.sentAt || 0) < POLL_MAX_AGE_MS,
+  );
+}
+
+function schedulePoll(delayMs) {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = setTimeout(() => {
+    pollTimer = null;
+    void (async () => {
+      const keepGoing = await pollSentTasksOnce();
+      if (keepGoing) {
+        const delay = pollFails > 0 ? POLL_BACKOFF_MS : POLL_INTERVAL_MS;
+        schedulePoll(delay);
+      } else {
+        pollRunning = false;
+      }
+    })();
+  }, delayMs);
+}
+
+function ensurePollRunning() {
+  if (pollRunning) return;
+  pollRunning = true;
+  pollFails = 0;
+  schedulePoll(0);
+}
+
+/**
+ * @param {{url: string, title?: string, headers?: Record<string,string>, pageUrl?: string, thumbnail_url?: string}[]} items
  */
 async function enqueueViaBridge(items) {
   const ctrl = new AbortController();
@@ -634,34 +935,189 @@ async function enqueueViaBridge(items) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data && data.ok) {
-      return { ok: true, count: data.count };
+      const taskIds = Array.isArray(data.taskIds)
+        ? data.taskIds.filter((id) => typeof id === "string" && id.trim())
+        : [];
+      return { ok: true, count: data.count, taskIds };
     }
     return {
       ok: false,
       error: (data && data.error) || `桥接失败 HTTP ${res.status}`,
+      retryable: looksLikeBridgeRetryable(
+        (data && data.error) || "",
+        res.status,
+      ),
     };
   } catch (err) {
     return {
       ok: false,
       error: String(err?.message || err),
       bridgeDown: true,
+      retryable: true,
     };
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 协议回退：仅支持单 URL（无 headers）。 */
+function looksLikeBridgeRetryable(error, status) {
+  const text = String(error || "").toLowerCase();
+  if (status === 502 || status === 503) return true;
+  return /未就绪|未启动|not ready|sidecar|下载服务|连接|econnrefused|failed to fetch|networkerror|aborted/i.test(
+    text,
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** @returns {Promise<{ok: boolean, sidecarReady?: boolean}>} */
+async function probeBridgeHealth() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 1500);
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/health`, {
+      method: "GET",
+      signal: ctrl.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data || !data.ok) {
+      return { ok: false };
+    }
+    return {
+      ok: true,
+      sidecarReady: data.sidecarReady !== false,
+    };
+  } catch {
+    return { ok: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const APP_MISSING_ERROR =
+  "未检测到百纳桌面端。已打开安装说明；请安装并运行后再回来点下载（开发可用：npm run desktop）。";
+
+/**
+ * 打开扩展内安装引导页（内含官网下载链接占位）。
+ * 冷却期内不重复弹页，避免连点刷标签。
+ */
+async function openInstallGuide({ force = false } = {}) {
+  try {
+    if (!force) {
+      const data = await chrome.storage.session.get(INSTALL_GUIDE_OPEN_KEY);
+      const last = Number(data?.[INSTALL_GUIDE_OPEN_KEY] || 0);
+      if (last && Date.now() - last < INSTALL_GUIDE_COOLDOWN_MS) {
+        return { ok: true, throttled: true };
+      }
+    }
+    await chrome.storage.session.set({
+      [INSTALL_GUIDE_OPEN_KEY]: Date.now(),
+    });
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL("install.html"),
+      active: true,
+    });
+    return { ok: true };
+  } catch (err) {
+    // 退而求其次：直接打开官网占位地址
+    try {
+      await chrome.tabs.create({ url: DOWNLOAD_SITE_URL, active: true });
+      return { ok: true, via: "site" };
+    } catch (err2) {
+      return { ok: false, error: String(err2?.message || err2 || err) };
+    }
+  }
+}
+
+/** 通过 downany://open 拉起 / 聚焦本机客户端（不入队）。必须前台标签，否则 Chrome 常不触发协议。 */
+async function wakeAppViaProtocol() {
+  const redirect =
+    chrome.runtime.getURL("redirect.html") + "?action=open";
+  const tab = await chrome.tabs.create({ url: redirect, active: true });
+  // 给系统一点时间弹出「打开百纳？」并完成唤起
+  await sleep(2500);
+  if (tab?.id != null) {
+    void chrome.tabs.remove(tab.id).catch(() => {});
+  }
+}
+
+/**
+ * 等待本机桥 + Sidecar 可入队。
+ * @returns {Promise<boolean>}
+ */
+async function waitForBridgeReady({
+  timeoutMs = 20000,
+  intervalMs = 700,
+} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const health = await probeBridgeHealth();
+    if (health.ok && health.sidecarReady) return true;
+    await sleep(intervalMs);
+  }
+  return false;
+}
+
+/**
+ * 桥失败时：唤醒客户端 → 等就绪 → 重试一次带 Cookie 的入队。
+ * @param {{url: string, title?: string, headers?: Record<string,string>}[]} items
+ * @param {{ onStatus?: (msg: string) => void }} [opts]
+ */
+async function enqueueViaBridgeOrWake(items, { onStatus } = {}) {
+  let bridge = await enqueueViaBridge(items);
+  if (bridge.ok) return bridge;
+  if (!bridge.retryable && !bridge.bridgeDown) return bridge;
+
+  onStatus?.("正在打开百纳…");
+  try {
+    await wakeAppViaProtocol();
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        "无法唤起百纳：" +
+        String(err?.message || err) +
+        "。" +
+        APP_MISSING_ERROR,
+      bridgeDown: true,
+      needApp: true,
+    };
+  }
+
+  onStatus?.("等待下载器就绪…");
+  const ready = await waitForBridgeReady();
+  if (!ready) {
+    return {
+      ok: false,
+      error: APP_MISSING_ERROR,
+      bridgeDown: true,
+      needApp: true,
+    };
+  }
+
+  onStatus?.("正在重新发送…");
+  bridge = await enqueueViaBridge(items);
+  if (bridge.ok) return { ...bridge, woke: true };
+  return {
+    ok: false,
+    error: bridge.error || "入队失败",
+    bridgeDown: !!bridge.bridgeDown,
+    needApp: !!bridge.bridgeDown,
+  };
+}
+
+/** 协议回退：仅支持单 URL（无 headers）；仅在已知桌面端已注册协议时偶用。 */
 async function enqueueViaProtocol(pageUrl) {
   const redirect =
     chrome.runtime.getURL("redirect.html") +
     `?url=${encodeURIComponent(pageUrl)}`;
-  const tab = await chrome.tabs.create({ url: redirect, active: false });
-  setTimeout(() => {
-    if (tab?.id != null) {
-      void chrome.tabs.remove(tab.id).catch(() => {});
-    }
-  }, 2500);
+  const tab = await chrome.tabs.create({ url: redirect, active: true });
+  await sleep(1800);
+  if (tab?.id != null) {
+    void chrome.tabs.remove(tab.id).catch(() => {});
+  }
   return { ok: true, via: "protocol" };
 }
 
@@ -773,46 +1229,70 @@ async function sendItemsToDownloader(
     return { ok: false, error, expired };
   }
 
-  const bridge = await enqueueViaBridge(valid);
+  const pushWakeStatus = (msg) => {
+    if (typeof tabId === "number" && tabId >= 0) {
+      void chrome.tabs
+        .sendMessage(tabId, { type: "wakeStatus", message: msg })
+        .catch(() => {});
+    }
+  };
+
+  const bridge = await enqueueViaBridgeOrWake(valid, {
+    onStatus: (msg) => {
+      pushWakeStatus(msg);
+      if (!silent) {
+        void flashBadge("…", "#2563eb", tabId);
+        // 不刷屏通知，仅角标提示；最终结果再 notify
+      }
+    },
+  });
   if (bridge.ok) {
+    const taskIds = Array.isArray(bridge.taskIds) ? bridge.taskIds : [];
+    if (taskIds.length > 0) {
+      await recordSentTasks({
+        taskIds,
+        items: valid,
+        tabId,
+      });
+    }
     if (!silent) {
       await flashBadge("✓", "#16a34a", tabId);
       notify(
         "已加入下载器",
         expired > 0
           ? `已发送 ${valid.length} 个任务，${expired} 条链接已过期被跳过`
-          : `已发送 ${valid.length} 个任务`,
+          : bridge.woke
+            ? `已打开百纳并发送 ${valid.length} 个任务`
+            : `已发送 ${valid.length} 个任务`,
       );
     }
-    return { ok: true, via: "bridge", count: valid.length, expired };
+    return {
+      ok: true,
+      via: bridge.woke ? "bridge-wake" : "bridge",
+      count: valid.length,
+      expired,
+      taskIds,
+      woke: !!bridge.woke,
+    };
   }
 
-  // 桥失败时对每个 URL 回退协议（无 header）
-  try {
-    for (const item of valid) {
-      await enqueueViaProtocol(item.url);
-    }
-    if (!silent) {
-      await flashBadge("✓", "#16a34a", tabId);
-      notify(
-        "已发送到下载器",
-        bridge.bridgeDown
-          ? "本机桥未连接，已改用协议投递；请确认下载器已启动"
-          : "已改用协议投递",
-      );
-    }
-    return { ok: true, via: "protocol", count: valid.length, expired };
-  } catch (err) {
-    const error =
-      (bridge.bridgeDown
-        ? "下载器未运行或桥未启动（请先打开 Electron 下载器）。"
-        : "") + String(err?.message || err || bridge.error || "发送失败");
-    if (!silent) {
-      await flashBadge("!", "#dc2626", tabId);
-      notify("无法发送", error);
-    }
-    return { ok: false, error };
+  // 唤醒后仍连不上：说明本机没有可用桌面端（或协议未注册）。
+  // 绝不把协议投递当成成功 — 否则页内按钮会闪「已入队」却什么都没发生。
+  const error = String(bridge.error || APP_MISSING_ERROR);
+  await flashBadge("!", "#dc2626", tabId);
+  if (bridge.needApp) {
+    void openInstallGuide();
   }
+  // 页内 silent 也要提示：否则用户以为点了没反应
+  notify("需要安装百纳", error);
+  return {
+    ok: false,
+    error,
+    needApp: true,
+    installUrl: chrome.runtime.getURL("install.html"),
+    downloadUrl: DOWNLOAD_SITE_URL,
+    expired,
+  };
 }
 
 async function sendToDownloader(pageUrl, { silent = false } = {}) {
@@ -1080,6 +1560,65 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "openInstallGuide") {
+    void openInstallGuide({ force: !!message.force }).then((result) => {
+      sendResponse(result);
+    });
+    return true;
+  }
+
+  if (message.type === "getSentTasks") {
+    void (async () => {
+      ensurePollRunning();
+      const tasks = await loadSentTasks();
+      sendResponse({
+        ok: true,
+        tasks: tasks.map((t) => ({
+          ...t,
+          error: friendlyTaskError(t.error),
+        })),
+      });
+    })();
+    return true;
+  }
+
+  if (message.type === "retrySend") {
+    void (async () => {
+      const taskId = String(message.taskId || "").trim();
+      const tasks = await loadSentTasks();
+      const entry = tasks.find((t) => t.taskId === taskId);
+      const url = String(
+        message.url || entry?.retryUrl || entry?.url || "",
+      ).trim();
+      if (!url) {
+        sendResponse({ ok: false, error: "找不到可重试的链接" });
+        return;
+      }
+      const pageUrl = String(
+        message.pageUrl || entry?.retryPageUrl || entry?.pageUrl || "",
+      );
+      const title = String(
+        message.title || entry?.retryTitle || entry?.title || "",
+      );
+      const tabId =
+        typeof message.tabId === "number"
+          ? message.tabId
+          : typeof entry?.tabId === "number"
+            ? entry.tabId
+            : -1;
+      const result = await sendItemsToDownloader(
+        [{ url, pageUrl, title }],
+        {
+          silent: true,
+          skipVerify: isYtdlpPreferredPage(url) || isYtdlpPreferredPage(pageUrl),
+          tabId,
+        },
+      );
+      sendResponse(result);
+    })();
+    return true;
+  }
+
   return false;
 });
 
@@ -1103,5 +1642,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
   if (info.menuItemId === MENU_PAGE) {
     void sendToDownloader(info.pageUrl || "");
+  }
+});
+
+// SW 被回收后重启时，若还有未终态任务则继续轮询
+void loadSentTasks().then((tasks) => {
+  if (
+    tasks.some(
+      (t) => t && t.taskId && !isTerminalStatus(t.status),
+    )
+  ) {
+    ensurePollRunning();
   }
 });

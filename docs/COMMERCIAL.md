@@ -10,6 +10,7 @@
 ## 官网（占位）
 
 - 主页：`https://downany.app`（待上线）
+- 下载页：`https://downany.app/download`（扩展「未检测到桌面端」时引导打开；待上线）
 - 文档：`https://downany.app/docs`
 - 更新日志：`https://downany.app/changelog`
 

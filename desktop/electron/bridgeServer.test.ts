@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseEnqueueBody } from "./bridgeServer";
+import {
+  parseEnqueueBody,
+  parseTaskIdsQuery,
+  BRIDGE_TASKS_MAX_IDS,
+} from "./bridgeServer";
 
 describe("parseEnqueueBody", () => {
   it("parses single url", () => {
@@ -95,5 +99,21 @@ describe("parseEnqueueBody", () => {
   it("returns empty for invalid json", () => {
     expect(parseEnqueueBody("{")).toEqual([]);
     expect(parseEnqueueBody("{}")).toEqual([]);
+  });
+});
+
+describe("parseTaskIdsQuery", () => {
+  it("parses and dedupes comma-separated ids", () => {
+    expect(parseTaskIdsQuery("a,b, a,c")).toEqual(["a", "b", "c"]);
+  });
+
+  it("returns empty for null or blank", () => {
+    expect(parseTaskIdsQuery(null)).toEqual([]);
+    expect(parseTaskIdsQuery("  ")).toEqual([]);
+  });
+
+  it("caps at BRIDGE_TASKS_MAX_IDS", () => {
+    const ids = Array.from({ length: BRIDGE_TASKS_MAX_IDS + 10 }, (_, i) => `t${i}`);
+    expect(parseTaskIdsQuery(ids.join(","))).toHaveLength(BRIDGE_TASKS_MAX_IDS);
   });
 });

@@ -115,3 +115,30 @@ function sanitizeHttpUrl(value: string): string | null {
 export function buildAddDeepLink(pageUrl: string): string {
   return `${PROTOCOL_SCHEME}://add?url=${encodeURIComponent(pageUrl)}`;
 }
+
+/**
+ * 仅唤醒 / 聚焦应用的深链（不入队）。
+ * 供扩展在本机桥不可达时拉起客户端，再走 HTTP 桥带 Cookie 入队。
+ */
+export function buildOpenDeepLink(): string {
+  return `${PROTOCOL_SCHEME}://open`;
+}
+
+/** 是否为唤醒深链：`downany://open` / `downany://wake`。 */
+export function isOpenDeepLink(raw: string): boolean {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== `${PROTOCOL_SCHEME}:`) {
+    return false;
+  }
+  const hostOrPath = (
+    parsed.hostname || parsed.pathname.replace(/^\//, "")
+  ).toLowerCase();
+  return hostOrPath === "open" || hostOrPath === "wake";
+}
