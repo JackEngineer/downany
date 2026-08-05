@@ -29,15 +29,28 @@
 
 1. 确认 `desktop/package.json` 的 `version` 与拟发 tag 一致（当前 `0.1.0`）。  
 2. 推送含发布说明的提交到 `main`。  
-3. 创建 Release：
+3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
+   ```bash
+   mkdir -p desktop/release
+   (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-0.8.1.zip . \
+     -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
+   ```
+4. 创建 Release（DMG + 扩展 zip）：
    ```bash
    gh auth login   # 若尚未登录
    gh release create v0.1.0 \
      desktop/release/Downany-0.1.0-mac.dmg \
+     desktop/release/Downany-chrome-extension-0.8.1.zip \
      --title "Downany 0.1.0" \
      --notes-file docs/RELEASE-NOTES-0.1.0.md
    ```
-4. 在另一台未装开发环境的 Mac 上验证：右键打开 → Sidecar 握手 → 扩展桥 `http://127.0.0.1:17888/health` → 入队一条公开链接。
+5. 在另一台未装开发环境的 Mac 上验证：右键打开 → Sidecar 握手 → 扩展桥 `http://127.0.0.1:17888/health` → 入队一条公开链接。
+
+### Chrome 扩展安装（未上架商店）
+
+1. 从 Release 下载 `Downany-chrome-extension-*.zip` 并解压  
+2. Chrome → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选解压目录  
+3. 先启动桌面端，再使用扩展（HTTP 桥 `127.0.0.1:17888`）
 
 ### 安装后冒烟清单
 

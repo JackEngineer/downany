@@ -7,6 +7,7 @@
 1. 下载 `Downany-0.1.0-mac.dmg`
 2. 将 Downany 拖入「应用程序」
 3. **右键打开**（或 `xattr -cr /Applications/Downany.app`），因当前未公证
+4. （可选）下载 `Downany-chrome-extension-0.8.1.zip`，解压后在 `chrome://extensions` 以开发者模式「加载已解压」
 
 详见 [RELEASE.md](RELEASE.md)。
 
