@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # 用 PyInstaller 构建 Sidecar 到 desktop/resources/sidecar
+# onedir 产物：macOS → DownanySidecar/DownanySidecar；Windows → DownanySidecar/DownanySidecar.exe
+# Windows 原生编排见 scripts/build_windows_nsis.ps1
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,16 +30,34 @@ cd "${ROOT}"
   --workpath "${BUILD_DIR}/work" \
   "${SPEC}"
 
-# onedir: OUT/DownanySidecar/DownanySidecar
-# onefile 兼容: OUT/DownanySidecar
+# onedir: OUT/DownanySidecar/DownanySidecar[.exe]
+# onefile 兼容: OUT/DownanySidecar[.exe]
+detect_is_windows() {
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*|Windows_NT) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 SIDECAR_DIR="${OUT}/DownanySidecar"
-SIDECAR="${SIDECAR_DIR}/DownanySidecar"
-if [[ ! -x "${SIDECAR}" ]]; then
-  SIDECAR="${OUT}/DownanySidecar"
-fi
-if [[ ! -x "${SIDECAR}" ]]; then
-  echo "未找到 Sidecar 可执行文件（期望 onedir ${SIDECAR_DIR}/DownanySidecar）" >&2
-  exit 1
+if detect_is_windows; then
+  SIDECAR="${SIDECAR_DIR}/DownanySidecar.exe"
+  if [[ ! -f "${SIDECAR}" ]]; then
+    SIDECAR="${OUT}/DownanySidecar.exe"
+  fi
+  if [[ ! -f "${SIDECAR}" ]]; then
+    echo "未找到 Sidecar 可执行文件（期望 onedir ${SIDECAR_DIR}/DownanySidecar.exe）" >&2
+    exit 1
+  fi
+else
+  SIDECAR="${SIDECAR_DIR}/DownanySidecar"
+  if [[ ! -x "${SIDECAR}" ]]; then
+    SIDECAR="${OUT}/DownanySidecar"
+  fi
+  if [[ ! -x "${SIDECAR}" ]]; then
+    echo "未找到 Sidecar 可执行文件（期望 onedir ${SIDECAR_DIR}/DownanySidecar）" >&2
+    exit 1
+  fi
 fi
 
 echo "==> 冒烟"
