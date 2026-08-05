@@ -27,6 +27,7 @@ import type * as http from "node:http";
   type BridgeTaskStatus,
 } from "./bridgeServer";
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
+import { windowChromeOptions } from "./windowChrome";
 import {
   PROTOCOL_SCHEME,
   extractAddsFromArgv,
@@ -467,9 +468,7 @@ function createWindow(): void {
     minHeight: 480,
     title: "百纳",
     show: false,
-    titleBarStyle: "hiddenInset",
-    vibrancy: "under-window",
-    transparent: true,
+    ...windowChromeOptions(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
