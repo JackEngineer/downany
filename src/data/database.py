@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from src.data.models import DownloadRecord, SearchRecord
+from src.sidecar.paths import AppPaths
 from src.utils.logger import setup_logger
 
 logger = setup_logger("Database")
@@ -37,15 +38,9 @@ class HistoryDB:
             return
 
         self._initialized = True
-        # 与 Sidecar AppPaths 默认一致；生产路径应显式传入 db_path
-        db_dir = os.path.join(
-            os.path.expanduser("~"),
-            "Library",
-            "Application Support",
-            "Downany",
-        )
-        os.makedirs(db_dir, exist_ok=True)
-        self.db_path = os.path.join(db_dir, "history.db")
+        paths = AppPaths.default()
+        paths.ensure()
+        self.db_path = str(paths.history_db_path)
         self._init_database()
         logger.info(f"数据库初始化完成: {self.db_path}")
 
