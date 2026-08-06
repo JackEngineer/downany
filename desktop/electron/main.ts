@@ -27,6 +27,7 @@ import type * as http from "node:http";
   type BridgeTaskStatus,
 } from "./bridgeServer";
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
+import { windowChromeOptions } from "./windowChrome";
 import {
   PROTOCOL_SCHEME,
   extractAddsFromArgv,
@@ -53,6 +54,7 @@ import {
   saveWindowState,
 } from "./windowState";
 import { checkForAppUpdates } from "./appUpdater";
+import { resolveDownanyDataDir, resolveDownanyLogDir } from "./appDataDir";
 import {
   buildExtractEnqueueItems,
   getExtractSession,
@@ -76,15 +78,8 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-/** 与 sidecar paths.py 对齐（Electron package name 是 downany-desktop，勿用 userData）。 */
-function resolveDownanyDataDir(): string {
-  const override = (
-    process.env.DOWNANY_DATA_DIR ||
-    process.env.VIDEODL_DATA_DIR ||
-    ""
-  ).trim();
-  if (override) return path.resolve(override);
-  return path.join(app.getPath("home"), "Library", "Application Support", "Downany");
+function downanyDataDir(): string {
+  return resolveDownanyDataDir(process.env, process.platform, app.getPath("home"));
 }
 
 function installLocalThumbnailProtocol(): void {
@@ -98,7 +93,7 @@ function installLocalThumbnailProtocol(): void {
         return new Response("bad request", { status: 400 });
       }
       const filePath = path.join(
-        resolveDownanyDataDir(),
+        downanyDataDir(),
         "thumbnails",
         `${taskId}.jpg`,
       );
@@ -473,9 +468,7 @@ function createWindow(): void {
     minHeight: 480,
     title: "百纳",
     show: false,
-    titleBarStyle: "hiddenInset",
-    vibrancy: "under-window",
-    transparent: true,
+    ...windowChromeOptions(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -572,14 +565,24 @@ function updateDockUi(rebuildMenu = true): void {
 
 function syncMenuBarMode(enabled: boolean): void {
   menuBarMode = enabled;
-  if (process.platform !== "darwin") return;
-  if (enabled) {
-    tray.enable();
-    tray.update(taskTracker.activeCount(), taskTracker.recent());
-    app.dock.hide();
-  } else {
-    tray.disable();
-    app.dock.show();
+  if (process.platform === "darwin") {
+    if (enabled) {
+      tray.enable();
+      tray.update(taskTracker.activeCount(), taskTracker.recent());
+      app.dock.hide();
+    } else {
+      tray.disable();
+      app.dock.show();
+    }
+    return;
+  }
+  if (process.platform === "win32" || process.platform === "linux") {
+    if (enabled) {
+      tray.enable();
+      tray.update(taskTracker.activeCount(), taskTracker.recent());
+    } else {
+      tray.disable();
+    }
   }
 }
 
@@ -709,8 +712,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("sidecar:getLogDir", async () => {
-    const home = app.getPath("home");
-    return path.join(home, "Library", "Logs", "Downany");
+    return resolveDownanyLogDir(process.env, process.platform, app.getPath("home"));
   });
 
   ipcMain.handle("app:openPath", async (_evt, target: string) => {

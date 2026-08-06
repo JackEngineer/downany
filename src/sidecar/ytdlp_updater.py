@@ -6,6 +6,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,7 +18,14 @@ from src.utils.logger import setup_logger
 logger = setup_logger("YtDlpUpdater")
 
 RELEASE_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
-ASSET_NAME = "yt-dlp_macos"
+
+
+def release_asset_name() -> str:
+    if sys.platform == "win32":
+        return "yt-dlp.exe"
+    if sys.platform == "darwin":
+        return "yt-dlp_macos"
+    return "yt-dlp"
 
 
 def ytdlp_bin_dir(paths: AppPaths) -> Path:
@@ -25,7 +33,8 @@ def ytdlp_bin_dir(paths: AppPaths) -> Path:
 
 
 def ytdlp_path(paths: AppPaths) -> Path:
-    return ytdlp_bin_dir(paths) / "yt-dlp"
+    name = "yt-dlp.exe" if sys.platform == "win32" else "yt-dlp"
+    return ytdlp_bin_dir(paths) / name
 
 
 def resolve_ytdlp_executable(paths: AppPaths) -> str:
@@ -93,7 +102,7 @@ def check_update(paths: AppPaths, *, opener=urllib.request.urlopen) -> Dict[str,
     assets = data.get("assets") or []
     download_url = ""
     for asset in assets:
-        if asset.get("name") == ASSET_NAME:
+        if asset.get("name") == release_asset_name():
             download_url = asset.get("browser_download_url") or ""
             break
     if not download_url:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import plistlib
 import shutil
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -215,6 +216,13 @@ def run_migration(
       status: skipped | migrated | failed
       message, details
     """
+    if sys.platform != "darwin":
+        return {
+            "status": "skipped",
+            "message": "非 macOS，跳过旧版迁移",
+            "details": {"platform": sys.platform},
+        }
+
     paths.ensure()
     details: Dict[str, Any] = {}
 

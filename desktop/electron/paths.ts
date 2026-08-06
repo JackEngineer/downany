@@ -28,15 +28,41 @@ export function bundledBinDir(fromDir: string): string {
   return path.join(resourcesRoot(fromDir), "bin");
 }
 
+export function platformExecutable(baseName: string): string[] {
+  if (process.platform === "win32") {
+    return [`${baseName}.exe`, baseName];
+  }
+  return [baseName, `${baseName}.exe`];
+}
+
+export function defaultDevPython(repoRoot: string): string {
+  if (process.platform === "win32") {
+    return path.join(repoRoot, "venv", "Scripts", "python.exe");
+  }
+  return path.join(repoRoot, "venv", "bin", "python");
+}
+
 export function bundledSidecarPath(fromDir: string): string {
   const root = path.join(resourcesRoot(fromDir), "sidecar");
-  // onedir（推荐）：sidecar/DownanySidecar/DownanySidecar
-  const onedir = path.join(root, "DownanySidecar", "DownanySidecar");
-  if (fs.existsSync(onedir)) {
-    return onedir;
+  const onedirDir = path.join(root, "DownanySidecar");
+
+  // onedir（推荐）：sidecar/DownanySidecar/{DownanySidecar[.exe]}
+  for (const name of platformExecutable("DownanySidecar")) {
+    const candidate = path.join(onedirDir, name);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
   }
-  // onefile 兼容：sidecar/DownanySidecar
-  return path.join(root, "DownanySidecar");
+
+  // onefile 兼容：sidecar/{DownanySidecar[.exe]}
+  for (const name of platformExecutable("DownanySidecar")) {
+    const candidate = path.join(root, name);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return path.join(onedirDir, platformExecutable("DownanySidecar")[0]);
 }
 
 
@@ -88,7 +114,7 @@ export function resolveSidecarLaunch(
     opts.pythonPath ||
     process.env.DOWNANY_PYTHON ||
     process.env.VIDEODL_PYTHON ||
-    path.join(repoRoot, "venv", "bin", "python");
+    defaultDevPython(repoRoot);
   const devBin = path.join(repoRoot, "bin");
   if (!env.DOWNANY_BIN_DIR && fs.existsSync(devBin)) {
     env.DOWNANY_BIN_DIR = devBin;

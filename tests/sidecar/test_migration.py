@@ -1,6 +1,7 @@
 """旧数据迁移测试。"""
 import plistlib
 import sqlite3
+import sys
 from pathlib import Path
 
 from src.data.json_config import JsonConfig
@@ -113,6 +114,14 @@ def test_migration_from_videodownloader_app_support(tmp_path):
     with sqlite3.connect(paths.history_db_path) as conn:
         row = conn.execute("SELECT id FROM download_history WHERE id='r1'").fetchone()
         assert row is not None
+
+
+def test_run_migration_skips_on_windows(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
+    result = run_migration(paths)
+    assert result["status"] == "skipped"
+    assert "Windows" in result["message"] or "非 macOS" in result["message"]
 
 
 def test_migration_no_old_data(tmp_path):

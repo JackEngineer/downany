@@ -9,6 +9,7 @@ import {
   ProtocolEvent,
 } from "./protocol";
 import { resolveSidecarLaunch } from "./paths";
+import { killProcessTree } from "./processTree";
 
 interface PendingRequest {
   resolve: (payload: unknown) => void;
@@ -277,19 +278,14 @@ export class SidecarProcess extends EventEmitter {
     const child = this.proc;
     this.proc = null;
     const pid = child.pid;
+    if (pid) {
+      killProcessTree(pid);
+      return;
+    }
     try {
-      if (pid && process.platform !== "win32") {
-        // 负 PID：杀掉整个进程组（含 PyInstaller 子进程）
-        process.kill(-pid, "SIGTERM");
-      } else {
-        child.kill("SIGTERM");
-      }
+      child.kill("SIGTERM");
     } catch {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
+      // ignore
     }
   }
 

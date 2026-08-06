@@ -122,7 +122,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
         >
           <option value="">不导入</option>
           <option value="chrome">Chrome</option>
-          <option value="safari">Safari</option>
+          {window.api?.platform === "darwin" && <option value="safari">Safari</option>}
           <option value="firefox">Firefox</option>
           <option value="edge">Edge</option>
         </select>
@@ -341,7 +341,28 @@ function PostprocessTab({ draft, disabled, update }: TabProps) {
   );
 }
 
+function menuBarModeCopy(): { label: string; hint: string } {
+  const ua = navigator.userAgent;
+  if (ua.includes("Windows")) {
+    return {
+      label: "关闭时最小化到托盘",
+      hint: "开启后关闭主窗口不退出，应用驻留系统托盘，可从托盘恢复或退出。",
+    };
+  }
+  if (ua.includes("Mac")) {
+    return {
+      label: "菜单栏模式",
+      hint: "开启后隐藏 Dock 图标，关闭主窗口不退出，驻留系统菜单栏。",
+    };
+  }
+  return {
+    label: "菜单栏模式",
+    hint: "开启后关闭主窗口不退出，应用驻留系统托盘。",
+  };
+}
+
 function AppearanceTab({ draft, disabled, update }: TabProps) {
+  const menuBarMode = menuBarModeCopy();
   return (
     <div className="settings-grid">
       <label className="settings-row">
@@ -360,7 +381,7 @@ function AppearanceTab({ draft, disabled, update }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>菜单栏模式</span>
+        <span>{menuBarMode.label}</span>
         <input
           type="checkbox"
           checked={Boolean(draft.menu_bar_mode)}
@@ -368,17 +389,19 @@ function AppearanceTab({ draft, disabled, update }: TabProps) {
           onChange={(e) => update({ menu_bar_mode: e.target.checked })}
         />
       </label>
-      <p className="muted small">开启后隐藏 Dock 图标，关闭主窗口不退出，驻留系统菜单栏。</p>
+      <p className="muted small">{menuBarMode.hint}</p>
 
-      <label className="settings-row">
-        <span>Dock 进度条</span>
-        <input
-          type="checkbox"
-          checked={draft.dock_progress !== false}
-          disabled={disabled}
-          onChange={(e) => update({ dock_progress: e.target.checked })}
-        />
-      </label>
+      {window.api?.platform === "darwin" && (
+        <label className="settings-row">
+          <span>Dock 进度条</span>
+          <input
+            type="checkbox"
+            checked={draft.dock_progress !== false}
+            disabled={disabled}
+            onChange={(e) => update({ dock_progress: e.target.checked })}
+          />
+        </label>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -77,6 +78,16 @@ def sanitize_filename(name: str, fallback: str = "video") -> str:
     cleaned = re.sub(r'[\\/:*?"<>|]', " ", name).strip()
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned[:80] or fallback
+
+
+def format_postprocess_command(script: str, file_path: str) -> str:
+    if sys.platform == "win32":
+        quoted = subprocess.list2cmdline([file_path])
+    else:
+        quoted = shlex.quote(file_path)
+    if "{file}" in script:
+        return script.format(file=quoted)
+    return f"{script} {quoted}"
 
 
 class DownloadManager:
@@ -437,8 +448,7 @@ class DownloadManager:
         if not script:
             logger.warning("任务配置了脚本后处理但脚本为空: %s", task.id)
             return
-        quoted = shlex.quote(task.file_path)
-        command = script.format(file=quoted) if "{file}" in script else f"{script} {quoted}"
+        command = format_postprocess_command(script, task.file_path)
         logger.info(f"执行后处理脚本: {command}")
         try:
             result = subprocess.run(

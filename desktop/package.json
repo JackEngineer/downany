@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.node.json --noEmit && vite build",
     "test": "vitest run --config vitest.config.ts",
     "start": "electron .",
-    "dist:mac": "electron-builder --mac --config electron-builder.yml"
+    "dist:mac": "electron-builder --mac --config electron-builder.yml",
+    "dist:win": "electron-builder --win --config electron-builder.yml"
   },
   "dependencies": {
     "react": "^18.3.1",

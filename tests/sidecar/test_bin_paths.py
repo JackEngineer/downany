@@ -40,3 +40,23 @@ def test_missing_bin_returns_none(monkeypatch):
     monkeypatch.setenv("DOWNANY_BIN_DIR", "/tmp/downany-missing-bin-dir-xyz")
     assert resolve_ffmpeg_path() is None
     assert resolve_bundled_ytdlp_path() is None
+
+
+def test_resolve_ffmpeg_exe_on_windows(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    ffmpeg = bin_dir / "ffmpeg.exe"
+    ffmpeg.write_bytes(b"MZ")
+    ffmpeg.chmod(0o755)
+    monkeypatch.setenv("DOWNANY_BIN_DIR", str(bin_dir))
+    assert resolve_ffmpeg_path() == ffmpeg.resolve()
+
+
+def test_resolve_bundled_ytdlp_exe(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    ytdlp = bin_dir / "yt-dlp.exe"
+    ytdlp.write_bytes(b"MZ")
+    ytdlp.chmod(0o755)
+    monkeypatch.setenv("DOWNANY_BIN_DIR", str(bin_dir))
+    assert resolve_bundled_ytdlp_path() == ytdlp.resolve()

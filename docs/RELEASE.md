@@ -25,6 +25,34 @@
    ```
 3. **系统设置** → 隐私与安全性 → 仍允许打开
 
+---
+
+## 未签名 NSIS（Windows）
+
+在 Windows 上本地构建（需 Python venv + Node.js；NSIS 不在 macOS 上产出）：
+
+```powershell
+.\scripts\build_windows_nsis.ps1
+# 已有 bin + sidecar 时可跳过：
+# $env:FETCH_BINS=0; $env:BUILD_SIDECAR=0; .\scripts\build_windows_nsis.ps1
+```
+
+产物：`desktop/release/Downany-<version>-win-x64.exe`（与 `desktop/electron-builder.yml` 中 `artifactName: Downany-${version}-win-${arch}.${ext}` 一致；已在 `.gitignore`，勿提交）。
+
+### 用户首次运行（SmartScreen）
+
+未签名安装包会被 Windows SmartScreen 拦截。安装或首次启动时：
+
+1. 出现 **「Windows 已保护你的电脑」**
+2. 点击 **更多信息**
+3. 点击 **仍要运行**
+
+### Windows Defender 误报
+
+未签名的 Sidecar（`DownanySidecar.exe`）与捆绑的 `ffmpeg.exe` 可能被 Defender 或第三方杀软标为「未知发布者」或误报。属未签名本地/CI 构建的常见情况；若用户遇到拦截，可在 Defender 中为安装目录添加排除项，或等待正式代码签名后再分发。
+
+---
+
 ### GitHub Releases 发布步骤
 
 1. 确认 `desktop/package.json` 的 `version` 与拟发 tag 一致（当前 `0.1.0`）。  
@@ -35,16 +63,20 @@
    (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-0.8.1.zip . \
      -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
    ```
-4. 创建 Release（DMG + 扩展 zip）：
+4. 创建 Release（**DMG + NSIS + 扩展 zip** 同挂一个 tag）：
    ```bash
    gh auth login   # 若尚未登录
    gh release create v0.1.0 \
      desktop/release/Downany-0.1.0-mac.dmg \
+     desktop/release/Downany-0.1.0-win-x64.exe \
      desktop/release/Downany-chrome-extension-0.8.1.zip \
      --title "Downany 0.1.0" \
      --notes-file docs/RELEASE-NOTES-0.1.0.md
    ```
-5. 在另一台未装开发环境的 Mac 上验证：右键打开 → Sidecar 握手 → 扩展桥 `http://127.0.0.1:17888/health` → 入队一条公开链接。
+   macOS 与 Windows 安装包可在各自平台构建后一并上传；勿只发 DMG 或只发 NSIS。
+5. 在另一台未装开发环境的机器上验证：
+   - **macOS**：右键打开 DMG → Sidecar 握手 → 扩展桥 `http://127.0.0.1:17888/health` → 入队一条公开链接
+   - **Windows**：SmartScreen「仍要运行」→ 安装 → 同上 health / 入队冒烟
 
 ### Chrome 扩展安装（未上架商店）
 

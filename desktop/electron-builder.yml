@@ -50,3 +50,15 @@ mac:
 dmg:
   artifactName: Downany-${version}-mac.${ext}
   title: Downany · 百纳 ${version}
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Downany-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Downany
+  uninstallDisplayName: Downany · 百纳

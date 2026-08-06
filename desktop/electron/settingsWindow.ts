@@ -1,6 +1,8 @@
 import { BrowserWindow } from "electron";
 import * as path from "node:path";
 
+import { windowChromeOptions } from "./windowChrome";
+
 let settingsWindow: BrowserWindow | null = null;
 
 export function openSettingsWindow(preloadPath: string): BrowserWindow {
@@ -16,9 +18,7 @@ export function openSettingsWindow(preloadPath: string): BrowserWindow {
     minHeight: 480,
     title: "设置",
     show: false,
-    titleBarStyle: "hiddenInset",
-    vibrancy: "under-window",
-    transparent: true,
+    ...windowChromeOptions(),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

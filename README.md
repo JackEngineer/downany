@@ -1,6 +1,6 @@
 # Downany · 百纳
 
-macOS 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
+macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
 ## 功能
 
@@ -31,8 +31,12 @@ Sidecar 单独调试：
 python -m src.sidecar
 ```
 
-数据目录：`~/Library/Application Support/Downany/`  
-日志：`~/Library/Logs/Downany/`
+| 平台 | 数据目录 | 日志 |
+|------|----------|------|
+| macOS | `~/Library/Application Support/Downany/` | `~/Library/Logs/Downany/` |
+| Windows | `%LOCALAPPDATA%\Downany` | `%LOCALAPPDATA%\Downany\logs` |
+
+环境变量 `DOWNANY_DATA_DIR` 可覆盖数据目录。
 
 ## 下载与发布
 
@@ -40,23 +44,31 @@ python -m src.sidecar
 
 | 产物 | 说明 |
 |------|------|
-| `Downany-<ver>-mac.dmg` | 桌面端；首次需右键「打开」或 `xattr -cr /Applications/Downany.app` |
+| `Downany-<ver>-mac.dmg` | macOS 桌面端；首次需右键「打开」或 `xattr -cr /Applications/Downany.app` |
+| `Downany-<ver>-win-x64.exe` | Windows NSIS 安装包；SmartScreen 需「更多信息 → 仍要运行」 |
 | `Downany-chrome-extension-<ver>.zip` | Chrome 扩展；解压后在 `chrome://extensions` 以开发者模式加载 |
 
 详细步骤、公证与应用内更新检查：见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-## 打包（macOS）
+## 打包
+
+**macOS：**
 
 ```bash
 ./scripts/fetch_release_binaries.sh   # yt-dlp + ffmpeg → desktop/resources/bin
 ./scripts/build_sidecar.sh            # PyInstaller Sidecar（onedir）
 ./scripts/build_macos_dmg.sh          # 未签名 .app / DMG（可设 FETCH_BINS=0 BUILD_SIDECAR=0 跳过）
-# Chrome 扩展 zip（版本取自 browser-extension/manifest.json）：
-# (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-0.8.1.zip . \
-#   -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
 # 有 Apple 证书时：
 # SIGN_IDENTITY=... APPLE_ID=... APP_PASSWORD=... TEAM_ID=... ./scripts/notarize_macos.sh
 ```
+
+**Windows**（须在 Windows 上构建；NSIS 不在 macOS 产出）：
+
+```powershell
+.\scripts\build_windows_nsis.ps1      # 拉取 Win 二进制 → Sidecar → electron-builder --win
+```
+
+Chrome 扩展 zip（版本取自 `browser-extension/manifest.json`）与 DMG/NSIS 同挂 Release；打包示例见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 产物默认在 `desktop/release/`（已 gitignore，勿提交）。
 

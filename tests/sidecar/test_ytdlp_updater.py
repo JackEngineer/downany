@@ -1,11 +1,29 @@
 """yt-dlp 更新器单测（mock 网络）。"""
 import io
 import json
+import sys
 
 import pytest
 
 from src.sidecar.paths import AppPaths
 from src.sidecar import ytdlp_updater as updater
+from src.sidecar.ytdlp_updater import release_asset_name, ytdlp_path
+
+
+def test_release_asset_name_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert release_asset_name() == "yt-dlp.exe"
+
+
+def test_release_asset_name_darwin(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert release_asset_name() == "yt-dlp_macos"
+
+
+def test_ytdlp_path_windows(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    paths = AppPaths(data_dir=tmp_path, log_dir=tmp_path / "logs")
+    assert ytdlp_path(paths).name == "yt-dlp.exe"
 
 
 class _FakeResp:
@@ -23,6 +41,7 @@ class _FakeResp:
 
 
 def test_check_update_parses_release(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs").ensure()
     monkeypatch.setattr(updater, "current_version", lambda _p: "2024.01.01")
 

@@ -37,7 +37,9 @@ function buildTrayIcon(): Electron.NativeImage {
     set(x, 16);
   }
   const image = nativeImage.createFromBitmap(buffer, { width: size, height: size });
-  image.setTemplateImage(true);
+  if (process.platform === "darwin") {
+    image.setTemplateImage(true);
+  }
   return image;
 }
 

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from src.sidecar.paths import AppPaths
@@ -29,3 +30,23 @@ def test_env_override_data_dir(tmp_path, monkeypatch):
     paths = AppPaths.default()
     assert paths.data_dir == data.resolve()
     assert paths.config_path == data.resolve() / "config.json"
+
+
+def test_default_paths_on_windows(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.delenv("DOWNANY_DATA_DIR", raising=False)
+    monkeypatch.delenv("VIDEODL_DATA_DIR", raising=False)
+    paths = AppPaths.default()
+    assert paths.data_dir == (tmp_path / "LocalAppData" / "Downany").resolve()
+    assert paths.log_dir == (tmp_path / "LocalAppData" / "Downany" / "logs").resolve()
+
+
+def test_default_paths_on_darwin(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("DOWNANY_DATA_DIR", raising=False)
+    monkeypatch.delenv("VIDEODL_DATA_DIR", raising=False)
+    paths = AppPaths.default()
+    assert paths.data_dir == tmp_path / "Library" / "Application Support" / "Downany"
+    assert paths.log_dir == tmp_path / "Library" / "Logs" / "Downany"

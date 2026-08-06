@@ -9,6 +9,7 @@ yt-dlp 通过 EJS remote components 自动下载 solver 脚本，并调用本机
 """
 import os
 import shutil
+import sys
 from pathlib import Path
 
 # 允许 yt-dlp 按需拉取的远程组件（EJS challenge solver）
@@ -21,12 +22,16 @@ _DENO_DIRS = (
 )
 
 
+def _deno_name() -> str:
+    return "deno.exe" if sys.platform == "win32" else "deno"
+
+
 def ensure_js_runtime_path() -> None:
     """GUI / 打包环境 PATH 可能不含 homebrew：补全 deno 常见安装位置。"""
-    if shutil.which("deno"):
+    if shutil.which("deno") or shutil.which("deno.exe"):
         return
     for directory in _DENO_DIRS:
-        if (Path(directory) / "deno").exists():
+        if (Path(directory) / _deno_name()).exists():
             os.environ["PATH"] = (
                 directory + os.pathsep + os.environ.get("PATH", "")
             )

@@ -19,6 +19,24 @@ def bin_dir_from_env() -> Optional[Path]:
     return Path(raw).expanduser().resolve()
 
 
+def _candidate_names(base: str) -> list[str]:
+    if sys.platform == "win32":
+        return [f"{base}.exe", base]
+    return [base, f"{base}.exe"]
+
+
+def _first_executable(directory: Path, base: str) -> Optional[Path]:
+    for name in _candidate_names(base):
+        candidate = directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    if sys.platform == "win32":
+        exe = directory / f"{base}.exe"
+        if exe.is_file():
+            return exe
+    return None
+
+
 def resolve_ffmpeg_path(*, project_root: Optional[Path] = None) -> Optional[Path]:
     """
     优先级：
@@ -27,13 +45,13 @@ def resolve_ffmpeg_path(*, project_root: Optional[Path] = None) -> Optional[Path
     """
     env_dir = bin_dir_from_env()
     if env_dir is not None:
-        candidate = env_dir / "ffmpeg"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
+        candidate = _first_executable(env_dir, "ffmpeg")
+        if candidate is not None:
             return candidate
 
     if project_root is not None:
-        candidate = project_root / "bin" / "ffmpeg"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
+        candidate = _first_executable(project_root / "bin", "ffmpeg")
+        if candidate is not None:
             return candidate
     return None
 
@@ -43,7 +61,4 @@ def resolve_bundled_ytdlp_path() -> Optional[Path]:
     env_dir = bin_dir_from_env()
     if env_dir is None:
         return None
-    candidate = env_dir / "yt-dlp"
-    if candidate.is_file() and os.access(candidate, os.X_OK):
-        return candidate
-    return None
+    return _first_executable(env_dir, "yt-dlp")

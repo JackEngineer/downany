@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.sidecar.bin_paths import resolve_ffmpeg_path
+from src.sidecar.paths import AppPaths
 from src.utils.logger import setup_logger
 
 logger = setup_logger("LocalThumbnail")
@@ -22,12 +23,7 @@ def thumbnail_url_for_task(task_id: str) -> str:
 
 
 def default_data_dir() -> Path:
-    override = (os.environ.get("DOWNANY_DATA_DIR") or "").strip()
-    if not override:
-        override = (os.environ.get("VIDEODL_DATA_DIR") or "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
-    return Path.home() / "Library" / "Application Support" / "Downany"
+    return AppPaths.default().data_dir
 
 
 def thumbs_dir(data_dir: Optional[Path] = None) -> Path:
