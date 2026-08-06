@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-macOS 视频下载应用（产品名 **Downany · 百纳**）：
+macOS / Windows 视频下载应用（产品名 **Downany · 百纳**）：
 
 - **唯一产品主线**：Electron（`desktop/`）+ Python Sidecar（`src/sidecar/`，JSON Lines）+ yt-dlp
 - **旁线已删除**：无 PyQt / SwiftUI / `legacy/`；勿再引入
@@ -24,6 +24,8 @@ tests/{core,data,sidecar}/
 ```
 
 ## 开发命令
+
+**macOS / Linux（shell）：**
 
 ```bash
 ./scripts/install_env.sh
@@ -51,13 +53,24 @@ node browser-extension/shared.test.js
 #   -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
 ```
 
+**Windows（PowerShell）：**
+
+```powershell
+.\scripts\install_env.sh          # Git Bash 或 WSL
+venv\Scripts\activate
+cd desktop; npm install; npm run dev
+
+# 打包 NSIS（须在 Windows 上）
+.\scripts\build_windows_nsis.ps1  # 见 docs/RELEASE.md
+```
+
 ## 架构要点
 
 - **进程模型**：Electron Main 拉起并监护 Sidecar；Renderer 只经 preload IPC；stdout 仅协议行，日志走 stderr
 - **Sidecar 握手**：启动后尽早 `hello`，再做迁移/恢复队列；打包态路径为 `resources/sidecar/DownanySidecar/DownanySidecar`
 - **下载核心**：`src/core/download_manager.py` 队列与状态机（带锁）；失败必须向上抛出
 - **ffmpeg**：`DOWNANY_BIN_DIR`（兼容旧 `VIDEODL_BIN_DIR`）；开发可用仓库/`install_ffmpeg`，发布用 `desktop/resources/bin`
-- **持久化**：`json_config.py` / `database.py` / `queue_store.py`；数据目录 `~/Library/Application Support/Downany/`（`DOWNANY_DATA_DIR` 可覆盖）
+- **持久化**：`json_config.py` / `database.py` / `queue_store.py`；数据目录 macOS `~/Library/Application Support/Downany/`，Windows `%LOCALAPPDATA%\Downany`；日志 Windows `%LOCALAPPDATA%\Downany\logs`、macOS `~/Library/Logs/Downany/`（`DOWNANY_DATA_DIR` 可覆盖）
 - **迁移**：`migration.py` 可读旧 Trae 与 `VideoDownloader` 数据；**新路径与发布产物使用 Downany / 百纳**
 - **分发**：默认未签名 DMG（macOS）+ NSIS（Windows）+ Chrome 扩展 zip，经 GitHub Releases；应用内更新当前为「检查最新 Release → 前往下载」，自动替换待签名后启用；见 [docs/RELEASE.md](docs/RELEASE.md)
 - **扩展桥**：`127.0.0.1:17888`；桌面端须先运行，扩展才能入队

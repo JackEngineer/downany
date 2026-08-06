@@ -126,7 +126,8 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 
 ## 5. 明确不做
 
-- **Windows / Linux**：当前代码高度 macOS 化（Dock、Tray、vibrancy、Keychain、公证），跨平台会分散全部精力
+- **Linux**：不在当前交付范围
+- **双平台同发（macOS + Windows）**：正式版本须同时发布 DMG 与 NSIS；Windows 当前基线为**未签名 NSIS**（SmartScreen 可接受），代码签名后补；macOS 公证/签名仍按 M0.3 演进
 - **DRM 站点**（Netflix 等）：技术与法律双重不可行
 - **自研下载引擎替代 yt-dlp**：yt-dlp 的 extractor 维护量无法自建
 - **把站内搜索做大**：浏览器扩展 + 内置浏览器抓取已覆盖发现入口，Downie 亦无此功能
