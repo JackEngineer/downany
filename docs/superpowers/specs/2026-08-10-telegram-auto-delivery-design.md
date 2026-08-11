@@ -1,7 +1,7 @@
 # Downany · 百纳 Telegram 自动发送设计
 
 - 日期：2026-08-10
-- 状态：方案方向已确认，书面规格待复核
+- 状态：用户已通过规格
 - 产品范围：Electron 桌面端 + Python Sidecar，macOS 与 Windows
 - 目标分支：在 `feat/m0-windows-foundation` 双平台基线上实施
 
@@ -152,7 +152,7 @@ Telegram
 - 用户回到 Downany 点击“刷新接收位置”。客户端从本地服务的 `getUpdates` 汇总 `message.chat`、`channel_post.chat` 和 `my_chat_member.chat`。
 - 会话 ID 端到端使用字符串，避免 JavaScript 数字精度问题；列表按类型、标题和最近发现时间去重。
 - 支持的类型为 `private`、`group`、`supergroup`、`channel`。其他类型不出现在可选列表。
-- 每个 Bot 账号单独保存非秘密的 `last_update_id` 和已发现会话缓存；成功处理一批更新后才推进 offset。切换 Bot 时清空旧缓存，重复刷新不会丢失之前发现的会话。
+- 每个 Bot 账号单独保存非秘密的 `next_update_offset` 和已发现会话缓存；该值就是下一次 `getUpdates` 要传入的十进制 offset。只有成功处理并持久化整批更新后，才把它推进到 `max(update_id) + 1`；切换 Bot 时清空旧缓存，重复刷新不会丢失之前发现的会话。
 
 ### 7.3 验证与启用
 
@@ -195,7 +195,7 @@ Telegram
 - `telegram_target_chat_id`
 - `telegram_target_chat_type`
 - `telegram_target_chat_title`
-- `telegram_last_update_id`
+- `telegram_next_update_offset`
 - `telegram_discovered_targets`
 
 这些字段不包含 Token。连接状态由“加密凭据存在 + 本地验证成功”实时计算，不能只相信普通设置布尔值。
@@ -220,6 +220,7 @@ CREATE TABLE telegram_delivery_queue (
     title TEXT NOT NULL DEFAULT '',
     file_path TEXT NOT NULL DEFAULT '',
     file_size INTEGER NOT NULL DEFAULT 0,
+    file_mtime_ns TEXT NOT NULL DEFAULT '0',
     media_kind TEXT NOT NULL DEFAULT 'document',
     status TEXT NOT NULL CHECK(status IN (
         'pending', 'preparing', 'sending', 'retry_wait',
@@ -272,9 +273,9 @@ pending / retry_wait ──断开连接──> cancelled
 
 ### 11.1 自动重试
 
-- 网络不可达、连接重置和 Telegram 5xx：按 10 秒、30 秒、2 分钟、10 分钟、1 小时退避；之后保持每小时重试，直到用户取消或连接配置改变。
+- 能证明请求尚未提交的网络不可达/连接失败，以及 Telegram 明确返回的 5xx：按 10 秒、30 秒、2 分钟、10 分钟、1 小时退避；之后保持每小时重试，直到用户取消或连接配置改变。若请求已进入 `sending` 后发生连接重置、超时、非法响应或本地服务崩溃，结果无法证明时进入 `uncertain`，不自动重发。
 - HTTP 429：严格使用 Telegram 返回的 `retry_after`，并加入小幅随机抖动，避免同一时刻再次拥塞。
-- 本地服务异常退出：Supervisor 先恢复服务，记录保持 `retry_wait`，不消耗一次媒体发送重试。
+- 本地服务异常退出：Supervisor 先恢复服务；尚未进入 `sending` 或可证明未提交的记录保持 `retry_wait`，不消耗一次媒体发送重试；已经进入 `sending` 的请求若没有明确响应，必须按上条进入 `uncertain`。
 
 ### 11.2 明确失败
 
@@ -373,7 +374,7 @@ Preload 对参数、返回值和事件做显式 schema 校验，不暴露任意 
 ### 15.1 二进制布局
 
 - macOS：`resources/telegram-bot-api/telegram-bot-api`
-- Windows：`resources/telegram-bot-api/telegram-bot-api.exe` 及其运行所需 DLL
+- Windows：`resources/telegram-bot-api/telegram-bot-api.exe`；第三方依赖静态链接，仅使用系统 DLL，不随包复制 OpenSSL/zlib/VC Runtime DLL
 - 开发覆盖：`DOWNANY_TELEGRAM_BOT_API_BIN`
 
 Electron `paths` 模块负责平台可执行文件后缀与打包/开发路径，Supervisor 不自行拼接平台分支。
@@ -381,7 +382,7 @@ Electron `paths` 模块负责平台可执行文件后缀与打包/开发路径�
 ### 15.2 构建
 
 - 固定 Telegram 官方 `tdlib/telegram-bot-api` 的版本或提交，并记录来源、许可证与校验值。
-- macOS runner 构建与 DMG 架构一致的原生二进制；Windows x64 runner 构建 `.exe` 和依赖 DLL。不得把 macOS 二进制交叉放入 Windows 包或反之。
+- macOS runner 构建与 DMG 架构一致的原生二进制；Windows x64 runner 以 static triplet 构建 `.exe` 并验证只依赖 Microsoft System32 DLL。不得把 macOS 二进制交叉放入 Windows 包或反之。
 - `electron-builder.yml` 通过 `extraResources` 收入平台目录；打包前脚本检查文件存在、架构正确且可执行。
 - 发布构建通过 CI secret 生成仅供构建使用的 Telegram 应用凭据资源；缺少 `api_id` 或 `api_hash` 时发布任务失败。
 - 本地开发可用 `DOWNANY_TELEGRAM_API_ID` 与 `DOWNANY_TELEGRAM_API_HASH`，但测试日志不得输出值。
@@ -430,7 +431,7 @@ Electron `paths` 模块负责平台可执行文件后缀与打包/开发路径�
 - `cd desktop && npm test && npm run build`
 - `node browser-extension/shared.test.js`
 - macOS 生成 DMG，确认本地服务二进制架构、权限、启动和退出。
-- Windows 生成 NSIS，确认 `.exe`/DLL、DPAPI、Unicode/空格路径、启动和卸载。
+- Windows 生成 NSIS，确认 `.exe` 架构、System32 DLL 策略、DPAPI、Unicode/空格路径、启动和卸载。
 - 使用专用测试 Bot 分别在 macOS 与 Windows 完成：私聊测试消息、小视频、音频、普通文件、接近上限的大文件、超过上限通知、断网恢复和重启恢复。
 
 真实 Bot 冒烟使用 CI/人工提供的短期测试 Token 与测试会话，不把凭据写入仓库或常规 CI 日志。没有真实凭据时，自动化集成测试使用本地假 Bot API 服务验证协议与状态机，但不能替代发布前双平台真实冒烟。
@@ -494,3 +495,4 @@ Electron `paths` 模块负责平台可执行文件后缀与打包/开发路径�
 - 下载成功与发送成功解耦。
 - Token 由 macOS Keychain / Windows DPAPI 支撑的 Electron `safeStorage` 保护。
 - 双平台安装包随附并监护官方本地服务。
+- 发现会话只持久化下一次请求要使用的 `telegram_next_update_offset`，不保存“最后 update ID”；这样字段名、写入值与 Telegram `getUpdates` 的 offset 语义保持一致。
