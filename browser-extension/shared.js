@@ -316,6 +316,58 @@
     }
   }
 
+  /**
+   * 详情页上的多个嗅探结果通常只是同一视频的音/视频流。
+   * 入队时折叠成一个页面任务，并让桌面端从页面读取权威标题，
+   * 避免 YouTube SPA 导航期间把旧标题配给新 URL。
+   */
+  function collapsePreferredPageSelection(pageUrl, items, thumbnailUrl) {
+    const canonical = normalizeYtdlpPageUrl(pageUrl || "");
+    if (!canonical) return [];
+    const selectedItems = Array.isArray(items) ? items : [];
+    const detectedAt = selectedItems.reduce((latest, item) => {
+      const value = Number(item && item.detectedAt) || 0;
+      return Math.max(latest, value);
+    }, 0);
+    const fallbackThumb = selectedItems.find(
+      (item) => item && (item.thumbnail_url || item.thumbnailUrl),
+    );
+    return [
+      {
+        url: canonical,
+        type: "page",
+        title: "",
+        pageUrl: canonical,
+        thumbnail_url:
+          thumbnailUrl ||
+          (fallbackThumb &&
+            (fallbackThumb.thumbnail_url || fallbackThumb.thumbnailUrl)) ||
+          "",
+        detectedAt,
+        forcePage: true,
+      },
+    ];
+  }
+
+  /**
+   * 对本机桥请求设置有界等待。入队默认必须覆盖 Electron→Sidecar 的
+   * 15 秒请求上限，避免客户端先在 2.5 秒误报失败，而任务稍后实际创建。
+   */
+  async function fetchWithTimeout(
+    url,
+    options = {},
+    timeoutMs = 20000,
+    fetchImpl = globalThis.fetch,
+  ) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetchImpl(url, { ...options, signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** X/Twitter 视频 CDN（时间线嗅探到的多为 HLS m3u8） */
   function isTwitterMediaCdn(url) {
     try {
@@ -615,6 +667,8 @@
     extractInstagramShortcode,
     isInstagramPostUrl,
     isYtdlpPreferredPage,
+    collapsePreferredPageSelection,
+    fetchWithTimeout,
     isTwitterMediaCdn,
     isOrphanTwitterCdn,
     classifyUrl,

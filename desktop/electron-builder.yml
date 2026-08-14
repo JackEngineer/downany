@@ -20,6 +20,16 @@ extraResources:
     filter:
       - "**/*"
       - "!**/.gitkeep"
+  - from: resources/telegram-bot-api
+    to: telegram-bot-api
+    filter:
+      - "**/*"
+      - "!**/.gitkeep"
+  - from: resources/process-host
+    to: process-host
+    filter:
+      - "**/*"
+      - "!**/.gitkeep"
 protocols:
   - name: Downany
     schemes:
@@ -52,6 +62,9 @@ dmg:
   title: Downany · 百纳 ${version}
 win:
   icon: build/icon.ico
+  # 当前发布包不做代码签名；关闭 winCodeSign 的可执行文件编辑步骤，
+  # 避免普通 Windows 构建机因解压 macOS 符号链接缺少权限而无法产包。
+  signAndEditExecutable: false
   target:
     - target: nsis
       arch:

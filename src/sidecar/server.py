@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TextIO
@@ -10,10 +11,12 @@ from src.core.download_manager import DownloadManager
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
+from src.data.telegram_delivery_store import TelegramDeliveryStore
 from src.sidecar.codec import ProtocolError, decode_line, encode_message
 from src.sidecar.handlers import HandlerContext, HandlerError, dispatch
 from src.sidecar.migration import run_migration
 from src.sidecar.paths import AppPaths
+from src.sidecar.telegram_delivery_service import TelegramDeliveryService
 from src.sidecar.protocol import (
     APP_NAME,
     APP_VERSION,
@@ -34,6 +37,12 @@ class SidecarServer:
         self.ctx = ctx
         self.paths = paths
         self._stdout: Optional[TextIO] = None
+        # DownloadManager and TelegramDeliveryService can emit events from
+        # worker threads while the request loop writes responses.  stdout is
+        # the JSONL protocol channel, so each complete message must be
+        # serialized with its flush; otherwise an event can interleave with a
+        # response and corrupt both protocol lines.
+        self._stdout_lock = threading.RLock()
         self._last_progress_emit: Dict[str, float] = {}
         self._unsubscribe = None
 
@@ -52,11 +61,16 @@ class SidecarServer:
         config = JsonConfig(str(paths.config_path))
         db = HistoryDB(db_path=str(paths.history_db_path))
         store = QueueStore(str(paths.history_db_path))
+        telegram_store = TelegramDeliveryStore(str(paths.history_db_path))
+        telegram = TelegramDeliveryService(config, telegram_store)
+        telegram.recover_delivery_leases()
+        telegram.recover_output_records()
         manager = DownloadManager(
             config=config,
             db=db,
             queue_store=store,
             temp_dir=str(paths.temp_dir),
+            output_ready_sink=telegram,
         )
         manager.restore_tasks()
         manager.start()
@@ -67,10 +81,12 @@ class SidecarServer:
             manager=manager,
             emit_event=lambda _name, _payload: None,
             paths=paths,
+            telegram=telegram,
             last_migration=migration_result,
         )
         server = cls(ctx, paths)
         ctx.emit_event = server._write_event
+        telegram.set_event_emitter(server._write_event)
         server._unsubscribe = manager.events.subscribe(server._on_manager_event)
         return server
 
@@ -78,10 +94,12 @@ class SidecarServer:
         return datetime.now(timezone.utc).isoformat()
 
     def _write(self, msg: Dict[str, Any]) -> None:
-        if self._stdout is None:
-            return
-        self._stdout.write(encode_message(msg))
-        self._stdout.flush()
+        encoded = encode_message(msg)
+        with self._stdout_lock:
+            if self._stdout is None:
+                return
+            self._stdout.write(encoded)
+            self._stdout.flush()
 
     def _write_event(self, event: str, payload: Dict[str, Any]) -> None:
         self._write(
@@ -299,12 +317,32 @@ def _consume_peer_hello_early(stdin: TextIO, stdout: TextIO) -> bool:
     return True
 
 
-def main(argv: Optional[list] = None) -> int:
-    # 协议 stdout 必须行缓冲，避免管道下 hello 被块缓冲吞掉
+def _configure_stdio() -> None:
+    """让 Sidecar 与 Electron 之间的 JSON Lines 管道始终使用 UTF-8。"""
     try:
-        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
-    except Exception:
+        sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    except (AttributeError, ValueError):
         pass
+    try:
+        sys.stdout.reconfigure(
+            encoding="utf-8",
+            errors="strict",
+            line_buffering=True,
+        )
+    except (AttributeError, ValueError):
+        pass
+    try:
+        sys.stderr.reconfigure(
+            encoding="utf-8",
+            errors="replace",
+            line_buffering=True,
+        )
+    except (AttributeError, ValueError):
+        pass
+
+
+def main(argv: Optional[list] = None) -> int:
+    _configure_stdio()
 
     paths = AppPaths.default().ensure()
     logging_msg = f"Sidecar 启动 data={paths.data_dir} log={paths.log_dir}\n"

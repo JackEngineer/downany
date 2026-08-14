@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   python-tests:
@@ -22,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
       - name: Run pytest (mainline)
-        run: pytest tests/core tests/data tests/sidecar -q
+        run: pytest tests/core tests/data tests/sidecar tests/cli -q
 
   desktop:
     strategy:
@@ -41,10 +43,22 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - name: Install dependencies
+        if: matrix.os == 'windows-latest'
+        run: npm.cmd ci
+      - name: Install dependencies (Unix)
+        if: matrix.os != 'windows-latest'
         run: npm ci
       - name: Typecheck and build
+        if: matrix.os == 'windows-latest'
+        run: npm.cmd run build
+      - name: Typecheck and build (Unix)
+        if: matrix.os != 'windows-latest'
         run: npm run build
       - name: Unit tests
+        if: matrix.os == 'windows-latest'
+        run: npm.cmd test
+      - name: Unit tests (Unix)
+        if: matrix.os != 'windows-latest'
         run: npm test
 
   browser-extension:
@@ -54,6 +68,162 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Extension shared tests
+      - name: Extension tests
         working-directory: browser-extension
-        run: node shared.test.js
+        run: |
+          node shared.test.js
+          node sniff-core.test.js
+
+  # Native resources are expensive and require platform-specific toolchains.
+  # Run them on an explicit dispatch or a release tag so every release can
+  # prove the real Bot API/ProcessHost binaries before packaging.
+  native-resources:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+          - os: macos-14
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require Telegram application credentials (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        env:
+          DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
+          DOWNANY_TELEGRAM_API_HASH: ${{ secrets.DOWNANY_TELEGRAM_API_HASH }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DOWNANY_TELEGRAM_API_ID) -or [string]::IsNullOrWhiteSpace($env:DOWNANY_TELEGRAM_API_HASH)) {
+            throw "DOWNANY_TELEGRAM_API_ID and DOWNANY_TELEGRAM_API_HASH GitHub Secrets are required for a formal package"
+          }
+      - name: Require Telegram application credentials (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        env:
+          DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
+          DOWNANY_TELEGRAM_API_HASH: ${{ secrets.DOWNANY_TELEGRAM_API_HASH }}
+        run: |
+          test -n "$DOWNANY_TELEGRAM_API_ID"
+          test -n "$DOWNANY_TELEGRAM_API_HASH"
+      - name: Install macOS build tools
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: brew install cmake gperf
+      - name: Build Telegram Bot API (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_telegram_bot_api_windows.ps1 -WorkspaceRoot $env:GITHUB_WORKSPACE
+      - name: Build Telegram Bot API (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: ./scripts/build_telegram_bot_api_macos.sh
+      - name: Build ProcessHost (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_process_host_windows.ps1
+      - name: Build ProcessHost (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: ./scripts/build_process_host_macos.sh
+      - name: Smoke-test ProcessHost (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: node scripts/test_process_host_windows.mjs --executable "$env:GITHUB_WORKSPACE\desktop\resources\process-host\DownanyProcessHost.exe"
+      - name: Smoke-test ProcessHost (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: python3 scripts/test_process_host.py --platform darwin --executable "$GITHUB_WORKSPACE/desktop/resources/process-host/DownanyProcessHost"
+      - name: Generate local Bot API credentials (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        env:
+          DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
+          DOWNANY_TELEGRAM_API_HASH: ${{ secrets.DOWNANY_TELEGRAM_API_HASH }}
+        run: >-
+          node scripts/generate_telegram_build_credentials.mjs
+          --output="$env:GITHUB_WORKSPACE\desktop\resources\telegram-bot-api\app-credentials.json"
+      - name: Generate local Bot API credentials (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        env:
+          DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
+          DOWNANY_TELEGRAM_API_HASH: ${{ secrets.DOWNANY_TELEGRAM_API_HASH }}
+        run: >-
+          node scripts/generate_telegram_build_credentials.mjs
+          --output="$GITHUB_WORKSPACE/desktop/resources/telegram-bot-api/app-credentials.json"
+      - name: Build verified Windows installer
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        env:
+          BUILD_TELEGRAM_NATIVE: "0"
+          ALLOW_CLOUD_ONLY_PACKAGE: "0"
+          FETCH_BINS: "1"
+          BUILD_SIDECAR: "1"
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_windows_nsis.ps1
+      - name: Build verified macOS disk image
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        env:
+          BUILD_TELEGRAM_NATIVE: "0"
+          ALLOW_CLOUD_ONLY_PACKAGE: "0"
+          FETCH_BINS: "1"
+          BUILD_SIDECAR: "1"
+        run: ./scripts/build_macos_dmg.sh
+      - name: Smoke-test packaged Sidecar (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: |
+          $sidecar = Get-ChildItem "$env:GITHUB_WORKSPACE\desktop\release" -Recurse -Filter DownanySidecar.exe | Select-Object -First 1
+          if (-not $sidecar) { throw "packaged DownanySidecar.exe not found" }
+          $data = Join-Path $env:RUNNER_TEMP "downany-sidecar-smoke"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+          node scripts/test_packaged_sidecar.mjs --executable="$($sidecar.FullName)" --data-dir="$data"
+      - name: Smoke-test packaged Sidecar (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: |
+          sidecar="$(find "$GITHUB_WORKSPACE/desktop/release" -type f -name DownanySidecar -perm -111 -print -quit)"
+          test -n "$sidecar"
+          mkdir -p "$RUNNER_TEMP/downany-sidecar-smoke"
+          node scripts/test_packaged_sidecar.mjs --executable="$sidecar" --data-dir="$RUNNER_TEMP/downany-sidecar-smoke"
+      - name: Smoke-test packaged Electron (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: |
+          $electron = Get-ChildItem "$env:GITHUB_WORKSPACE\desktop\release" -Recurse -Filter Downany.exe |
+            Where-Object { $_.FullName -match "win-unpacked" } |
+            Select-Object -First 1
+          if (-not $electron) { throw "packaged Downany.exe not found" }
+          node scripts/test_packaged_electron.mjs "--executable=$($electron.FullName)"
+      - name: Smoke-test packaged Electron (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: |
+          electron="$(find "$GITHUB_WORKSPACE/desktop/release" -type f -path '*/Downany.app/Contents/MacOS/Downany' -perm -111 -print -quit)"
+          test -n "$electron"
+          node scripts/test_packaged_electron.mjs --executable="$electron"
+      - name: Upload native resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: downany-native-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            desktop/resources/telegram-bot-api/**
+            desktop/resources/process-host/**
+      - name: Upload verified installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: downany-installer-${{ matrix.target }}
+          if-no-files-found: error
+          path: desktop/release/**

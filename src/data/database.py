@@ -7,11 +7,19 @@ import sqlite3
 from datetime import datetime
 from typing import List, Optional
 
-from src.data.models import DownloadRecord, SearchRecord
+from src.data.models import DownloadRecord, OutputState, SearchRecord
 from src.sidecar.paths import AppPaths
 from src.utils.logger import setup_logger
 
 logger = setup_logger("Database")
+
+
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
 
 
 class HistoryDB:
@@ -45,7 +53,7 @@ class HistoryDB:
         logger.info(f"数据库初始化完成: {self.db_path}")
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = sqlite3.connect(self.db_path, timeout=10, factory=_ClosingConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA journal_mode=WAL")
@@ -84,6 +92,20 @@ class HistoryDB:
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in cursor.execute("PRAGMA table_info(download_history)").fetchall()
+            }
+            migrations = {
+                "output_state": "ALTER TABLE download_history ADD COLUMN output_state TEXT NOT NULL DEFAULT 'pending'",
+                "output_ready_at": "ALTER TABLE download_history ADD COLUMN output_ready_at TEXT",
+                "output_recovery_safe": "ALTER TABLE download_history ADD COLUMN output_recovery_safe INTEGER NOT NULL DEFAULT 0",
+                "output_owner_id": "ALTER TABLE download_history ADD COLUMN output_owner_id TEXT",
+                "output_lease_expires_at": "ALTER TABLE download_history ADD COLUMN output_lease_expires_at TEXT",
+            }
+            for name, sql in migrations.items():
+                if name not in columns:
+                    cursor.execute(sql)
             conn.commit()
 
     @staticmethod
@@ -103,16 +125,74 @@ class HistoryDB:
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
             completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             error_message=row["error_message"] or "",
+            output_state=str(row["output_state"] or OutputState.PENDING.value),
+            output_ready_at=row["output_ready_at"],
+            output_recovery_safe=bool(row["output_recovery_safe"]),
+            output_owner_id=row["output_owner_id"],
+            output_lease_expires_at=row["output_lease_expires_at"],
         )
 
-    def add_download_record(self, record: DownloadRecord):
+    def add_download_record(
+        self,
+        record: DownloadRecord,
+        *,
+        output_state_override: Optional[OutputState | str] = None,
+        output_recovery_safe_override: Optional[bool] = None,
+        output_owner_id_override: Optional[str] = None,
+        output_lease_expires_at_override: Optional[str] = None,
+    ):
+        state_override = (
+            output_state_override.value
+            if isinstance(output_state_override, OutputState)
+            else output_state_override
+        )
+        output_state = state_override if state_override is not None else record.output_state
+        output_safe = (
+            int(output_recovery_safe_override)
+            if output_recovery_safe_override is not None
+            else int(record.output_recovery_safe)
+        )
+        output_owner = (
+            output_owner_id_override
+            if output_owner_id_override is not None
+            else record.output_owner_id
+        )
+        output_lease = (
+            output_lease_expires_at_override
+            if output_lease_expires_at_override is not None
+            else record.output_lease_expires_at
+        )
+        state_changed = state_override is not None
+        safe_changed = output_recovery_safe_override is not None
+        owner_changed = output_owner_id_override is not None
+        lease_changed = output_lease_expires_at_override is not None
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO download_history
+                INSERT INTO download_history
                 (id, url, title, platform, duration, thumbnail_url, uploader,
-                 status, file_path, file_size, created_at, started_at, completed_at, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 status, file_path, file_size, created_at, started_at, completed_at, error_message,
+                 output_state, output_ready_at, output_recovery_safe, output_owner_id, output_lease_expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  url=excluded.url,
+                  title=excluded.title,
+                  platform=excluded.platform,
+                  duration=excluded.duration,
+                  thumbnail_url=excluded.thumbnail_url,
+                  uploader=excluded.uploader,
+                  status=excluded.status,
+                  file_path=excluded.file_path,
+                  file_size=excluded.file_size,
+                  created_at=excluded.created_at,
+                  started_at=excluded.started_at,
+                  completed_at=excluded.completed_at,
+                  error_message=excluded.error_message,
+                  output_state=CASE WHEN ? THEN excluded.output_state ELSE download_history.output_state END,
+                  output_ready_at=CASE WHEN ? THEN NULL ELSE download_history.output_ready_at END,
+                  output_recovery_safe=CASE WHEN ? THEN excluded.output_recovery_safe ELSE download_history.output_recovery_safe END,
+                  output_owner_id=CASE WHEN ? THEN excluded.output_owner_id ELSE download_history.output_owner_id END,
+                  output_lease_expires_at=CASE WHEN ? THEN excluded.output_lease_expires_at ELSE download_history.output_lease_expires_at END
                 """,
                 (
                     record.id,
@@ -129,6 +209,16 @@ class HistoryDB:
                     record.started_at.isoformat() if record.started_at else None,
                     record.completed_at.isoformat() if record.completed_at else None,
                     record.error_message,
+                    output_state,
+                    record.output_ready_at,
+                    output_safe,
+                    output_owner,
+                    output_lease,
+                    int(state_changed),
+                    int(state_changed),
+                    int(safe_changed),
+                    int(owner_changed),
+                    int(lease_changed),
                 ),
             )
             conn.commit()
@@ -145,6 +235,13 @@ class HistoryDB:
                 (limit,),
             )
             return [self._row_to_record(row) for row in cursor.fetchall()]
+
+    def get_download_record(self, record_id: str) -> Optional[DownloadRecord]:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM download_history WHERE id = ?", (record_id,)
+            ).fetchone()
+        return self._row_to_record(row) if row is not None else None
 
     def search_download_records(self, query: str, limit: int = 100) -> List[DownloadRecord]:
         with self._get_connection() as conn:

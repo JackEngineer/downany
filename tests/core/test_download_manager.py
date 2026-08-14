@@ -7,9 +7,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.core.download_manager import DownloadManager, format_postprocess_command
-from src.core.download_task import DownloadOptions, DownloadTask, TaskStatus, VideoInfo
+from src.core.download_task import (
+    DownloadOptions,
+    DownloadTask,
+    Platform,
+    TaskStatus,
+    VideoInfo,
+)
 from src.core.downloader import DownloadCancelled, DownloadError
 from src.core import error_codes as ec
+from src.data.database import HistoryDB
+from src.data.json_config import JsonConfig
+from src.data.telegram_delivery_store import TelegramDeliveryStore
+from src.data.queue_store import QueueStore
+from src.sidecar.telegram_delivery_service import TelegramDeliveryService
 
 
 @pytest.fixture
@@ -63,6 +74,147 @@ def _run_one_task(manager, task, download_return="/tmp/out.mp4"):
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
     return captured["opts"]
+
+
+def test_download_rebinds_missing_system_proxy_before_starting(manager):
+    manager.config.get_proxy_for_download.return_value = "http://127.0.0.1:7897"
+    task = _make_task(title="old-task-without-proxy")
+
+    opts = _run_one_task(manager, task)
+
+    assert task.options.proxy == "http://127.0.0.1:7897"
+    assert opts["proxy"] == "http://127.0.0.1:7897"
+
+
+def test_auto_detected_proxy_credentials_are_not_logged(manager, caplog):
+    manager.config.get_proxy_for_download.return_value = (
+        "http://proxy-user:proxy-secret@127.0.0.1:7897"
+    )
+    task = _make_task(title="proxy-credential-log-test")
+
+    with caplog.at_level("INFO", logger="DownloadManager"):
+        manager._refresh_task_proxy(task)
+
+    assert task.options.proxy == "http://proxy-user:proxy-secret@127.0.0.1:7897"
+    assert "proxy-user" not in caplog.text
+    assert "proxy-secret" not in caplog.text
+
+
+def test_retry_rebinds_missing_system_proxy(manager):
+    manager.config.get_proxy_for_download.return_value = "http://127.0.0.1:7897"
+    task = _make_task(title="failed-task-without-proxy")
+    task.status = TaskStatus.FAILED
+    manager.tasks[task.id] = task
+
+    manager.retry_task(task.id)
+
+    assert task.status == TaskStatus.PENDING
+    assert task.options.proxy == "http://127.0.0.1:7897"
+
+
+def test_retry_repairs_duplicate_youtube_url(manager):
+    malformed = (
+        "https://www.youtube.comhttps://www.youtube.com/watch?v=QPspNEOkvxM"
+        "/watch?v=QPspNEOkvxM"
+    )
+    task = _make_task(url=malformed, title="failed-youtube-task")
+    task.status = TaskStatus.FAILED
+    manager.tasks[task.id] = task
+
+    manager.retry_task(task.id)
+
+    assert task.video_info.url == "https://www.youtube.com/watch?v=QPspNEOkvxM"
+
+
+def test_youtube_progress_replaces_stale_extension_title(manager):
+    """首次下载进度应立即采用 yt-dlp 元数据，避免页面 URL 配到旧标题。"""
+    task = _make_task(
+        url="https://www.youtube.com/watch?v=current",
+        title="上一条视频标题",
+    )
+    observed = {}
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = None
+
+        def fake_download(_url, _opts=None):
+            progress = instance.set_callbacks.call_args.kwargs["progress"]
+            progress(
+                {
+                    "status": "downloading",
+                    "_percent_str": "1.0%",
+                    "downloaded_bytes": 1,
+                    "total_bytes": 100,
+                    "info_dict": {
+                        "title": "当前视频真实标题",
+                        "uploader": "当前作者",
+                    },
+                }
+            )
+            observed["title_during_download"] = task.video_info.title
+            return "/tmp/out.mp4"
+
+        instance.download.side_effect = fake_download
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    assert observed["title_during_download"] == "当前视频真实标题"
+
+
+def test_download_repairs_duplicate_youtube_url_before_starting(manager):
+    malformed = (
+        "https://www.youtube.comhttps://www.youtube.com/watch?v=QPspNEOkvxM"
+        "/watch?v=QPspNEOkvxM"
+    )
+    task = _make_task(url=malformed, title="youtube-task")
+    captured = {}
+
+    def fake_download(url, opts=None):
+        captured["url"] = url
+        return "/tmp/out.mp4"
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+    ):
+        instance = MagicMock()
+        instance.download.side_effect = fake_download
+        mock_cls.return_value = instance
+        manager.add_task(task)
+        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+    assert captured["url"] == "https://www.youtube.com/watch?v=QPspNEOkvxM"
+    assert task.video_info.url == "https://www.youtube.com/watch?v=QPspNEOkvxM"
+
+
+def test_youtube_task_skips_optional_metadata_prefetch(manager):
+    """元数据预取不可阻塞真正的 YouTube 下载请求。"""
+    task = _make_task(
+        url="https://www.youtube.com/watch?v=UXEjocWEfiM",
+        title="未命名视频",
+    )
+    task.video_info.platform = Platform.YOUTUBE
+
+    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract",
+        side_effect=AssertionError("YouTube 下载不应先做可选元数据预取"),
+    ):
+        instance = MagicMock()
+        instance.last_info = None
+        instance.last_ydl_info = None
+        instance.download.return_value = "/tmp/out.mp4"
+        mock_cls.return_value = instance
+
+        manager.add_task(task)
+        assert _wait_until(
+            lambda: task.status in {TaskStatus.COMPLETED, TaskStatus.FAILED}
+        )
+
+    assert task.status == TaskStatus.COMPLETED
 
 
 def test_download_failure_marks_failed_and_emits_event(manager):
@@ -342,6 +494,93 @@ def test_script_postprocess_runs_after_completion(manager, monkeypatch):
     command = mock_run.call_args[0][0]
     expected = format_postprocess_command("process-video {file}", "/tmp/my file.mp4")
     assert command == expected
+
+
+def test_failed_script_postprocess_does_not_mark_output_ready(manager, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    task = _make_task()
+    task.options.postprocessing = "script"
+    task.options.postprocess_script = "process-video {file}"
+    sink = MagicMock()
+    manager.output_ready_sink = sink
+    with patch("src.core.download_manager.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=7, stderr="postprocess failed")
+        _run_one_task(manager, task, "/tmp/my file.mp4")
+        assert _wait_until(lambda: mock_run.called)
+
+    sink.mark_processing.assert_called_once()
+    sink.mark_ready.assert_not_called()
+
+
+def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path):
+    """真实下载管理器完成任务后，Telegram 队列应保存可发送的文件快照。"""
+    HistoryDB._instance = None
+    root = tmp_path / "telegram-handoff"
+    root.mkdir()
+    config = JsonConfig(str(root / "config.json"))
+    config.configure_telegram(
+        {
+            "accountId": "42",
+            "botUsername": "downany_bot",
+            "targetChatId": "-100123",
+            "targetChatType": "supergroup",
+            "targetChatTitle": "测试群",
+            "targetVerifiedAt": "2026-01-01T00:00:00Z",
+            "autoSendEnabled": True,
+        },
+        now="2026-01-01T00:00:00Z",
+    )
+    db = HistoryDB(db_path=str(root / "history.db"))
+    delivery = TelegramDeliveryService(
+        config,
+        TelegramDeliveryStore(str(root / "history.db")),
+    )
+    manager = DownloadManager(
+        config=config,
+        db=db,
+        queue_store=QueueStore(str(root / "history.db")),
+        temp_dir=str(root / "tmp"),
+        output_ready_sink=delivery,
+    )
+    output = root / "clip.mp4"
+    output.write_bytes(b"downloaded-bytes")
+    task = DownloadTask(
+        id="task-telegram-handoff",
+        video_info=VideoInfo(
+            url="https://example.com/clip.mp4",
+            title="自动转发测试",
+            platform=Platform.UNKNOWN,
+        ),
+        options=DownloadOptions(output_path=str(root / "downloads")),
+    )
+
+    def fake_download(_url, _opts=None):
+        return str(output)
+
+    try:
+        manager.start()
+        with patch("src.core.download_manager.Downloader") as downloader_cls, patch(
+            "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
+        ):
+            downloader = MagicMock()
+            downloader.download.side_effect = fake_download
+            downloader_cls.return_value = downloader
+            manager.add_task(task)
+            assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
+
+        assert _wait_until(
+            lambda: delivery.list_summaries(offset=0, limit=10, status="pending")["total"] == 1
+        )
+        page = delivery.list_summaries(offset=0, limit=10, status="pending")
+        assert page["total"] == 1
+        item = page["items"][0]
+        assert item["taskId"] == task.id
+        assert item["accountId"] == "42"
+        assert item["targetChatId"] == "-100123"
+        assert item["status"] == "pending"
+    finally:
+        manager.stop(join_timeout=2)
+        HistoryDB._instance = None
 
 
 def test_queue_order_picks_lower_first():

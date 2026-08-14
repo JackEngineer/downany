@@ -2,11 +2,13 @@
 import json
 import queue
 import threading
+import time
 from datetime import datetime, timezone
 
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import APP_NAME, APP_VERSION, PROTOCOL_VERSION
 from src.sidecar.server import SidecarServer
+import src.sidecar.server as sidecar_server
 
 
 class LinePipe:
@@ -124,3 +126,75 @@ def test_protocol_mismatch_exits(tmp_path):
     # server should exit after mismatch
     thread.join(timeout=5)
     assert not thread.is_alive()
+
+
+class _ReconfigurableStream:
+    def __init__(self):
+        self.calls = []
+
+    def reconfigure(self, **kwargs):
+        self.calls.append(kwargs)
+
+
+class _SlowWriteStream:
+    def __init__(self):
+        self._state_lock = threading.Lock()
+        self.active_writes = 0
+        self.max_active_writes = 0
+        self.chunks = []
+
+    def write(self, data: str) -> int:
+        with self._state_lock:
+            self.active_writes += 1
+            self.max_active_writes = max(self.max_active_writes, self.active_writes)
+        try:
+            # Force a thread switch while the write is in progress. The
+            # server-level lock, rather than the stream implementation, must
+            # provide protocol-line serialization.
+            time.sleep(0.01)
+            self.chunks.append(data)
+            return len(data)
+        finally:
+            with self._state_lock:
+                self.active_writes -= 1
+
+    def flush(self) -> None:
+        return None
+
+
+def test_protocol_stdio_is_configured_as_utf8(monkeypatch):
+    stdin = _ReconfigurableStream()
+    stdout = _ReconfigurableStream()
+    stderr = _ReconfigurableStream()
+    monkeypatch.setattr(sidecar_server.sys, "stdin", stdin)
+    monkeypatch.setattr(sidecar_server.sys, "stdout", stdout)
+    monkeypatch.setattr(sidecar_server.sys, "stderr", stderr)
+
+    sidecar_server._configure_stdio()
+
+    assert stdin.calls == [{"encoding": "utf-8", "errors": "strict"}]
+    assert stdout.calls == [
+        {"encoding": "utf-8", "errors": "strict", "line_buffering": True}
+    ]
+    assert stderr.calls == [
+        {"encoding": "utf-8", "errors": "replace", "line_buffering": True}
+    ]
+
+
+def test_protocol_messages_are_serialized_across_event_threads():
+    stream = _SlowWriteStream()
+    server = SidecarServer.__new__(SidecarServer)
+    server._stdout = stream
+    server._stdout_lock = threading.RLock()
+
+    threads = [
+        threading.Thread(target=server._write, args=({"type": "event", "id": index},))
+        for index in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert stream.max_active_writes == 1
+    assert {json.loads(chunk)["id"] for chunk in stream.chunks} == {0, 1}

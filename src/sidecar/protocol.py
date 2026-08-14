@@ -5,7 +5,7 @@ from enum import Enum
 
 PROTOCOL_VERSION = 1
 APP_NAME = "Downany"
-APP_VERSION = "0.1.0-phase1"
+APP_VERSION = "0.2.0"
 
 
 class MessageType(str, Enum):
@@ -44,6 +44,27 @@ class Method(str, Enum):
     UPDATER_CHECK_YTDLP = "updater.checkYtDlp"
     UPDATER_CHECK_HEALTH = "updater.checkHealth"
     UPDATER_UPDATE_YTDLP = "updater.updateYtDlp"
+    TELEGRAM_GET_CONFIG = "telegram.getConfig"
+    TELEGRAM_CONFIGURE = "telegram.configure"
+    TELEGRAM_LIST_DELIVERIES = "telegram.listDeliveries"
+    TELEGRAM_CLAIM_NEXT = "telegram.claimNext"
+    TELEGRAM_RENEW_LEASE = "telegram.renewLease"
+    TELEGRAM_RELEASE_CLAIM = "telegram.releaseClaim"
+    TELEGRAM_MARK_SENDING = "telegram.markSending"
+    TELEGRAM_SET_SEGMENT_MANIFEST = "telegram.setSegmentManifest"
+    TELEGRAM_MARK_SEGMENT_SENT = "telegram.markSegmentSent"
+    TELEGRAM_MARK_FALLBACK_USED = "telegram.markFallbackUsed"
+    TELEGRAM_MARK_SENT = "telegram.markSent"
+    TELEGRAM_MARK_RETRY = "telegram.markRetry"
+    TELEGRAM_MARK_RETRY_NOT_SUBMITTED = "telegram.markRetryNotSubmitted"
+    TELEGRAM_MARK_FAILED = "telegram.markFailed"
+    TELEGRAM_MARK_UNCERTAIN = "telegram.markUncertain"
+    TELEGRAM_MARK_SKIPPED_OVERSIZE = "telegram.markSkippedOversize"
+    TELEGRAM_MARK_TARGET_FAILED = "telegram.markTargetFailed"
+    TELEGRAM_RETRY = "telegram.retry"
+    TELEGRAM_CANCEL_PENDING = "telegram.cancelPending"
+    TELEGRAM_GET_TARGET_BLOCK = "telegram.getTargetBlock"
+    TELEGRAM_CLEAR_TARGET_BLOCK = "telegram.clearTargetBlock"
 
 
 class EventName(str, Enum):
@@ -58,6 +79,11 @@ class EventName(str, Enum):
     HISTORY_CHANGED = "history.changed"
     SETTINGS_CHANGED = "settings.changed"
     SIDECAR_HEALTH = "sidecar.health"
+    TELEGRAM_DELIVERY_QUEUED = "telegramDelivery.queued"
+    TELEGRAM_DELIVERY_UPDATED = "telegramDelivery.updated"
+    TELEGRAM_DELIVERY_SENT = "telegramDelivery.sent"
+    TELEGRAM_DELIVERY_FAILED = "telegramDelivery.failed"
+    TELEGRAM_DELIVERY_UNCERTAIN = "telegramDelivery.uncertain"
 
 
 class ErrorCode(str, Enum):

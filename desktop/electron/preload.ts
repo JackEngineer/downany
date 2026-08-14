@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { ConnectionState, ProtocolEvent } from "./protocol";
+import type {
+  TelegramConfig,
+  TelegramDeliverySummary,
+  TelegramTarget,
+} from "./telegram/types";
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 export type NativeThemeMode = "light" | "dark";
@@ -28,6 +33,35 @@ const api = {
   platform: process.platform as NodeJS.Platform,
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
+  },
+  telegram: {
+    getConfig(): Promise<TelegramConfig> {
+      return ipcRenderer.invoke("telegram:getConfig");
+    },
+    bind(token: string): Promise<TelegramConfig> {
+      return ipcRenderer.invoke("telegram:bind", token);
+    },
+    discoverTargets(): Promise<TelegramTarget[]> {
+      return ipcRenderer.invoke("telegram:discoverTargets");
+    },
+    selectTarget(targetId: string): Promise<TelegramConfig> {
+      return ipcRenderer.invoke("telegram:selectTarget", targetId);
+    },
+    sendTest(text: string): Promise<unknown> {
+      return ipcRenderer.invoke("telegram:sendTest", text);
+    },
+    setAutoSend(enabled: boolean): Promise<TelegramConfig> {
+      return ipcRenderer.invoke("telegram:setAutoSend", enabled);
+    },
+    disconnect(): Promise<TelegramConfig> {
+      return ipcRenderer.invoke("telegram:disconnect");
+    },
+    listDeliveries(offset = 0, limit = 50): Promise<{ items: TelegramDeliverySummary[]; total: number; offset: number; limit: number }> {
+      return ipcRenderer.invoke("telegram:listDeliveries", offset, limit);
+    },
+    retry(deliveryId: string, confirmPossibleDuplicate = false, confirmInterruptedOutput = false): Promise<TelegramDeliverySummary> {
+      return ipcRenderer.invoke("telegram:retry", { deliveryId, confirmPossibleDuplicate, confirmInterruptedOutput });
+    },
   },
   getConnectionState(): Promise<ConnectionState> {
     return ipcRenderer.invoke("sidecar:getState");

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "allowedRootEnvironmentVariable": "SystemRoot",
+  "allowedRelativeRoot": "System32",
+  "requireAuthenticodeStatus": "Valid",
+  "requireSignerOrganization": "Microsoft Corporation",
+  "denyPathSeparators": true,
+  "deniedNamePrefixes": ["libssl", "libcrypto", "zlib", "msvcp", "vcruntime", "ucrtbase", "api-ms-win-crt-"]
+}

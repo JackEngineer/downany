@@ -48,7 +48,8 @@ def _write_old_history(path: Path) -> None:
         conn.commit()
 
 
-def test_migration_copies_config_and_history(tmp_path):
+def test_migration_copies_config_and_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
     home = tmp_path / "home"
     plist = home / "Library" / "Preferences" / "com.Trae.Downloader.plist"
     history = home / ".trae_downloader" / "history.db"
@@ -89,7 +90,8 @@ def test_migration_copies_config_and_history(tmp_path):
     assert again["status"] == "skipped"
 
 
-def test_migration_from_videodownloader_app_support(tmp_path):
+def test_migration_from_videodownloader_app_support(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
     home = tmp_path / "home"
     old = home / "Library" / "Application Support" / "VideoDownloader"
     old.mkdir(parents=True)
@@ -124,7 +126,8 @@ def test_run_migration_skips_on_windows(tmp_path, monkeypatch):
     assert "Windows" in result["message"] or "非 macOS" in result["message"]
 
 
-def test_migration_no_old_data(tmp_path):
+def test_migration_no_old_data(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
     missing_plist = tmp_path / "no.plist"
     missing_hist = tmp_path / "no.db"

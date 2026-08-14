@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 
 from src.core.download_task import (
@@ -26,7 +26,7 @@ from src.core.ytdlp_cookies import apply_cookie_sources
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.events import EventEmitter
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
-from src.core.interfaces import DownloadConfig, HistoryWriter
+from src.core.interfaces import DownloadConfig, HistoryWriter, OutputReadySink
 from src.core.local_thumbnail import ensure_local_thumbnail
 from src.core.platform_detector import (
     PlatformDetector,
@@ -35,6 +35,7 @@ from src.core.platform_detector import (
 )
 from src.core.quality import build_format_selector
 from src.core.title_utils import is_weak_title, pick_title_from_ydl_info
+from src.core.url_normalizer import normalize_download_url
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.models import DownloadRecord
 from src.data.queue_store import QueueStore
@@ -99,11 +100,13 @@ class DownloadManager:
         db: HistoryWriter,
         queue_store: Optional[QueueStore] = None,
         temp_dir: Optional[str] = None,
+        output_ready_sink: Optional[OutputReadySink] = None,
     ):
         self.config = config
         self.db = db
         self.queue_store = queue_store
         self.temp_dir = (temp_dir or "").strip()
+        self.output_ready_sink = output_ready_sink
         self.events = EventEmitter()
         self._last_progress_persist: Dict[str, float] = {}
 
@@ -180,6 +183,33 @@ class DownloadManager:
             self.queue_store.upsert_task(task)
         except Exception as exc:
             logger.error(f"持久化任务失败 {task.id}: {exc}")
+
+    def _refresh_task_proxy(self, task: DownloadTask) -> None:
+        """任务真正执行前补齐当前配置中的系统代理。"""
+        if (task.options.proxy or "").strip():
+            return
+        getter = getattr(self.config, "get_proxy_for_download", None)
+        if not callable(getter):
+            return
+        try:
+            proxy = getter()
+        except Exception as exc:
+            logger.warning("读取下载代理失败: %s", exc)
+            return
+        if not isinstance(proxy, str):
+            return
+        proxy = proxy.strip()
+        if not proxy:
+            return
+        task.options.proxy = proxy
+        logger.info("任务已自动配置系统代理")
+
+    def _normalize_task_url(self, task: DownloadTask) -> None:
+        normalized = normalize_download_url(task.video_info.url)
+        if normalized == task.video_info.url:
+            return
+        task.video_info.url = normalized
+        logger.info("已修复任务 URL: %s", normalized)
 
     def _persist_remove(self, task_id: str) -> None:
         if self.queue_store is None:
@@ -327,6 +357,8 @@ class DownloadManager:
                 return
             if task_id in self.active_tasks:
                 return
+            self._refresh_task_proxy(task)
+            self._normalize_task_url(task)
             task.status = TaskStatus.PENDING
             task.error_message = ""
             task.error_code = ""
@@ -442,12 +474,12 @@ class DownloadManager:
             logger.error(f"重命名输出文件失败 {old_path}: {exc}")
         return old_path
 
-    def _run_postprocess_script(self, task: DownloadTask) -> None:
-        """执行用户自定义后处理脚本；失败只记日志，不影响任务结果。"""
+    def _run_postprocess_script(self, task: DownloadTask) -> bool:
+        """执行用户自定义后处理脚本，并返回是否完成。"""
         script = (task.options.postprocess_script or "").strip()
         if not script:
             logger.warning("任务配置了脚本后处理但脚本为空: %s", task.id)
-            return
+            return False
         command = format_postprocess_command(script, task.file_path)
         logger.info(f"执行后处理脚本: {command}")
         try:
@@ -462,8 +494,11 @@ class DownloadManager:
                 logger.error(
                     f"后处理脚本退出码 {result.returncode}: {result.stderr.strip()[:500]}"
                 )
+                return False
+            return True
         except Exception as exc:
             logger.error(f"后处理脚本执行失败: {exc}")
+            return False
 
     def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
         """锁内调用：queue_order 升序，再 priority 降序，再创建时间早优先。"""
@@ -503,6 +538,8 @@ class DownloadManager:
             with self._lock:
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                     return
+                self._refresh_task_proxy(task)
+                self._normalize_task_url(task)
                 task.status = TaskStatus.DOWNLOADING
                 task.started_at = datetime.now()
             self._persist(task)
@@ -528,7 +565,14 @@ class DownloadManager:
                 extract_url = page_for_meta
             elif needs_full_meta or (needs_thumb and not is_direct_media):
                 extract_url = task.video_info.url
-            if extract_url:
+            # YouTube 的实际下载流程本身会解析完整元数据。先做一次可选预取会把
+            # 同一 API 请求重复一遍；网络偶发超时时，用户只能看到 0 B/s 而无法开始下载。
+            # 交由 Downloader 的单次解析处理，完成后再统一回填标题/封面。
+            is_youtube_task = (
+                task.video_info.platform == Platform.YOUTUBE
+                or PlatformDetector.detect(task.video_info.url) == Platform.YOUTUBE
+            )
+            if extract_url and not is_youtube_task:
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
                     extract_url,
@@ -573,13 +617,39 @@ class DownloadManager:
                     )
 
             downloader = Downloader(task.options.output_path)
+            metadata_backfilled_from_progress = False
 
             def progress_callback(d):
+                nonlocal metadata_backfilled_from_progress
                 with self._lock:
                     if task.status == TaskStatus.CANCELLED:
                         raise DownloadCancelled("任务已取消")
                     if task.status == TaskStatus.PAUSED:
                         raise DownloadCancelled("任务已暂停")
+
+                metadata_changed = False
+                info_dict = d.get("info_dict")
+                if (
+                    not metadata_backfilled_from_progress
+                    and isinstance(info_dict, dict)
+                ):
+                    title = pick_title_from_ydl_info(
+                        info_dict,
+                        task.video_info.title if is_direct_media else "",
+                    )
+                    if title:
+                        with self._lock:
+                            if title != task.video_info.title and (
+                                not is_direct_media
+                                or is_weak_title(task.video_info.title)
+                            ):
+                                task.video_info.title = title
+                                metadata_changed = True
+                        metadata_backfilled_from_progress = True
+
+                if metadata_changed:
+                    self._persist(task)
+                    self.events.emit("task_updated", {"task_id": task.id})
 
                 downloaded = int(d.get("downloaded_bytes") or 0)
                 total = int(d.get("total_bytes") or d.get("total_bytes_estimate") or 0)
@@ -761,7 +831,36 @@ class DownloadManager:
             self.events.emit("task_completed", {"task_id": task.id})
 
             if task.options.postprocessing == "script" and task.file_path:
-                self._run_postprocess_script(task)
+                owner_id = f"postprocess:{task.id}"
+                if self.output_ready_sink is not None:
+                    try:
+                        self.output_ready_sink.mark_processing(
+                            task,
+                            owner_id,
+                            # The post-process command itself is bounded at 600 s;
+                            # keep the durable handoff lease alive beyond that
+                            # bound so a slow but valid script is not recovered
+                            # as interrupted while it is still running.
+                            (datetime.now(timezone.utc) + timedelta(seconds=900))
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                        )
+                    except Exception as exc:
+                        logger.warning("无法登记后处理租约 %s: %s", task.id, exc)
+                postprocess_ok = self._run_postprocess_script(task)
+                if postprocess_ok and self.output_ready_sink is not None:
+                    self.output_ready_sink.mark_ready(task, owner_id=owner_id, refresh_config=True)
+                elif not postprocess_ok and self.output_ready_sink is not None:
+                    try:
+                        self.output_ready_sink.mark_processing_failed(
+                            task,
+                            owner_id,
+                            "Post-process script failed; confirm before retrying delivery.",
+                        )
+                    except Exception as exc:
+                        logger.warning("无法记录后处理失败的 Telegram 发送记录 %s: %s", task.id, exc)
+            elif self.output_ready_sink is not None and task.file_path:
+                self.output_ready_sink.mark_ready(task, owner_id=None, refresh_config=True)
 
         except DownloadCancelled as e:
             cancelled = False
@@ -827,7 +926,10 @@ class DownloadManager:
         ydl_info = getattr(downloader, "last_ydl_info", None)
         is_direct = bool(_MEDIA_URL_RE.search(task.video_info.url))
         if isinstance(ydl_info, dict):
-            title = pick_title_from_ydl_info(ydl_info, task.video_info.title)
+            title = pick_title_from_ydl_info(
+                ydl_info,
+                task.video_info.title if is_direct else "",
+            )
             # 页面链接：用挑选后的标题；直链：仅在当前标题很弱时覆盖
             if title and (not is_direct or is_weak_title(task.video_info.title)):
                 task.video_info.title = title
@@ -896,8 +998,12 @@ class DownloadManager:
             started_at=task.started_at,
             completed_at=task.completed_at,
             error_message=task.error_message,
+            output_recovery_safe=task.options.postprocessing != "script",
         )
         try:
-            self.db.add_download_record(record)
+            self.db.add_download_record(
+                record,
+                output_recovery_safe_override=record.output_recovery_safe,
+            )
         except Exception as exc:
             logger.error(f"写入历史失败: {exc}")

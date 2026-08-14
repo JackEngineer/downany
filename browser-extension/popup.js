@@ -6,6 +6,7 @@ const {
   normalizeYtdlpPageUrl,
   YTDLP_FRIENDLY_HOST_RE,
   isWeakPageTitle,
+  collapsePreferredPageSelection,
 } = globalThis.VideoDlShared;
 
 const HTTP_RE = /^https?:\/\/\S+/i;
@@ -498,17 +499,18 @@ enqueueBtn.addEventListener("click", async () => {
   } catch {
     // content script 未就绪时忽略
   }
-  const items = mediaItems
-    .filter((m) => selected.has(m.url))
-    .map((m) => ({
-      url: m.url,
-      type: m.type || "",
-      title: m.title || m.pageTitle || currentTitle,
-      pageUrl: preferPage ? pageCanonical : m.pageUrl || currentUrl,
-      thumbnail_url: pageThumb || m.thumbnail_url || "",
-      detectedAt: m.detectedAt || 0,
-      forcePage: !!m.nowPlaying || preferPage,
-    }));
+  const selectedItems = mediaItems.filter((m) => selected.has(m.url));
+  const items = preferPage
+    ? collapsePreferredPageSelection(pageCanonical, selectedItems, pageThumb)
+    : selectedItems.map((m) => ({
+        url: m.url,
+        type: m.type || "",
+        title: m.title || m.pageTitle || currentTitle,
+        pageUrl: m.pageUrl || currentUrl,
+        thumbnail_url: pageThumb || m.thumbnail_url || "",
+        detectedAt: m.detectedAt || 0,
+        forcePage: !!m.nowPlaying,
+      }));
   if (items.length === 0) return;
 
   enqueueBtn.disabled = true;
@@ -595,7 +597,8 @@ enqueuePageBtn.addEventListener("click", async () => {
       items: [
         {
           url: pageUrl,
-          title: currentTitle,
+          // 页面标题由桌面端按 URL 实时读取，避免 SPA 导航时标题滞后。
+          title: "",
           pageUrl,
           thumbnail_url: pageThumb,
         },

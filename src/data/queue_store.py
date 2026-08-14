@@ -19,6 +19,14 @@ from src.utils.logger import setup_logger
 logger = setup_logger("QueueStore")
 
 
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class QueueStore:
     """task_queue 表的读写与 DownloadTask 重建。"""
 
@@ -28,7 +36,7 @@ class QueueStore:
         self._init_table()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = sqlite3.connect(self.db_path, timeout=10, factory=_ClosingConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA journal_mode=WAL")

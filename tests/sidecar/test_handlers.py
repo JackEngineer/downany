@@ -62,6 +62,24 @@ def test_get_snapshot_and_create_tasks(tmp_path):
     assert "settings" in snap
 
 
+def test_create_tasks_repairs_duplicate_youtube_url(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    malformed = (
+        "https://www.youtube.comhttps://www.youtube.com/watch?v=QPspNEOkvxM"
+        "/watch?v=QPspNEOkvxM"
+    )
+
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": [malformed]},
+    )
+
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task is not None
+    assert task.video_info.url == "https://www.youtube.com/watch?v=QPspNEOkvxM"
+
+
 def test_create_tasks_accepts_playlist_group_fields(tmp_path):
     ctx, _ = _ctx(tmp_path)
     result = dispatch(

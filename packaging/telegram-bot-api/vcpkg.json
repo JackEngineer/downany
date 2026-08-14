@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "downany-telegram-bot-api-build",
+  "version-string": "1",
+  "dependencies": [
+    { "name": "gperf", "host": true },
+    "openssl",
+    "zlib"
+  ]
+}

@@ -149,7 +149,7 @@ export class SidecarProcess extends EventEmitter {
       this.write({
         protocolVersion: PROTOCOL_VERSION,
         type: "hello",
-        payload: { app: "electron", appVersion: "0.1.0-phase4" },
+        payload: { app: "electron", appVersion: "0.2.0" },
         timestamp: new Date().toISOString(),
       });
     } catch (err) {

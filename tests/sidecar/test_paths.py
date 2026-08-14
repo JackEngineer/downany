@@ -44,7 +44,7 @@ def test_default_paths_on_windows(tmp_path, monkeypatch):
 
 def test_default_paths_on_darwin(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("DOWNANY_DATA_DIR", raising=False)
     monkeypatch.delenv("VIDEODL_DATA_DIR", raising=False)
     paths = AppPaths.default()

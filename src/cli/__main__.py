@@ -12,8 +12,10 @@ from src.core.quality import normalize_quality
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.queue_store import QueueStore
+from src.data.telegram_delivery_store import TelegramDeliveryStore
 from src.sidecar.handlers import _normalize_inbound_url
 from src.sidecar.paths import AppPaths
+from src.sidecar.telegram_delivery_service import TelegramDeliveryService
 
 
 def _build_manager(paths: AppPaths) -> tuple[DownloadManager, JsonConfig]:
@@ -21,11 +23,16 @@ def _build_manager(paths: AppPaths) -> tuple[DownloadManager, JsonConfig]:
     config = JsonConfig(str(paths.config_path))
     db = HistoryDB(db_path=str(paths.history_db_path))
     store = QueueStore(str(paths.history_db_path))
+    telegram = TelegramDeliveryService(
+        config,
+        TelegramDeliveryStore(str(paths.history_db_path)),
+    )
     manager = DownloadManager(
         config=config,
         db=db,
         queue_store=store,
         temp_dir=str(paths.temp_dir),
+        output_ready_sink=telegram,
     )
     manager.restore_tasks()
     manager.start()

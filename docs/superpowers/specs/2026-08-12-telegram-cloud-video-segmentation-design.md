@@ -25,8 +25,8 @@ Electron Main 新增独立 `TelegramVideoSegmenter`：
 
 - 只接受普通文件、`mediaKind=video`、绝对输入路径和受控的应用数据目录。
 - 使用随包提供的 `ffmpeg`，先读取媒体时长，再按 `duration × 45,000,000 / sourceSize` 估算片段时长。
-- 首轮使用 stream copy，避免无谓降画质；每轮都逐个 `stat` 并计算 SHA-256，任何片段达到 49,000,000 bytes 即缩短时长重试。
-- 如果关键帧间隔导致多轮 stream copy 仍无法满足上限，最后改用 H.264/AAC 快速转码并强制片段边界。
+- 探测源视频和音频编码；只有 H.264/AAC（或无音轨）首轮使用 stream copy，避免无谓降画质。AV1、HEVC、非 AAC 或无法识别的输入从首轮就转为 Telegram 客户端通用的 H.264/AAC、`yuv420p`、`avc1`。
+- 转码首轮单段不超过 135 秒，给 49,000,000 bytes 硬上限留出封装和码率波动余量；每轮都逐个 `stat` 并计算 SHA-256，超限时缩短时长重试。兼容源若多轮 stream copy 仍无法满足上限，最后同样转码并强制片段边界。
 - 最多执行有界次数；失败时清理本次未持久化的临时目录并返回稳定错误码。
 - 临时根目录固定为 `<DOWNANY_DATA_DIR>/telegram/segments/<deliveryId>`；拒绝链接、重解析点、越界路径和非普通文件。
 

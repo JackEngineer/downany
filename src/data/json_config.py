@@ -5,10 +5,14 @@ import json
 import os
 import re
 import tempfile
+import threading
+import hashlib
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.core.download_task import DownloadOptions
 from src.core.quality import normalize_quality
+from src.core.system_proxy import detect_system_proxy
 
 VALID_POSTPROCESSING = {"none", "mp4", "mp3", "script"}
 
@@ -51,6 +55,7 @@ class JsonConfig:
 
     def __init__(self, path: str):
         self.path = path
+        self._lock = threading.RLock()
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
@@ -92,6 +97,19 @@ class JsonConfig:
             "download_sections": "",
             "sponsorblock_remove": "",
             "telemetry_enabled": False,
+            # Telegram stores routing metadata only.  The Bot Token is owned
+            # by Electron's credential vault and must never enter this file.
+            "telegram_account_id": "",
+            "telegram_bot_username": "",
+            "telegram_target_chat_id": "",
+            "telegram_target_chat_type": "",
+            "telegram_target_chat_title": "",
+            "telegram_target_verified_at": None,
+            "telegram_auto_send_enabled": False,
+            "telegram_enabled_at": None,
+            "telegram_discovered_targets": [],
+            "telegram_next_update_offset": None,
+            "telegram_delivery_recovery_hold": None,
         }
 
     def _load_or_init(self) -> None:
@@ -128,10 +146,131 @@ class JsonConfig:
                 pass
             raise
 
+    def reload_from_disk(self) -> Dict[str, Any]:
+        """Reload the JSON atomically for cross-process callers."""
+        with self._lock:
+            if not os.path.isfile(self.path):
+                return self.to_dict()
+            with open(self.path, "r", encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            if not isinstance(loaded, dict):
+                raise ValueError("配置文件必须是对象")
+            merged = self._defaults()
+            merged.update(loaded)
+            merged["download_dir"] = self._sanitize_download_dir(
+                str(merged.get("download_dir") or "")
+            )
+            self._data = merged
+            return self.to_dict()
+
     def to_dict(self) -> Dict[str, Any]:
-        return dict(self._data)
+        with self._lock:
+            return dict(self._data)
+
+    def telegram_revision(self) -> str:
+        with self._lock:
+            payload = {
+                key: self._data.get(key)
+                for key in (
+                    "telegram_account_id",
+                    "telegram_bot_username",
+                    "telegram_target_chat_id",
+                    "telegram_target_chat_type",
+                    "telegram_target_chat_title",
+                    "telegram_target_verified_at",
+                    "telegram_auto_send_enabled",
+                    "telegram_enabled_at",
+                    "telegram_discovered_targets",
+                    "telegram_next_update_offset",
+                    "telegram_delivery_recovery_hold",
+                )
+            }
+            raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _reject_telegram_secrets(patch: Dict[str, Any]) -> None:
+        forbidden = {
+            "token", "bot_token", "botToken", "telegram_token", "telegramToken",
+            "api_id", "api_hash", "apiId", "apiHash", "secret", "password",
+        }
+        leaked = sorted(key for key in patch if key in forbidden or "token" in key.lower())
+        if leaked:
+            raise ValueError("Telegram 密钥只能通过安全凭据保险箱传递")
+
+    def telegram_config(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "revision": self.telegram_revision(),
+                "accountId": str(self._data.get("telegram_account_id") or ""),
+                "botUsername": str(self._data.get("telegram_bot_username") or ""),
+                "targetChatId": str(self._data.get("telegram_target_chat_id") or ""),
+                "targetChatType": str(self._data.get("telegram_target_chat_type") or ""),
+                "targetChatTitle": str(self._data.get("telegram_target_chat_title") or ""),
+                "targetVerifiedAt": self._data.get("telegram_target_verified_at"),
+                "autoSendEnabled": bool(self._data.get("telegram_auto_send_enabled", False)),
+                "enabledAt": self._data.get("telegram_enabled_at"),
+                "discoveredTargets": list(self._data.get("telegram_discovered_targets") or [])[-200:],
+                "nextUpdateOffset": self._data.get("telegram_next_update_offset"),
+                "deliveryRecoveryHold": self._data.get("telegram_delivery_recovery_hold"),
+            }
+
+    def configure_telegram(self, patch: Dict[str, Any], *, now: Optional[str] = None) -> Dict[str, Any]:
+        if not isinstance(patch, dict):
+            raise ValueError("Telegram 配置必须是对象")
+        self._reject_telegram_secrets(patch)
+        allowed = {
+            "accountId", "botUsername", "targetChatId", "targetChatType", "targetChatTitle",
+            "targetVerifiedAt", "autoSendEnabled", "enabledAt", "discoveredTargets",
+            "nextUpdateOffset", "deliveryRecoveryHold",
+        }
+        unknown = sorted(set(patch) - allowed)
+        if unknown:
+            raise ValueError(f"未知 Telegram 配置字段: {', '.join(unknown)}")
+        with self._lock:
+            current_enabled = bool(self._data.get("telegram_auto_send_enabled", False))
+            next_enabled = bool(patch.get("autoSendEnabled", current_enabled))
+            account = str(patch.get("accountId", self._data.get("telegram_account_id", "")) or "").strip()
+            target = str(patch.get("targetChatId", self._data.get("telegram_target_chat_id", "")) or "").strip()
+            verified = patch.get("targetVerifiedAt", self._data.get("telegram_target_verified_at"))
+            if next_enabled and (not account or not target or not verified):
+                raise ValueError("启用自动发送前必须完成 Bot 绑定和接收位置验证")
+            mapping = {
+                "accountId": "telegram_account_id",
+                "botUsername": "telegram_bot_username",
+                "targetChatId": "telegram_target_chat_id",
+                "targetChatType": "telegram_target_chat_type",
+                "targetChatTitle": "telegram_target_chat_title",
+                "targetVerifiedAt": "telegram_target_verified_at",
+                "autoSendEnabled": "telegram_auto_send_enabled",
+                "discoveredTargets": "telegram_discovered_targets",
+                "nextUpdateOffset": "telegram_next_update_offset",
+                "deliveryRecoveryHold": "telegram_delivery_recovery_hold",
+            }
+            for key, field in mapping.items():
+                if key in patch:
+                    value = patch[key]
+                    if key == "discoveredTargets":
+                        if not isinstance(value, list):
+                            raise ValueError("discoveredTargets 必须是数组")
+                        value = value[-200:]
+                    if key == "nextUpdateOffset" and value is not None:
+                        if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)", value):
+                            raise ValueError("nextUpdateOffset 必须是无符号十进制字符串或 null")
+                    self._data[field] = value
+            if "autoSendEnabled" in patch:
+                self._data["telegram_auto_send_enabled"] = next_enabled
+                if next_enabled and not current_enabled:
+                    self._data["telegram_enabled_at"] = now or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                elif not next_enabled:
+                    self._data["telegram_enabled_at"] = None
+            if "enabledAt" in patch:
+                self._data["telegram_enabled_at"] = patch["enabledAt"]
+            self._save()
+            return self.telegram_config()
 
     def update_from_dict(self, partial: Dict[str, Any]) -> Dict[str, Any]:
+        self._reject_telegram_secrets(partial)
         if not isinstance(partial, dict):
             raise ValueError("设置必须是对象")
         next_data = dict(self._data)
@@ -275,10 +414,13 @@ class JsonConfig:
         self._save()
 
     def get_proxy_for_download(self) -> Optional[str]:
-        if not self.is_proxy_enabled():
-            return None
         url = (self.get_proxy_url() or "").strip()
-        return url or None
+        if self.is_proxy_enabled():
+            return url or None
+        # 保留“填写但关闭”的语义；没有手动地址时才复用系统/本机代理。
+        if url:
+            return None
+        return detect_system_proxy()
 
     def build_download_options(self, output_path: Optional[str] = None) -> DownloadOptions:
         speed = self.get_speed_limit() or 0

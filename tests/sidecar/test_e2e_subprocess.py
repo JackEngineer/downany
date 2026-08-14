@@ -38,6 +38,7 @@ def test_subprocess_hello_ping_snapshot_shutdown(tmp_path):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
         bufsize=1,
     )
     assert proc.stdin is not None

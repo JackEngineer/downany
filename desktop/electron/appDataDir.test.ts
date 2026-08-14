@@ -57,7 +57,7 @@ describe("resolveDownanyLogDir", () => {
   it("uses data/logs when data dir is overridden", () => {
     const env = { DOWNANY_DATA_DIR: "/custom/data" };
     expect(resolveDownanyLogDir(env, "darwin", HOME)).toBe(
-      path.join("/custom/data", "logs"),
+      path.join(path.resolve("/custom/data"), "logs"),
     );
   });
 });

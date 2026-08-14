@@ -38,5 +38,23 @@ def ensure_js_runtime_path() -> None:
             return
 
 
+def resolve_js_runtimes() -> dict[str, dict[str, str]]:
+    """Return every installed EJS runtime that yt-dlp may use.
+
+    yt-dlp enables Deno by default, but Node must be opted in explicitly even
+    when ``node.exe`` is already on ``PATH``.  Supplying the resolved absolute
+    path also keeps GUI/packaged launches independent of their working folder.
+    """
+    ensure_js_runtime_path()
+    runtimes: dict[str, dict[str, str]] = {}
+    deno = shutil.which("deno") or shutil.which("deno.exe")
+    if deno:
+        runtimes["deno"] = {"path": deno}
+    node = shutil.which("node") or shutil.which("node.exe")
+    if node:
+        runtimes["node"] = {"path": node}
+    return runtimes
+
+
 # 导入即修补 PATH：保证所有 yt-dlp 使用点（含未来新增）都能找到 deno
 ensure_js_runtime_path()

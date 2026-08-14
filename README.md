@@ -9,9 +9,13 @@ macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar
 - **队列管理**：可配置并发、暂停 / 恢复 / 取消 / 重试、实时进度
 - **历史记录**：SQLite 存储，可检索与重新下载
 - **设置**：下载目录、并发、限速、代理、画质、字幕、主题、yt-dlp 更新
+- **Telegram 自动转发**：绑定 Bot、验证私聊/群组/频道，下载完成后自动发送并保留发送记录
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
 - **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
 - **浏览器抓取窗口**：登录墙 / 纯 HLS 页可用内置浏览器嗅探入队
+
+Telegram 的绑定与发送说明见 [`docs/TELEGRAM.md`](docs/TELEGRAM.md)。云端 Bot API 可直接用于开发；
+本地 Bot API 的 2 GB 文件能力需要随平台安装包提供已构建并验收的原生资源。
 - **CLI**：`./scripts/downany add <url> [--audio] [--quality 1080p] [--detach]`
 
 路线图见 [docs/roadmap.md](docs/roadmap.md)。

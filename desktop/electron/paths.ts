@@ -78,6 +78,12 @@ export function resolveSidecarLaunch(
   opts: { pythonPath?: string; dataDir?: string; repoRoot?: string } = {},
 ): SidecarLaunch {
   const env: NodeJS.ProcessEnv = { ...process.env };
+  const hasNoProxyOverride = Object.entries(env).some(
+    ([key, value]) => key.toLowerCase() === "no_proxy" && Boolean(value?.trim()),
+  );
+  if (process.platform === "win32" && !hasNoProxyOverride) {
+    env.NO_PROXY = "localhost,127.0.0.1,::1";
+  }
   const binDir = bundledBinDir(fromDir);
 
   const legacyBin = process.env.VIDEODL_BIN_DIR;

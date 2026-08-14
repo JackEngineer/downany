@@ -113,3 +113,51 @@ describe("packaging paths", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
+
+describe("Windows Sidecar proxy environment", () => {
+  const originalPlatform = process.platform;
+  const originalNoProxy = process.env.NO_PROXY;
+  const originalLowerNoProxy = process.env.no_proxy;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+    if (originalNoProxy === undefined) {
+      delete process.env.NO_PROXY;
+    } else {
+      process.env.NO_PROXY = originalNoProxy;
+    }
+    if (originalLowerNoProxy === undefined) {
+      delete process.env.no_proxy;
+    } else {
+      process.env.no_proxy = originalLowerNoProxy;
+    }
+  });
+
+  it("keeps remote hosts on an explicit proxy when Windows has no NO_PROXY override", () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+    delete process.env.NO_PROXY;
+    delete process.env.no_proxy;
+
+    const launch = resolveSidecarLaunch(__dirname, {
+      repoRoot: resolveRepoRoot(__dirname),
+      pythonPath: "/tmp/fake-python",
+    });
+
+    expect(launch.env.NO_PROXY).toBe("localhost,127.0.0.1,::1");
+  });
+
+  it("preserves a lowercase no_proxy override supplied by the user", () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+    delete process.env.NO_PROXY;
+    delete process.env.no_proxy;
+    process.env.no_proxy = "example.internal";
+
+    const launch = resolveSidecarLaunch(__dirname, {
+      repoRoot: resolveRepoRoot(__dirname),
+      pythonPath: "/tmp/fake-python",
+    });
+
+    expect(launch.env.no_proxy).toBe("example.internal");
+    expect(launch.env.NO_PROXY).toBeUndefined();
+  });
+});

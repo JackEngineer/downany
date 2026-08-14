@@ -1,3 +1,4 @@
+import src.data.json_config as json_config
 from src.data.json_config import JsonConfig
 
 
@@ -39,11 +40,23 @@ def test_sanitizes_videodownloader_download_dir(tmp_path):
     )
 
 
-def test_proxy_for_download_none_when_disabled(tmp_path):
+def test_proxy_for_download_none_when_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(json_config, "detect_system_proxy", lambda: None)
     cfg = JsonConfig(str(tmp_path / "c.json"))
     cfg.set_proxy_enabled(False)
     cfg.set_proxy_url("http://127.0.0.1:7890")
     assert cfg.get_proxy_for_download() is None
+
+
+def test_proxy_for_download_auto_detects_system_proxy_when_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        json_config,
+        "detect_system_proxy",
+        lambda: "http://127.0.0.1:7897",
+    )
+    cfg = JsonConfig(str(tmp_path / "c.json"))
+
+    assert cfg.get_proxy_for_download() == "http://127.0.0.1:7897"
 
 
 def test_telemetry_enabled_roundtrip(tmp_path):

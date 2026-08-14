@@ -1,4 +1,6 @@
 """ParseSession 取消、超时与成功路径测试。"""
+import json
+import subprocess
 import sys
 import threading
 import time
@@ -45,6 +47,24 @@ def test_build_parse_command_allows_playlist_when_requested():
     assert "--flat-playlist" in cmd
 
 
+def test_build_parse_command_prefers_bundled_ytdlp_in_packaged_environment(
+    tmp_path,
+    monkeypatch,
+):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable = bin_dir / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+    executable.write_bytes(b"fixture")
+    executable.chmod(0o755)
+    monkeypatch.setenv("DOWNANY_BIN_DIR", str(bin_dir))
+
+    cmd = build_parse_command("https://example.com/video")
+
+    assert cmd[0] == str(executable.resolve())
+    assert cmd[1] == "--dump-single-json"
+    assert "-m" not in cmd
+
+
 def test_successful_parse(monkeypatch):
     monkeypatch.setattr(
         url_parser, "build_parse_command", lambda url, proxy=None, allow_playlist=False: _fake_command(FAKE_INFO)
@@ -55,6 +75,97 @@ def test_successful_parse(monkeypatch):
     assert result.info.duration == 61
     assert result.info.uploader == "uploader1"
     assert result.info.platform == Platform.YOUTUBE
+
+
+def test_successful_parse_decodes_raw_utf8_output_on_windows(monkeypatch):
+    payload = json.dumps(
+        {**FAKE_INFO, "title": "做自媒体6年了，我想说…"},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None, allow_playlist=False: [
+            sys.executable,
+            "-c",
+            f"import os; os.write(1, {payload!r})",
+        ],
+    )
+
+    result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
+
+    assert result.info.title == "做自媒体6年了，我想说…"
+
+
+def test_parse_child_removes_inherited_pyinstaller_environment(monkeypatch):
+    monkeypatch.setenv("_PYI_ARCHIVE_FILE", r"C:\Downany\DownanySidecar.exe")
+    monkeypatch.setenv("_PYI_PARENT_PROCESS_LEVEL", "1")
+    monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
+    payload = {
+        **FAKE_INFO,
+        "title": "leaked",
+    }
+    code = (
+        "import json, os; "
+        f"payload = {payload!r}; "
+        "blocked = ['_PYI_ARCHIVE_FILE', '_PYI_PARENT_PROCESS_LEVEL', "
+        "'PYINSTALLER_RESET_ENVIRONMENT']; "
+        "payload['title'] = 'leaked' if any(os.environ.get(key) for key in blocked) else 'clean'; "
+        "print(json.dumps(payload))"
+    )
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None, allow_playlist=False: [sys.executable, "-c", code],
+    )
+
+    result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
+
+    assert result.info.title == "clean"
+
+
+def test_frozen_windows_parse_resets_dll_directory_around_spawn(monkeypatch):
+    bundle_dir = r"C:\Downany\resources\sidecar\DownanySidecar\_internal"
+    dll_directory_calls = []
+    monkeypatch.setattr(url_parser.sys, "platform", "win32")
+    monkeypatch.setattr(url_parser.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(url_parser.sys, "_MEIPASS", bundle_dir, raising=False)
+    monkeypatch.setattr(
+        url_parser,
+        "_set_windows_dll_directory",
+        lambda path: dll_directory_calls.append(path),
+    )
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None, allow_playlist=False: _fake_command(FAKE_INFO),
+    )
+
+    result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
+
+    assert result.info.title == "测试视频"
+    assert dll_directory_calls == [None, bundle_dir]
+
+
+def test_parse_child_does_not_inherit_sidecar_protocol_stdin(monkeypatch):
+    captured = {}
+    original_start = url_parser._start_parse_process
+
+    def start(command, **kwargs):
+        captured.update(kwargs)
+        return original_start(command, **kwargs)
+
+    monkeypatch.setattr(url_parser, "_start_parse_process", start)
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda url, proxy=None, allow_playlist=False: _fake_command(FAKE_INFO),
+    )
+
+    result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
+
+    assert result.info.title == "测试视频"
+    assert captured["stdin"] is subprocess.DEVNULL
 
 
 def test_timeout_kills_process(monkeypatch):

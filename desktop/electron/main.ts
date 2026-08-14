@@ -42,6 +42,7 @@ import {
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
+import { resourcesRoot } from "./paths";
 import { openSettingsWindow } from "./settingsWindow";
 import { TaskTracker } from "./taskTracker";
 import { TrayController } from "./tray";
@@ -55,11 +56,16 @@ import {
 } from "./windowState";
 import { checkForAppUpdates } from "./appUpdater";
 import { resolveDownanyDataDir, resolveDownanyLogDir } from "./appDataDir";
+import { initializePrimaryInstance } from "./singleInstance";
 import {
   buildExtractEnqueueItems,
   getExtractSession,
   openExtractWindow,
 } from "./extractWindow";
+import { TelegramController } from "./telegram/controller";
+import { registerTelegramIpc } from "./telegram/ipc";
+import { createOptionalTelegramSupervisor } from "./telegram/runtimeFactory";
+import { TelegramVideoSegmenter } from "./telegram/videoSegmenter";
 
 /** 本地抽帧封面：sidecar 写入 Downany 数据目录 thumbnails/{taskId}.jpg */
 const LOCAL_THUMB_SCHEME = "downany-thumb";
@@ -130,11 +136,14 @@ function installThumbnailReferrerFix(): void {
 
 let mainWindow: BrowserWindow | null = null;
 let sidecar: SidecarProcess | null = null;
+let telegramController: TelegramController | null = null;
 let saveStateTimer: NodeJS.Timeout | null = null;
 let sidecarReady = false;
+let sidecarStartup: Promise<void> | null = null;
 let bridgeServer: http.Server | null = null;
 let menuBarMode = false;
 let isQuitting = false;
+let quitSequenceStarted = false;
 const pendingEnqueueItems: BridgeEnqueueItem[] = [];
 
 const taskTracker = new TaskTracker();
@@ -672,8 +681,60 @@ async function startSidecar(): Promise<void> {
       void refreshDockFromSnapshot();
     });
   });
-  await sidecar.start();
-  markSidecarReady(true);
+  // 启动控制器前先固定这一次 Sidecar 启动 promise。Renderer 可能在窗口
+  // 首次加载时立刻调用 Telegram IPC；这些请求必须等握手完成后再写入
+  // stdout，否则会把“服务尚未连接”暴露成一次性的初始化失败。
+  const sidecarStart = sidecar.start();
+  let resolveTelegramSupervisorReady: () => void = () => undefined;
+  const telegramSupervisorReady = new Promise<void>((resolve) => {
+    resolveTelegramSupervisorReady = resolve;
+  });
+  const supervisorSetup = sidecarStart.then(async () => {
+    let telegramSupervisor;
+    try {
+      telegramSupervisor = await createOptionalTelegramSupervisor({
+      fromDir: __dirname,
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      resourcesPath: resourcesRoot(__dirname),
+      dataDir: downanyDataDir(),
+      env: process.env,
+      log: (level, message) => process.stderr.write(`[Telegram ${level}] ${message}\n`),
+    });
+  } catch (error) {
+    process.stderr.write(`Telegram 本地服务资源校验失败: ${String(error)}\n`);
+  }
+    telegramController?.attachSupervisor(telegramSupervisor ?? undefined);
+  }).catch(() => undefined).finally(() => resolveTelegramSupervisorReady());
+  telegramController = new TelegramController(
+    async (method, payload) => {
+      await sidecarStart;
+      const current = sidecar;
+      if (!current) throw new Error("Sidecar 未连接");
+      return current.request(method, payload);
+    },
+    downanyDataDir(),
+    (error) => process.stderr.write(`Telegram: ${error.message}\n`),
+    undefined,
+    telegramSupervisorReady,
+    undefined,
+    app.isPackaged ? undefined : (process.env.DOWNANY_TELEGRAM_LOCAL_API_BASE || process.env.DOWNANY_TELEGRAM_API_BASE),
+    new TelegramVideoSegmenter({
+      dataDir: downanyDataDir(),
+      ffmpegPath: path.join(
+        resourcesRoot(__dirname),
+        "bin",
+        process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg",
+      ),
+    }),
+  );
+  await sidecarStart;
+  await supervisorSetup;
+  try {
+    await telegramController.start();
+  } catch (error) {
+    process.stderr.write(`Telegram 恢复失败: ${String(error)}\n`);
+  }
   void refreshDockFromSnapshot();
 
   try {
@@ -700,7 +761,11 @@ async function startSidecar(): Promise<void> {
 }
 
 function registerIpc(): void {
+  registerTelegramIpc(() => telegramController);
   ipcMain.handle("sidecar:request", async (_evt, method: string, payload: unknown) => {
+    if (sidecarStartup) {
+      await sidecarStartup;
+    }
     if (!sidecar) {
       throw new Error("Sidecar 未启动");
     }
@@ -816,28 +881,34 @@ function registerIpc(): void {
   );
 }
 
-app.whenReady().then(async () => {
-  installLocalThumbnailProtocol();
-  installThumbnailReferrerFix();
-  registerIpc();
-  installMenu();
-  createWindow();
-  startBridge();
+initializePrimaryInstance(gotLock, () => {
+  void app.whenReady().then(async () => {
+    installLocalThumbnailProtocol();
+    installThumbnailReferrerFix();
+    registerIpc();
+    installMenu();
+    // 先启动 Sidecar（函数会同步创建 TelegramController），再创建窗口。
+    // 窗口仍会立即加载，不会等待 90 秒握手超时；Telegram IPC 自己等待
+    // 本次启动 promise，从而避免首次 render 的竞态。
+    sidecarStartup = startSidecar();
+    createWindow();
+    startBridge();
 
-  nativeTheme.on("updated", () => {
-    broadcastAll(
-      "app:nativeTheme",
-      nativeTheme.shouldUseDarkColors ? "dark" : "light",
-    );
+    nativeTheme.on("updated", () => {
+      broadcastAll(
+        "app:nativeTheme",
+        nativeTheme.shouldUseDarkColors ? "dark" : "light",
+      );
+    });
+
+    try {
+      await sidecarStartup;
+    } catch (err) {
+      process.stderr.write(`Sidecar 启动失败: ${String(err)}\n`);
+      sidecarReady = false;
+      broadcastState("failed");
+    }
   });
-
-  try {
-    await startSidecar();
-  } catch (err) {
-    process.stderr.write(`Sidecar 启动失败: ${String(err)}\n`);
-    sidecarReady = false;
-    broadcastState("failed");
-  }
 });
 
 app.on("window-all-closed", () => {
@@ -852,12 +923,30 @@ app.on("activate", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (quitSequenceStarted) return;
+  event.preventDefault();
+  quitSequenceStarted = true;
   isQuitting = true;
   if (mainWindow) saveWindowState(mainWindow);
   sidecarReady = false;
   clipboardWatcher.stop();
   tray.disable();
   stopBridge();
-  void sidecar?.stop();
+  void (async () => {
+    try {
+      // Telegram worker 的 lease/终态写入必须先于 Sidecar shutdown，避免
+      // 退出时把 sending 留成无主记录或丢掉最后一次状态提交。
+      await telegramController?.stop();
+    } catch (error) {
+      process.stderr.write(`Telegram 停止失败: ${String(error)}\n`);
+    }
+    try {
+      await sidecar?.stop();
+    } catch (error) {
+      process.stderr.write(`Sidecar 停止失败: ${String(error)}\n`);
+    } finally {
+      app.quit();
+    }
+  })();
 });

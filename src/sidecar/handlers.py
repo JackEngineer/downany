@@ -18,6 +18,7 @@ from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
 from src.core.twitter_fallback import is_twitter_url, normalize_twitter_url
+from src.core.url_normalizer import normalize_download_url
 from src.core.url_parser import (
     ParseCancelled,
     ParseFailed,
@@ -27,6 +28,8 @@ from src.core.url_parser import (
 )
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
+from src.data.telegram_delivery_store import DeliveryStateConflict
+from src.sidecar.telegram_delivery_service import TelegramDeliveryService
 from src.sidecar import ytdlp_updater
 from src.sidecar.diagnostics import export_diagnostics
 from src.sidecar.migration import run_migration
@@ -42,7 +45,7 @@ EmitEvent = Callable[[str, Dict[str, Any]], None]
 
 def _normalize_inbound_url(url: str) -> str:
     """入队前归一化：抖音 modal_id → /video/{id}，Twitter 去跟踪参数。"""
-    text = (url or "").strip()
+    text = normalize_download_url(url)
     if not text:
         return text
     if is_douyin_url(text):
@@ -113,6 +116,7 @@ class HandlerContext:
         manager: DownloadManager,
         emit_event: EmitEvent,
         paths: AppPaths,
+        telegram: Optional[TelegramDeliveryService] = None,
         *,
         last_migration: Optional[Dict[str, Any]] = None,
     ):
@@ -121,6 +125,7 @@ class HandlerContext:
         self.manager = manager
         self.emit_event = emit_event
         self.paths = paths
+        self.telegram = telegram
         self.last_migration = last_migration
         self.shutdown_requested = False
         self._parse_jobs: Dict[str, _ParseJob] = {}
@@ -161,6 +166,27 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.UPDATER_CHECK_YTDLP.value: _check_ytdlp,
         Method.UPDATER_CHECK_HEALTH.value: _check_ytdlp_health,
         Method.UPDATER_UPDATE_YTDLP.value: _update_ytdlp,
+        Method.TELEGRAM_GET_CONFIG.value: _telegram_get_config,
+        Method.TELEGRAM_CONFIGURE.value: _telegram_configure,
+        Method.TELEGRAM_LIST_DELIVERIES.value: _telegram_list_deliveries,
+        Method.TELEGRAM_CLAIM_NEXT.value: _telegram_claim_next,
+        Method.TELEGRAM_RENEW_LEASE.value: _telegram_renew_lease,
+        Method.TELEGRAM_RELEASE_CLAIM.value: _telegram_release_claim,
+        Method.TELEGRAM_MARK_SENDING.value: _telegram_mark_sending,
+        Method.TELEGRAM_SET_SEGMENT_MANIFEST.value: _telegram_set_segment_manifest,
+        Method.TELEGRAM_MARK_SEGMENT_SENT.value: _telegram_mark_segment_sent,
+        Method.TELEGRAM_MARK_FALLBACK_USED.value: _telegram_mark_fallback_used,
+        Method.TELEGRAM_MARK_SENT.value: _telegram_mark_sent,
+        Method.TELEGRAM_MARK_RETRY.value: _telegram_mark_retry,
+        Method.TELEGRAM_MARK_RETRY_NOT_SUBMITTED.value: _telegram_mark_retry_not_submitted,
+        Method.TELEGRAM_MARK_FAILED.value: _telegram_mark_failed,
+        Method.TELEGRAM_MARK_UNCERTAIN.value: _telegram_mark_uncertain,
+        Method.TELEGRAM_MARK_SKIPPED_OVERSIZE.value: _telegram_mark_skipped_oversize,
+        Method.TELEGRAM_MARK_TARGET_FAILED.value: _telegram_mark_target_failed,
+        Method.TELEGRAM_RETRY.value: _telegram_retry,
+        Method.TELEGRAM_CANCEL_PENDING.value: _telegram_cancel_pending,
+        Method.TELEGRAM_GET_TARGET_BLOCK.value: _telegram_get_target_block,
+        Method.TELEGRAM_CLEAR_TARGET_BLOCK.value: _telegram_clear_target_block,
     }
     handler = handlers.get(method)
     if handler is None:
@@ -787,6 +813,147 @@ def _history_clear(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, An
     ctx.db.clear_download_history()
     ctx.emit_event(EventName.HISTORY_CHANGED.value, {"action": "clear"})
     return {"ok": True}
+
+
+def _telegram_service(ctx: HandlerContext) -> TelegramDeliveryService:
+    if ctx.telegram is None:
+        raise HandlerError(ErrorCode.NOT_IMPLEMENTED, "Telegram 服务尚未启动")
+    return ctx.telegram
+
+
+def _telegram_get_config(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return _telegram_service(ctx).get_config()
+
+
+def _telegram_configure(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return _telegram_service(ctx).configure(payload)
+    except ValueError as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+
+
+def _telegram_list_deliveries(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return _telegram_service(ctx).list_summaries(offset=int(payload.get("offset", 0)), limit=int(payload.get("limit", 50)), status=str(payload["status"]) if payload.get("status") else None)
+
+
+def _telegram_claim_next(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    account_id = str(payload.get("accountId") or "").strip()
+    lease_id = str(payload.get("leaseId") or "").strip()
+    if not account_id or not lease_id:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少 accountId 或 leaseId")
+    return {"claim": service.claim_next(account_id=account_id, now=str(payload.get("now") or service._now()), lease_id=lease_id, lease_expires_at=str(payload.get("leaseExpiresAt") or service.lease_deadline()))}
+
+
+def _telegram_renew_lease(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    service.renew_lease(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("leaseExpiresAt") or service.lease_deadline()))
+    return {"ok": True}
+
+
+def _telegram_release_claim(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.release_claim(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("releasedAt") or service._now()))
+
+
+def _telegram_mark_sending(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_sending(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("requestStartedAt") or service._now()), str(payload.get("mediaKind") or "document"), bool(payload.get("fallbackUsed")), bool(payload.get("chargeAttempt", True)))
+
+
+def _telegram_set_segment_manifest(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    manifest = payload.get("manifest")
+    if not isinstance(manifest, dict):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少分段清单")
+    try:
+        return service.set_segment_manifest(
+            str(payload.get("deliveryId") or ""),
+            str(payload.get("leaseId") or ""),
+            manifest,
+            str(payload.get("preparedAt") or service._now()),
+        )
+    except (ValueError, DeliveryStateConflict) as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+
+
+def _telegram_mark_segment_sent(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    index = payload.get("segmentIndex")
+    if not isinstance(index, int) or isinstance(index, bool):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "分段索引无效")
+    try:
+        return service.mark_segment_sent(
+            str(payload.get("deliveryId") or ""),
+            str(payload.get("leaseId") or ""),
+            index,
+            str(payload.get("messageId") or ""),
+            str(payload.get("sentAt") or service._now()),
+        )
+    except DeliveryStateConflict as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+
+
+def _telegram_mark_fallback_used(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_fallback_used(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""))
+
+
+def _telegram_mark_sent(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_sent(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("messageId") or ""), str(payload.get("sentAt") or service._now()))
+
+
+def _telegram_mark_skipped_oversize(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_skipped_oversize(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("messageId") or ""), str(payload.get("sentAt") or service._now()))
+
+
+def _telegram_mark_retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_retry(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("code") or "NETWORK_ERROR"), str(payload.get("message") or ""), str(payload.get("nextAttemptAt") or service._now()))
+
+
+def _telegram_mark_retry_not_submitted(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_retry_not_submitted(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("code") or "NETWORK_NOT_SUBMITTED"), str(payload.get("message") or ""), str(payload.get("nextAttemptAt") or service._now()))
+
+
+def _telegram_mark_failed(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_failed(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("code") or "SEND_FAILED"), str(payload.get("message") or ""), str(payload.get("failedAt") or service._now()))
+
+
+def _telegram_mark_uncertain(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return service.mark_uncertain(str(payload.get("deliveryId") or ""), str(payload.get("leaseId") or ""), str(payload.get("code") or "SEND_UNKNOWN"), str(payload.get("message") or ""), str(payload.get("failedAt") or service._now()))
+
+
+def _telegram_mark_target_failed(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    service = _telegram_service(ctx)
+    return {"items": service.mark_target_failed(delivery_id=str(payload.get("deliveryId") or ""), lease_id=str(payload.get("leaseId") or ""), account_id=str(payload.get("accountId") or ""), target_chat_id=str(payload.get("targetChatId") or ""), code=str(payload.get("code") or "TARGET_PERMISSION_DENIED"), message=str(payload.get("message") or ""), failed_at=str(payload.get("failedAt") or service._now()))}
+
+
+def _telegram_retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    import asyncio
+    service = _telegram_service(ctx)
+    try:
+        return asyncio.run(service.retry(str(payload.get("deliveryId") or ""), confirm_possible_duplicate=bool(payload.get("confirmPossibleDuplicate")), confirm_interrupted_output=bool(payload.get("confirmInterruptedOutput"))))
+    except Exception as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+
+
+def _telegram_cancel_pending(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    account = payload.get("accountId")
+    return {"cancelled": _telegram_service(ctx).cancel_pending(str(account) if account else None)}
+
+
+def _telegram_get_target_block(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {"block": _telegram_service(ctx).get_target_block(str(payload.get("accountId") or ""), str(payload.get("targetChatId") or ""))}
+
+
+def _telegram_clear_target_block(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {"cleared": _telegram_service(ctx).clear_target_block(str(payload.get("accountId") or ""), str(payload.get("targetChatId") or ""))}
 
 
 def _check_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,7 +9,7 @@ from src.core.download_task import VideoInfo
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.twitter_fallback import is_twitter_url, resolve_twitter_media
 from src.core.ytdlp_cookies import apply_cookiefile_from_headers, cleanup_cookiefile
-from src.core.ytdlp_opts import REMOTE_COMPONENTS
+from src.core.ytdlp_opts import REMOTE_COMPONENTS, resolve_js_runtimes
 from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.utils.logger import setup_logger
 
@@ -21,6 +21,25 @@ _FORMAT_FRAGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 _MERGED_EXTS = (".mp4", ".mkv", ".webm", ".m4a", ".opus")
+_TRANSIENT_NETWORK_MARKERS = (
+    "timed out",
+    "transporterror",
+    "connection reset",
+    "temporarily unavailable",
+    "network is unreachable",
+    "http error 403",
+    "http error 429",
+    "http error 5",
+)
+
+
+def _is_retryable_youtube_network_error(url: str, exc: Exception) -> bool:
+    """只对 YouTube 的短暂网络错误重建一次 yt-dlp 会话。"""
+    host = (url or "").lower()
+    if "youtube.com" not in host and "youtu.be" not in host:
+        return False
+    message = str(exc).lower()
+    return any(marker in message for marker in _TRANSIENT_NETWORK_MARKERS)
 
 
 def resolve_output_path(
@@ -162,8 +181,14 @@ class Downloader:
             "noprogress": True,
             "logger": _YtDlpQuietLogger(),
             "http_headers": dict(DEFAULT_HTTP_HEADERS),
+            # 代理或网络异常时，避免任务无限期停留在“下载中”。
+            "socket_timeout": 15,
+            "retries": 2,
+            "extractor_retries": 2,
             # YouTube JS challenge（nsig/signature）求解，缺了只剩低画质格式
             "remote_components": REMOTE_COMPONENTS,
+            # yt-dlp 仅默认启用 Deno；Windows 常见的 Node 必须显式开启。
+            "js_runtimes": resolve_js_runtimes(),
         }
 
         if ffmpeg_location:
@@ -225,20 +250,30 @@ class Downloader:
             cleanup_cookiefile(cookie_path)
 
     def _download_with_ydl(self, url: str, ydl_opts: Dict[str, Any]) -> None:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if isinstance(info, dict):
-                self.last_ydl_info = info
-                prepared = ""
-                try:
-                    prepared = ydl.prepare_filename(info)
-                except Exception:
-                    prepared = ""
-                final_path = resolve_output_path(
-                    self.last_filename or prepared,
-                    info,
-                )
-                if final_path:
-                    self.last_filename = final_path
-            elif self.last_filename:
-                self.last_filename = resolve_output_path(self.last_filename)
+        for attempt in range(2):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    if isinstance(info, dict):
+                        self.last_ydl_info = info
+                        prepared = ""
+                        try:
+                            prepared = ydl.prepare_filename(info)
+                        except Exception:
+                            prepared = ""
+                        final_path = resolve_output_path(
+                            self.last_filename or prepared,
+                            info,
+                        )
+                        if final_path:
+                            self.last_filename = final_path
+                    elif self.last_filename:
+                        self.last_filename = resolve_output_path(self.last_filename)
+                return
+            except Exception as exc:
+                if attempt == 0 and _is_retryable_youtube_network_error(url, exc):
+                    logger.warning(
+                        "YouTube 媒体地址暂时失效，正在重新解析并续传一次"
+                    )
+                    continue
+                raise

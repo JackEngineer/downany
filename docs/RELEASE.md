@@ -55,7 +55,11 @@
 
 ### GitHub Releases 发布步骤
 
-1. 确认 `desktop/package.json` 的 `version` 与拟发 tag 一致（当前 `0.1.0`）。  
+#### Windows 候选版
+
+macOS 尚未完成同版本验收时，Windows 可先发布为 GitHub **Prerelease**，不替换现有稳定版，也不触发正式版更新提示。候选版至少包含 Windows NSIS 安装包和同次构建的 Chrome 扩展 ZIP；标题与说明必须明确 macOS 安装包尚未包含。macOS 验收通过后，再用不带预发布后缀的版本标签同时发布 DMG、NSIS 和扩展 ZIP。
+
+1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.0`；Windows 候选标签为 `v0.2.0-rc.1`）。
 2. 推送含发布说明的提交到 `main`。  
 3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
    ```bash

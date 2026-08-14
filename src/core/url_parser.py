@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,12 +23,41 @@ from src.core.twitter_fallback import (
     normalize_twitter_url,
     resolve_twitter_media,
 )
+from src.sidecar.bin_paths import resolve_bundled_ytdlp_path
 from src.utils.logger import setup_logger
 
 logger = setup_logger("UrlParser")
 
 DEFAULT_PARSE_TIMEOUT = 30.0
 _BVID_RE = re.compile(r"^BV[0-9A-Za-z]+$")
+_WINDOWS_DLL_DIRECTORY_LOCK = threading.Lock()
+
+
+def _set_windows_dll_directory(path: Optional[str]) -> None:
+    """Set the process-wide DLL search directory used by child processes."""
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    set_dll_directory = kernel32.SetDllDirectoryW
+    set_dll_directory.argtypes = [ctypes.c_wchar_p]
+    set_dll_directory.restype = ctypes.c_int
+    if not set_dll_directory(path):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _start_parse_process(command: List[str], **kwargs) -> subprocess.Popen:
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return subprocess.Popen(command, **kwargs)
+    if not bundle_dir:
+        raise RuntimeError("打包运行时缺少 PyInstaller 资源目录")
+
+    with _WINDOWS_DLL_DIRECTORY_LOCK:
+        _set_windows_dll_directory(None)
+        try:
+            return subprocess.Popen(command, **kwargs)
+        finally:
+            _set_windows_dll_directory(str(bundle_dir))
 
 
 def fetch_bilibili_view(bvid: str, proxy: Optional[str] = None) -> Tuple[str, str]:
@@ -136,10 +166,10 @@ def build_parse_command(
     *,
     allow_playlist: bool = False,
 ) -> List[str]:
+    bundled_ytdlp = resolve_bundled_ytdlp_path()
+    executable = [str(bundled_ytdlp)] if bundled_ytdlp else [sys.executable, "-m", "yt_dlp"]
     cmd = [
-        sys.executable,
-        "-m",
-        "yt_dlp",
+        *executable,
         "--dump-single-json",
         "--no-warnings",
         "--no-color",
@@ -220,18 +250,27 @@ class ParseSession:
         return text
 
     def _run_ytdlp(self) -> ParseResult:
+        child_env = os.environ.copy()
+        for key in list(child_env):
+            normalized = key.upper()
+            if normalized.startswith("_PYI_") or normalized == "PYINSTALLER_RESET_ENVIRONMENT":
+                child_env.pop(key, None)
         with self._lock:
             if self._cancelled:
                 raise ParseCancelled(self.url)
-            self._process = subprocess.Popen(
+            self._process = _start_parse_process(
                 build_parse_command(
                     self.url,
                     self.proxy,
                     allow_playlist=self.allow_playlist,
                 ),
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=child_env,
             )
             process = self._process
 

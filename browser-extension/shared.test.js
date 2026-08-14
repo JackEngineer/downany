@@ -48,6 +48,38 @@ assert.notStrictEqual(
   videoIdentityKey("https://www.douyin.com/video/222"),
 );
 
+const { collapsePreferredPageSelection } = globalThis.VideoDlShared;
+assert.deepStrictEqual(
+  collapsePreferredPageSelection(
+    "https://www.youtube.com/watch?v=current",
+    [
+      {
+        url: "https://googlevideo.example/video",
+        title: "上一条视频标题",
+        thumbnail_url: "https://img.example/stale.jpg",
+        detectedAt: 10,
+      },
+      {
+        url: "https://googlevideo.example/audio",
+        title: "另一条旧标题",
+        detectedAt: 20,
+      },
+    ],
+    "https://img.example/current.jpg",
+  ),
+  [
+    {
+      url: "https://www.youtube.com/watch?v=current",
+      type: "page",
+      title: "",
+      pageUrl: "https://www.youtube.com/watch?v=current",
+      thumbnail_url: "https://img.example/current.jpg",
+      detectedAt: 20,
+      forcePage: true,
+    },
+  ],
+);
+
 const { countDisplayMedia } = globalThis.VideoDlShared;
 assert.strictEqual(
   countDisplayMedia([

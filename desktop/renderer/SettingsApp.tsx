@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MigrationResult } from "../electron/preload";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { SitesPanel } from "./components/SitesPanel";
+import { TelegramSettingsTab } from "./components/TelegramSettingsTab";
 import { ToastHost } from "./components/ToastHost";
 import { request } from "./lib/api";
 import { getLocale, setLocale, t, type Locale } from "./i18n";
@@ -18,13 +19,14 @@ type YtDlpInfo = {
   downloadUrl?: string;
 };
 
-type TabKey = "general" | "quality" | "postprocess" | "appearance";
+type TabKey = "general" | "quality" | "postprocess" | "appearance" | "telegram";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "通用" },
   { key: "quality", label: "质量" },
   { key: "postprocess", label: "后处理" },
   { key: "appearance", label: "界面" },
+  { key: "telegram", label: "Telegram" },
 ];
 
 function useBootstrap() {
@@ -600,6 +602,7 @@ export function SettingsApp() {
       {tab === "quality" && <QualityTab {...tabProps} />}
       {tab === "postprocess" && <PostprocessTab {...tabProps} />}
       {tab === "appearance" && <AppearanceTab {...tabProps} />}
+      {tab === "telegram" && <TelegramSettingsTab disabled={disabled} />}
 
       {tab === "general" && (
         <>

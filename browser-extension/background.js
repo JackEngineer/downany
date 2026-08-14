@@ -10,6 +10,7 @@ const {
   extractDouyinVideoId,
   countDisplayMedia,
   isOrphanTwitterCdn,
+  fetchWithTimeout,
 } = globalThis.VideoDlShared;
 
 const {
@@ -924,14 +925,11 @@ function ensurePollRunning() {
  * @param {{url: string, title?: string, headers?: Record<string,string>, pageUrl?: string, thumbnail_url?: string}[]} items
  */
 async function enqueueViaBridge(items) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 2500);
   try {
-    const res = await fetch(`${BRIDGE_BASE}/enqueue`, {
+    const res = await fetchWithTimeout(`${BRIDGE_BASE}/enqueue`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items }),
-      signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data && data.ok) {
@@ -955,8 +953,6 @@ async function enqueueViaBridge(items) {
       bridgeDown: true,
       retryable: true,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

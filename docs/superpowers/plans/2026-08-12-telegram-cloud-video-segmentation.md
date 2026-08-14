@@ -90,7 +90,7 @@ Expected: FAIL because `videoSegmenter.ts` does not exist.
 
 - [ ] **Step 3: Implement minimal segmenter**
 
-Implement a focused module using `spawn(ffmpegPath, args, { shell: false, windowsHide: true, signal })`. Parse duration from bounded stderr, estimate segment time for a 45 MB target, verify every output with `lstat/open/fstat/SHA-256`, retry with shorter duration, and use H.264/AAC fallback only after bounded copy attempts.
+Implement a focused module using `spawn(ffmpegPath, args, { shell: false, windowsHide: true, signal })`. Parse duration and stream codecs from bounded stderr, stream-copy only H.264/AAC-compatible sources, and transcode AV1/HEVC/non-AAC/unknown inputs to H.264/AAC (`yuv420p`, `avc1`) from the first attempt. Cap the first transcode segment at 135 seconds, verify every output with `lstat/open/fstat/SHA-256`, retry with shorter duration, and retain H.264/AAC fallback after bounded copy attempts for otherwise compatible sources.
 
 - [ ] **Step 4: Add deterministic containment and cleanup**
 
