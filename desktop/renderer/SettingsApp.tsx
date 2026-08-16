@@ -590,7 +590,7 @@ export function SettingsApp() {
           <button
             key={t.key}
             type="button"
-            className={tab === t.key ? "segment active" : "segment"}
+            className={tab === t.key ? "settings-tab active" : "settings-tab"}
             onClick={() => setTab(t.key)}
           >
             {t.label}

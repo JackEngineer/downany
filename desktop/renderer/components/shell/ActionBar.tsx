@@ -61,7 +61,7 @@ export function ActionBar() {
       if (menu.open) {
         document
           .querySelectorAll<HTMLDetailsElement>(
-            "details.card-menu[open], details.topbar-menu[open]",
+            "details.card-menu[open], details.action-bar-menu[open]",
           )
           .forEach((other) => {
             if (other !== menu) other.open = false;
@@ -184,7 +184,7 @@ export function ActionBar() {
         label={t("action.search", locale)}
         onClick={() => setSearchOpen(true)}
       />
-      <details className="action-bar__menu topbar-menu" ref={menuRef}>
+      <details className="action-bar-menu" ref={menuRef}>
         <summary aria-label={t("action.batch", locale)}>
           <Icon name="more" size={16} />
         </summary>

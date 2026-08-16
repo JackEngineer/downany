@@ -44,11 +44,11 @@
   background: var(--color-surface-chrome);
 }
 
-.action-bar__menu {
+.action-bar-menu {
   position: relative;
 }
 
-.action-bar__menu > summary {
+.action-bar-menu > summary {
   display: grid;
   width: var(--control-height-small);
   height: var(--control-height-small);
@@ -60,12 +60,12 @@
   list-style: none;
 }
 
-.action-bar__menu > summary::-webkit-details-marker {
+.action-bar-menu > summary::-webkit-details-marker {
   display: none;
 }
 
-.action-bar__menu[open] > summary,
-.action-bar__menu > summary:hover {
+.action-bar-menu[open] > summary,
+.action-bar-menu > summary:hover {
   border-color: var(--color-stroke-subtle);
   background: var(--color-surface-control-hover);
   color: var(--color-text-primary);
