@@ -55,6 +55,9 @@ describe("ActionBar", () => {
 
     expect(addButton).toHaveFocus();
     expect(addButton.matches(":focus-visible")).toBe(true);
+    expect(addButton).toHaveClass("ui-button", "ui-button--primary");
+    expect(addButton.closest(".action-bar")).toContainElement(addButton);
+    expect(addButton.matches(".action-bar .ui-button--primary")).toBe(true);
 
     const testFilePath = fileURLToPath(import.meta.url);
     const shellStyles = readFileSync(
