@@ -165,10 +165,14 @@ html[data-theme="light"] {
   --material-action-media-fill-hover: rgba(12, 15, 19, 0.82);
   --material-action-media-fill-pressed: rgba(12, 15, 19, 0.9);
   --material-action-media-fill-opaque: #181c22;
+  --material-action-media-fill-opaque-hover: #202630;
+  --material-action-media-fill-opaque-pressed: #11151a;
   --material-action-media-stroke: rgba(255, 255, 255, 0.3);
   --material-action-media-stroke-focus: rgba(255, 255, 255, 0.48);
   --material-action-media-text: rgba(255, 255, 255, 0.96);
   --material-action-media-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --material-action-media-focus-inner: #0b0d10;
+  --material-action-media-focus-outer: #5b7cfa;
   --elevation-overlay: 0 14px 36px rgba(0, 0, 0, 0.32);
   --material-media-placeholder-start: #252b34;
   --material-media-placeholder-middle: #11151a;

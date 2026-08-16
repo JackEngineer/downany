@@ -312,12 +312,14 @@
 }
 
 .media-task-banner__actions .ui-button:focus-visible {
-  outline-color: var(--color-focus-ring);
+  outline-color: var(--material-action-media-focus-outer);
   outline-style: solid;
   outline-width: 2px;
   outline-offset: 2px;
   border-color: var(--material-action-media-stroke-focus);
-  box-shadow: var(--material-action-media-highlight);
+  box-shadow:
+    0 0 0 2px var(--material-action-media-focus-inner),
+    var(--material-action-media-highlight);
 }
 
 .task-actions-menu {
@@ -412,6 +414,14 @@
   .media-task-banner__actions .ui-button {
     background: var(--material-action-media-fill-opaque);
   }
+
+  .media-task-banner__actions .ui-button:hover:not(:disabled) {
+    background: var(--material-action-media-fill-opaque-hover);
+  }
+
+  .media-task-banner__actions .ui-button:active:not(:disabled) {
+    background: var(--material-action-media-fill-opaque-pressed);
+  }
 }
 
 html[data-reduce-transparency="true"] .media-task-banner__glass,
@@ -429,6 +439,18 @@ html[data-reduce-transparency="true"] .media-task-banner__actions .ui-button {
   background: var(--material-action-media-fill-opaque);
 }
 
+html[data-reduce-transparency="true"]
+  .media-task-banner__actions
+  .ui-button:hover:not(:disabled) {
+  background: var(--material-action-media-fill-opaque-hover);
+}
+
+html[data-reduce-transparency="true"]
+  .media-task-banner__actions
+  .ui-button:active:not(:disabled) {
+  background: var(--material-action-media-fill-opaque-pressed);
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .media-task-banner__glass,
   .media-task-banner__actions .ui-button {
@@ -443,6 +465,14 @@ html[data-reduce-transparency="true"] .media-task-banner__actions .ui-button {
 
   .media-task-banner__actions .ui-button {
     background: var(--material-action-media-fill-opaque);
+  }
+
+  .media-task-banner__actions .ui-button:hover:not(:disabled) {
+    background: var(--material-action-media-fill-opaque-hover);
+  }
+
+  .media-task-banner__actions .ui-button:active:not(:disabled) {
+    background: var(--material-action-media-fill-opaque-pressed);
   }
 }
 

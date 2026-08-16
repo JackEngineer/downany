@@ -47,6 +47,32 @@ function getCssBlock(css: string, header: string): string | null {
   return null;
 }
 
+function readRootToken(css: string, name: string): string {
+  const match = css.match(new RegExp(`${name}:\\s*([^;]+);`));
+  if (!match) throw new Error(`Missing token ${name}`);
+  return match[1].trim();
+}
+
+function relativeLuminance(hex: string): number {
+  const channels = hex
+    .replace("#", "")
+    .match(/.{2}/g)
+    ?.map((channel) => Number.parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3) throw new Error(`Invalid color ${hex}`);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(first: string, second: string): number {
+  const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
+  const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 function expectTaskLayoutContract(tokens: string, styles: string): void {
   expect(tokens).toMatch(/^\s*--material-task-glass-width:\s*58%;\s*$/m);
   expect(tokens).not.toMatch(/^\s*--layout-task-narrow-viewport:/m);
@@ -252,10 +278,67 @@ describe("MediaTaskBanner", () => {
       computed.getPropertyValue("--material-action-media-highlight").trim(),
     ).toContain("inset");
     expect(mediaBannerStyles).toMatch(
-      /\.media-task-banner__actions \.ui-button:focus-visible\s*\{[^}]*outline-style:\s*solid;[^}]*outline-width:\s*2px;[^}]*box-shadow:\s*var\(--material-action-media-highlight\);/s,
+      /\.media-task-banner__actions \.ui-button:focus-visible\s*\{[^}]*outline-style:\s*solid;[^}]*outline-width:\s*2px;[^}]*box-shadow:\s*0 0 0 2px var\(--material-action-media-focus-inner\),\s*var\(--material-action-media-highlight\);/s,
     );
     expect(mediaBannerStyles).toMatch(
       /data-reduce-transparency="true"[^}]*\.media-task-banner__actions \.ui-button\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque\);/s,
+    );
+  });
+
+  it("keeps every reduced-transparency action state opaque", () => {
+    expect(readRootToken(designTokens, "--material-action-media-fill-opaque")).toBe(
+      "#181c22",
+    );
+    expect(
+      readRootToken(designTokens, "--material-action-media-fill-opaque-hover"),
+    ).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(
+      readRootToken(designTokens, "--material-action-media-fill-opaque-pressed"),
+    ).toMatch(/^#[0-9a-f]{6}$/i);
+
+    for (const context of [
+      '@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))',
+      '@media (prefers-reduced-transparency: reduce)',
+    ]) {
+      const block = getCssBlock(mediaBannerStyles, context);
+      expect(block, context).not.toBeNull();
+      expect(block).toMatch(
+        /\.media-task-banner__actions \.ui-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque-hover\);/s,
+      );
+      expect(block).toMatch(
+        /\.media-task-banner__actions \.ui-button:active:not\(:disabled\)\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque-pressed\);/s,
+      );
+    }
+    expect(mediaBannerStyles).toMatch(
+      /html\[data-reduce-transparency="true"\]\s+\.media-task-banner__actions\s+\.ui-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque-hover\);/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /html\[data-reduce-transparency="true"\]\s+\.media-task-banner__actions\s+\.ui-button:active:not\(:disabled\)\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque-pressed\);/s,
+    );
+  });
+
+  it("uses a theme-independent double focus treatment that contrasts on bright and dark media", () => {
+    const outer = readRootToken(
+      designTokens,
+      "--material-action-media-focus-outer",
+    );
+    const inner = readRootToken(
+      designTokens,
+      "--material-action-media-focus-inner",
+    );
+    expect(contrastRatio(outer, "#ffffff")).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(outer, "#0b0d10")).toBeGreaterThanOrEqual(3);
+    expect(inner).toBe("#0b0d10");
+
+    const focusRules = getCssBlock(
+      mediaBannerStyles,
+      ".media-task-banner__actions .ui-button:focus-visible",
+    );
+    expect(focusRules).toMatch(
+      /outline-color:\s*var\(--material-action-media-focus-outer\);/,
+    );
+    expect(focusRules).toMatch(
+      /box-shadow:\s*0 0 0 2px var\(--material-action-media-focus-inner\),\s*var\(--material-action-media-highlight\);/s,
     );
   });
 
