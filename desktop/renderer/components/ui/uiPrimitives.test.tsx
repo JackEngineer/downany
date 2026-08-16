@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { cleanup, render, screen } from "@testing-library/react";
@@ -72,8 +73,7 @@ describe("UI primitives", () => {
 
   it("defines visible focus rules for interactive primitives", () => {
     const testFilePath = fileURLToPath(import.meta.url);
-    const cssPath = testFilePath
-      .replace("/components/ui/uiPrimitives.test.tsx", "/styles/ui.css");
+    const cssPath = resolve(dirname(testFilePath), "../../styles/ui.css");
     const css = readFileSync(cssPath, "utf8");
 
     expect(css).toContain(".ui-button:focus-visible");
