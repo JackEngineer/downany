@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { useAppStore } from "../store/appStore";
+import { Icon } from "./ui/Icon";
 
 export function ToastHost() {
   const toasts = useAppStore((s) => s.toasts);
@@ -37,7 +38,7 @@ export function ToastHost() {
             {t.detail && <p>{t.detail}</p>}
           </div>
           <button type="button" aria-label="关闭" onClick={() => dismissToast(t.id)}>
-            ×
+            <Icon name="close" size={14} />
           </button>
         </div>
       ))}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createTasksAndRefresh } from "../lib/addFlow";
 import type { NetSearchItem } from "../lib/types";
 import { useAppStore } from "../store/appStore";
+import { Icon } from "./ui/Icon";
 
 function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "";
@@ -76,7 +77,7 @@ export function NetSearchPanel() {
               <img className="net-thumb" src={item.thumbnail_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
             ) : (
               <div className="net-thumb net-thumb-placeholder" aria-hidden="true">
-                ▶
+                <Icon name="play" size={14} />
               </div>
             )}
             <div className="net-info">
