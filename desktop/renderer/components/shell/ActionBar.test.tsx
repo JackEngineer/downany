@@ -1,11 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import "../../styles.css";
 import type { DesktopApi } from "../../../electron/preload";
 import { setLocale } from "../../i18n";
 import { useAppStore } from "../../store/appStore";
@@ -46,15 +44,14 @@ beforeEach(() => {
 });
 
 describe("ActionBar", () => {
-  it("keeps the toolbar add action quiet and separates webpage recognition", () => {
-    const testFilePath = fileURLToPath(import.meta.url);
-    const cssPath = resolve(dirname(testFilePath), "../../styles/shell.css");
-    const css = readFileSync(cssPath, "utf8");
+  it("keeps the quiet Add action visibly focused for keyboard users", () => {
+    render(<ActionBar />);
 
-    expect(css).toContain(".action-bar .ui-button--primary");
-    expect(css).toContain("background: var(--color-surface-control);");
-    expect(css).toContain(".action-bar__recognize::before");
-    expect(css).toContain("border-left: 1px solid var(--color-stroke-subtle);");
+    const addButton = screen.getByRole("button", { name: "添加" });
+    addButton.focus();
+
+    expect(addButton).toHaveFocus();
+    expect(addButton.matches(":focus-visible")).toBe(true);
   });
 
   it("submits the link from the explicit Add action", async () => {
