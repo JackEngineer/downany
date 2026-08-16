@@ -84,6 +84,25 @@ describe("ActionBar", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("closes the search popover when focus leaves it but stays open for internal focus moves", () => {
+    render(<ActionBar />);
+    const trigger = screen.getByRole("button", { name: "搜索" });
+    fireEvent.click(trigger);
+
+    const searchbox = screen.getByRole("searchbox", { name: "搜索任务" });
+    const closeButton = screen.getByRole("button", { name: "关闭搜索" });
+    const settingsButton = screen.getByRole("button", { name: "设置" });
+
+    fireEvent.blur(searchbox, { relatedTarget: closeButton });
+    expect(screen.getByRole("dialog", { name: "搜索任务" })).toBeInTheDocument();
+
+    fireEvent.blur(searchbox, { relatedTarget: settingsButton });
+    expect(
+      screen.queryByRole("dialog", { name: "搜索任务" }),
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("uses english locale strings in the search popover", () => {
     setLocale("en");
     render(<ActionBar />);

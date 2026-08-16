@@ -60,6 +60,13 @@ export function SearchPopover(props: SearchPopoverProps) {
       className="search-popover"
       role="dialog"
       aria-label={t("search.dialog", props.locale)}
+      onBlur={(event) => {
+        const root = rootRef.current;
+        const nextTarget = event.relatedTarget;
+        if (!root) return;
+        if (nextTarget instanceof Node && root.contains(nextTarget)) return;
+        props.onClose();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
