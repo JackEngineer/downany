@@ -136,7 +136,6 @@ html[data-theme="light"] {
   --motion-normal: 180ms;
   --motion-slow: 240ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --layout-task-narrow-viewport: 760px;
   --material-task-glass-width: 58%;
   --material-task-glass-blur: 40px;
   --material-task-glass-saturate: 1.2;

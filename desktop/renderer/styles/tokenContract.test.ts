@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 const tokenPath = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "../../../design-system/tokens.css",
 );
 
@@ -40,7 +41,6 @@ const requiredTokens = [
   "--space-8",
   "--space-10",
   "--radius-small",
-  "--layout-task-narrow-viewport",
   "--material-task-glass-width",
   "--material-task-glass-blur",
   "--material-task-glass-saturate",

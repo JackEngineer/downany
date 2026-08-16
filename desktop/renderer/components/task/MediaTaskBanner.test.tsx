@@ -48,7 +48,7 @@ function getCssBlock(css: string, header: string): string | null {
 
 function expectTaskLayoutContract(tokens: string, styles: string): void {
   expect(tokens).toMatch(/^\s*--material-task-glass-width:\s*58%;\s*$/m);
-  expect(tokens).toMatch(/^\s*--layout-task-narrow-viewport:\s*760px;\s*$/m);
+  expect(tokens).not.toMatch(/^\s*--layout-task-narrow-viewport:/m);
 
   const bannerRules = getCssBlock(styles, ".media-task-banner");
   expect(bannerRules).toMatch(
