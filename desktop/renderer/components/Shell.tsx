@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { submitAddText } from "../lib/addFlow";
+import { useDocumentTheme } from "../lib/documentTheme";
 import { useAppStore } from "../store/appStore";
 import { AddConfirmDialog } from "./AddConfirmDialog";
 import { ConnectionGate } from "./ConnectionGate";
@@ -23,6 +24,8 @@ export function Shell() {
   const connection = useAppStore((s) => s.connection);
   const filter = useAppStore((s) => s.filter);
   const settings = useAppStore((s) => s.settings);
+
+  useDocumentTheme(settings?.theme_mode);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -113,27 +116,6 @@ export function Shell() {
       });
     });
   }, []);
-
-  useEffect(() => {
-    const applySystem = async (mode?: "light" | "dark") => {
-      const themeMode = useAppStore.getState().settings?.theme_mode || "system";
-      if (themeMode !== "system") return;
-      const resolved = mode || (await window.api.getNativeTheme());
-      document.documentElement.setAttribute("data-theme", resolved);
-    };
-    void applySystem();
-    return window.api.onNativeTheme((mode) => {
-      void applySystem(mode);
-    });
-  }, [settings?.theme_mode]);
-
-  useEffect(() => {
-    const themeMode = settings?.theme_mode || "system";
-    void window.api.setThemeSource(themeMode);
-    if (themeMode !== "system") {
-      document.documentElement.setAttribute("data-theme", themeMode);
-    }
-  }, [settings?.theme_mode]);
 
   if (connection === "failed") {
     return (

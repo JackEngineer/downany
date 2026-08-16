@@ -27,7 +27,12 @@ import type * as http from "node:http";
   type BridgeTaskStatus,
 } from "./bridgeServer";
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
-import { MAIN_WINDOW_GEOMETRY, windowChromeOptions } from "./windowChrome";
+import {
+  MAIN_WINDOW_GEOMETRY,
+  syncWindowBackgrounds,
+  windowChromeOptions,
+  type WindowThemeSource,
+} from "./windowChrome";
 import {
   PROTOCOL_SCHEME,
   extractAddsFromArgv,
@@ -803,6 +808,11 @@ function registerIpc(): void {
   ipcMain.handle("app:setThemeSource", async (_evt, mode: string) => {
     if (mode === "system" || mode === "light" || mode === "dark") {
       nativeTheme.themeSource = mode;
+      syncWindowBackgrounds(
+        BrowserWindow.getAllWindows(),
+        mode,
+        nativeTheme.shouldUseDarkColors,
+      );
     }
   });
 
@@ -895,6 +905,11 @@ initializePrimaryInstance(gotLock, () => {
     startBridge();
 
     nativeTheme.on("updated", () => {
+      syncWindowBackgrounds(
+        BrowserWindow.getAllWindows(),
+        nativeTheme.themeSource as WindowThemeSource,
+        nativeTheme.shouldUseDarkColors,
+      );
       broadcastAll(
         "app:nativeTheme",
         nativeTheme.shouldUseDarkColors ? "dark" : "light",
