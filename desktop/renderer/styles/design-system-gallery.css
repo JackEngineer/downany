@@ -1,0 +1,102 @@
+html,
+body,
+#root,
+.design-system-gallery {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.design-system-gallery {
+  min-width: 760px;
+  background:
+    radial-gradient(circle at top left, rgba(122, 162, 255, 0.14), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface-window) 94%, #000 6%), var(--color-surface-window));
+}
+
+.design-system-gallery__controls {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-stroke-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  box-shadow: var(--elevation-overlay);
+}
+
+.design-system-gallery__controls span,
+.design-system-gallery__controls button {
+  min-height: 28px;
+  border: 0;
+  border-radius: var(--radius-small);
+  padding: 0 var(--space-2);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+}
+
+.design-system-gallery__controls button {
+  cursor: pointer;
+}
+
+.design-system-gallery__controls button[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.design-system-gallery__window {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.design-system-gallery__main {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+
+.design-system-gallery__section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.design-system-gallery__section-head {
+  display: grid;
+  gap: 4px;
+}
+
+.design-system-gallery__main h2,
+.design-system-gallery__section-head p {
+  margin: 0;
+}
+
+.design-system-gallery__main h2 {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.design-system-gallery__section-head p {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.design-system-gallery__section [data-backdrop-mode="none"] .media-task-banner__glass,
+.design-system-gallery__section [data-backdrop-mode="none"] .media-task-banner__actions .ui-button {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.design-system-gallery__section [data-backdrop-mode="none"] .media-task-banner__glass {
+  background-color: color-mix(in srgb, var(--task-glass-tint, var(--material-task-glass-tint)) 92%, rgba(15, 23, 42, 0.14));
+  background-image: none !important;
+}

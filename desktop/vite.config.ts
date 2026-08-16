@@ -33,7 +33,7 @@ function buildExtractAssets(): { name: string; closeBundle: () => Promise<void> 
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   root: path.resolve(__dirname, "renderer"),
   server: {
     fs: {
@@ -73,7 +73,15 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "renderer/index.html"),
         settings: path.resolve(__dirname, "renderer/settings.html"),
+        ...(mode === "development"
+          ? {
+              designSystem: path.resolve(
+                __dirname,
+                "renderer/design-system.html",
+              ),
+            }
+          : {}),
       },
     },
   },
-});
+}));
