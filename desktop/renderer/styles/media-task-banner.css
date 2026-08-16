@@ -294,12 +294,30 @@
 
 .media-task-banner__actions .ui-button {
   height: 30px;
-  border-color: var(--material-action-glass-stroke);
-  background: var(--material-action-glass-fill);
-  color: var(--color-text-on-media);
+  border-color: var(--material-action-media-stroke);
+  background: var(--material-action-media-fill);
+  color: var(--material-action-media-text);
   backdrop-filter: blur(var(--material-action-glass-blur));
   -webkit-backdrop-filter: blur(var(--material-action-glass-blur));
-  box-shadow: var(--material-action-glass-highlight);
+  box-shadow: var(--material-action-media-highlight);
+}
+
+.media-task-banner__actions .ui-button:hover:not(:disabled) {
+  border-color: var(--material-action-media-stroke-focus);
+  background: var(--material-action-media-fill-hover);
+}
+
+.media-task-banner__actions .ui-button:active:not(:disabled) {
+  background: var(--material-action-media-fill-pressed);
+}
+
+.media-task-banner__actions .ui-button:focus-visible {
+  outline-color: var(--color-focus-ring);
+  outline-style: solid;
+  outline-width: 2px;
+  outline-offset: 2px;
+  border-color: var(--material-action-media-stroke-focus);
+  box-shadow: var(--material-action-media-highlight);
 }
 
 .task-actions-menu {
@@ -390,6 +408,10 @@
     background-color: var(--material-task-glass-fallback);
     background-image: none;
   }
+
+  .media-task-banner__actions .ui-button {
+    background: var(--material-action-media-fill-opaque);
+  }
 }
 
 html[data-reduce-transparency="true"] .media-task-banner__glass,
@@ -403,6 +425,10 @@ html[data-reduce-transparency="true"] .media-task-banner__glass {
   background-image: none;
 }
 
+html[data-reduce-transparency="true"] .media-task-banner__actions .ui-button {
+  background: var(--material-action-media-fill-opaque);
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .media-task-banner__glass,
   .media-task-banner__actions .ui-button {
@@ -413,6 +439,10 @@ html[data-reduce-transparency="true"] .media-task-banner__glass {
   .media-task-banner__glass {
     background-color: var(--material-task-glass-fallback);
     background-image: none;
+  }
+
+  .media-task-banner__actions .ui-button {
+    background: var(--material-action-media-fill-opaque);
   }
 }
 

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../store/appStore";
 import { taskFixture } from "../../test/taskFixture";
 import { MediaTaskBanner } from "./MediaTaskBanner";
+import { artworkToneSampler } from "./artworkPresentation";
 
 const requestMock = vi.fn();
 const openPathMock = vi.fn();
@@ -78,7 +79,7 @@ function expectTaskLayoutContract(tokens: string, styles: string): void {
 function installBannerCascade(): void {
   const style = document.createElement("style");
   style.dataset.testStyles = "media-task-banner-cascade";
-  style.textContent = `${mediaBannerStyles}\n${appStyles}`;
+  style.textContent = `${designTokens}\n${mediaBannerStyles}\n${appStyles}`;
   document.head.append(style);
 }
 
@@ -134,17 +135,8 @@ function rect(
 }
 
 function mockCanvasGray(channel: number): void {
-  const pixels = new Uint8ClampedArray(16 * 16 * 4);
-  for (let index = 0; index < pixels.length; index += 4) {
-    pixels[index] = channel;
-    pixels[index + 1] = channel;
-    pixels[index + 2] = channel;
-    pixels[index + 3] = 255;
-  }
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-    drawImage: vi.fn(),
-    getImageData: () => ({ data: pixels }),
-  } as unknown as CanvasRenderingContext2D);
+  const tone = channel >= 220 ? "light" : channel >= 140 ? "medium" : "dark";
+  vi.mocked(artworkToneSampler.sample).mockResolvedValue(tone);
 }
 
 vi.mock("../../lib/api", () => ({
@@ -158,6 +150,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-reduce-transparency");
   document
     .querySelectorAll('[data-test-styles="media-task-banner-cascade"]')
     .forEach((node) => node.remove());
@@ -177,6 +170,7 @@ beforeEach(() => {
   showItemInFolderMock.mockResolvedValue(undefined);
   showTaskContextMenuMock.mockReset();
   showTaskContextMenuMock.mockResolvedValue(null);
+  vi.spyOn(artworkToneSampler, "sample").mockResolvedValue("light");
   useAppStore.setState({ tasks: [], settings: null, toasts: [] });
   (window as unknown as { api: Record<string, unknown> }).api = {
     platform: "darwin",
@@ -224,6 +218,44 @@ describe("MediaTaskBanner", () => {
     );
     expect(mediaBannerStyles).toMatch(
       /\.media-task-banner input\.media-task-banner__title-input:focus(?:-visible)?\s*\{[^}]*border-color:\s*var\(--color-focus-ring\);[^}]*box-shadow:\s*0 0 0 2px var\(--color-focus-ring\);/s,
+    );
+  });
+
+  it("keeps media actions dark, bounded and focus-visible on bright reduced-transparency media", () => {
+    installBannerCascade();
+    document.documentElement.dataset.theme = "light";
+    document.documentElement.dataset.reduceTransparency = "true";
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "completed",
+          file_path: "/tmp/video.mp4",
+          thumbnail_url: "https://example.com/bright.jpg",
+        })}
+      />,
+    );
+    const action = screen.getByRole("button", { name: "打开" });
+    action.focus();
+    const computed = getComputedStyle(action);
+
+    expect(
+      computed.getPropertyValue("--material-action-media-fill-opaque").trim(),
+    ).toBe("#181c22");
+    expect(
+      computed.getPropertyValue("--material-action-media-text").trim(),
+    ).toBe("rgba(255,255,255,0.96)");
+    expect(
+      computed.getPropertyValue("--material-action-media-stroke").trim(),
+    ).toBe("rgba(255,255,255,0.3)");
+    expect(action.matches(":focus-visible")).toBe(true);
+    expect(
+      computed.getPropertyValue("--material-action-media-highlight").trim(),
+    ).toContain("inset");
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner__actions \.ui-button:focus-visible\s*\{[^}]*outline-style:\s*solid;[^}]*outline-width:\s*2px;[^}]*box-shadow:\s*var\(--material-action-media-highlight\);/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /data-reduce-transparency="true"[^}]*\.media-task-banner__actions \.ui-button\s*\{[^}]*background:\s*var\(--material-action-media-fill-opaque\);/s,
     );
   });
 
@@ -356,6 +388,64 @@ describe("MediaTaskBanner", () => {
     );
   });
 
+  it("ignores a stale sampler result after the artwork URL changes", async () => {
+    let resolveFirst!: (tone: "dark" | "medium" | "light") => void;
+    let resolveSecond!: (tone: "dark" | "medium" | "light") => void;
+    vi.mocked(artworkToneSampler.sample)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+    const firstTask = taskFixture({ thumbnail_url: "https://example.com/first.jpg" });
+    const { container, rerender } = render(<MediaTaskBanner task={firstTask} />);
+
+    rerender(
+      <MediaTaskBanner
+        task={{ ...firstTask, thumbnail_url: "https://example.com/second.jpg" }}
+      />,
+    );
+    resolveFirst("dark");
+    await Promise.resolve();
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-artwork-tone",
+      "light",
+    );
+
+    resolveSecond("medium");
+    await waitFor(() =>
+      expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+        "data-artwork-tone",
+        "medium",
+      ),
+    );
+  });
+
+  it("keeps the display thumbnail visible when anonymous sampling falls back", () => {
+    vi.mocked(artworkToneSampler.sample).mockResolvedValue("light");
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://no-cors.example/video.jpg" })}
+      />,
+    );
+    const display = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    loadImage(display, 1920, 1080);
+
+    expect(display).toHaveAttribute("src", "https://no-cors.example/video.jpg");
+    expect(display).not.toHaveAttribute("crossorigin");
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-artwork-tone",
+      "light",
+    );
+  });
+
   it("retries a previously broken artwork URL when it becomes current again", () => {
     const firstTask = taskFixture({
       thumbnail_url: "https://example.com/first.jpg",
@@ -422,7 +512,7 @@ describe("MediaTaskBanner", () => {
     expect(resizeDisconnectMock).toHaveBeenCalledTimes(1);
   });
 
-  it("removes the focus layer for a standard landscape image", () => {
+  it("removes the focus layer for a standard landscape image", async () => {
     mockCanvasGray(0);
     const { container } = render(
       <MediaTaskBanner
@@ -440,7 +530,9 @@ describe("MediaTaskBanner", () => {
     );
 
     expect(banner).toHaveAttribute("data-media-quality", "standard");
-    expect(banner).toHaveAttribute("data-artwork-tone", "dark");
+    await waitFor(() =>
+      expect(banner).toHaveAttribute("data-artwork-tone", "dark"),
+    );
     expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
   });
 

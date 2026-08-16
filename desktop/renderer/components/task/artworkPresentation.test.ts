@@ -5,8 +5,27 @@ import {
   classifyArtwork,
   classifyArtworkShape,
   classifyArtworkTone,
+  createArtworkToneSampler,
   sampleArtworkLuminance,
 } from "./artworkPresentation";
+
+interface ControlledImage {
+  crossOrigin: string | null;
+  referrerPolicy: string;
+  src: string;
+  onload: ((event: Event) => void) | null;
+  onerror: ((event: Event | string) => void) | null;
+}
+
+function controlledImage(): ControlledImage {
+  return {
+    crossOrigin: null,
+    referrerPolicy: "",
+    src: "",
+    onload: null,
+    onerror: null,
+  };
+}
 
 describe("artwork presentation", () => {
   it("keeps a sufficiently large landscape image standard", () => {
@@ -71,5 +90,69 @@ describe("artwork presentation", () => {
     expect(
       sampleArtworkLuminance({} as HTMLImageElement, () => canvas),
     ).toBeNull();
+  });
+
+  it.each([
+    ["https://cdn.example/video.jpg", 0.1, "dark"],
+    ["http://localhost/local.jpg", 0.4, "medium"],
+  ] as const)("samples %s through an anonymous image", async (url, luminance, tone) => {
+    const image = controlledImage();
+    const sampler = createArtworkToneSampler({
+      createImage: () => image as unknown as HTMLImageElement,
+      sampleLuminance: () => luminance,
+    });
+
+    const sampled = sampler.sample(url);
+    expect(image.crossOrigin).toBe("anonymous");
+    expect(image.referrerPolicy).toBe("no-referrer");
+    expect(image.src).toBe(url);
+    image.onload?.(new Event("load"));
+
+    await expect(sampled).resolves.toBe(tone);
+  });
+
+  it("falls back to light when the anonymous CORS request is denied", async () => {
+    const image = controlledImage();
+    const sampler = createArtworkToneSampler({
+      createImage: () => image as unknown as HTMLImageElement,
+      sampleLuminance: () => {
+        throw new Error("must not sample a failed image");
+      },
+    });
+
+    const sampled = sampler.sample("https://no-cors.example/video.jpg");
+    image.onerror?.(new Event("error"));
+
+    await expect(sampled).resolves.toBe("light");
+  });
+
+  it("deduplicates in-flight samples and evicts the least-recent URL at its bound", async () => {
+    const images: ControlledImage[] = [];
+    const sampler = createArtworkToneSampler({
+      maxEntries: 2,
+      createImage: () => {
+        const image = controlledImage();
+        images.push(image);
+        return image as unknown as HTMLImageElement;
+      },
+      sampleLuminance: () => 0.1,
+    });
+
+    const first = sampler.sample("https://example.com/a.jpg");
+    expect(sampler.sample("https://example.com/a.jpg")).toBe(first);
+    images[0].onload?.(new Event("load"));
+    await first;
+
+    const second = sampler.sample("https://example.com/b.jpg");
+    images[1].onload?.(new Event("load"));
+    await second;
+    const third = sampler.sample("https://example.com/c.jpg");
+    images[2].onload?.(new Event("load"));
+    await third;
+
+    const firstAgain = sampler.sample("https://example.com/a.jpg");
+    expect(images).toHaveLength(4);
+    images[3].onload?.(new Event("load"));
+    await expect(firstAgain).resolves.toBe("dark");
   });
 });

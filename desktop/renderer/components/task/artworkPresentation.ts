@@ -81,3 +81,67 @@ export function classifyArtworkTone(relativeLuminance: number | null): ArtworkTo
   if (relativeLuminance < 0.24) return "dark";
   return "medium";
 }
+
+export interface ArtworkToneSampler {
+  sample(url: string): Promise<ArtworkTone>;
+}
+
+interface ArtworkToneSamplerOptions {
+  maxEntries?: number;
+  createImage?: () => HTMLImageElement;
+  sampleLuminance?: (image: HTMLImageElement) => number | null;
+}
+
+export function createArtworkToneSampler({
+  maxEntries = 64,
+  createImage = () => new Image(),
+  sampleLuminance = sampleArtworkLuminance,
+}: ArtworkToneSamplerOptions = {}): ArtworkToneSampler {
+  const cache = new Map<string, Promise<ArtworkTone>>();
+  const limit = Math.max(1, Math.floor(maxEntries));
+
+  return {
+    sample(url: string): Promise<ArtworkTone> {
+      const cached = cache.get(url);
+      if (cached) {
+        cache.delete(url);
+        cache.set(url, cached);
+        return cached;
+      }
+
+      const sampled = new Promise<ArtworkTone>((resolve) => {
+        try {
+          const image = createImage();
+          const finish = (tone: ArtworkTone) => {
+            image.onload = null;
+            image.onerror = null;
+            resolve(tone);
+          };
+          image.crossOrigin = "anonymous";
+          image.referrerPolicy = "no-referrer";
+          image.onload = () => {
+            try {
+              finish(classifyArtworkTone(sampleLuminance(image)));
+            } catch {
+              finish("light");
+            }
+          };
+          image.onerror = () => finish("light");
+          image.src = url;
+        } catch {
+          resolve("light");
+        }
+      });
+
+      cache.set(url, sampled);
+      while (cache.size > limit) {
+        const oldest = cache.keys().next().value as string | undefined;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+      }
+      return sampled;
+    },
+  };
+}
+
+export const artworkToneSampler = createArtworkToneSampler();

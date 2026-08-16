@@ -17,10 +17,9 @@ import {
   dispatchTaskAction,
 } from "./TaskActionsMenu";
 import {
+  artworkToneSampler,
   classifyArtwork,
   classifyArtworkShape,
-  classifyArtworkTone,
-  sampleArtworkLuminance,
   type ArtworkDimensions,
   type ArtworkTone,
 } from "./artworkPresentation";
@@ -197,6 +196,21 @@ export function MediaTaskBanner({
   }, [task.title]);
 
   useEffect(() => {
+    const artworkUrl = task.thumbnail_url;
+    if (!artworkUrl) return;
+    let active = true;
+    void artworkToneSampler.sample(artworkUrl).then((tone) => {
+      if (!active) return;
+      setArtworkState((current) =>
+        current.url === artworkUrl ? { ...current, tone } : current,
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [task.thumbnail_url]);
+
+  useEffect(() => {
     if (!editing) return;
     queueMicrotask(() => {
       editRef.current?.focus();
@@ -256,13 +270,16 @@ export function MediaTaskBanner({
     const image = event.currentTarget;
     const artworkUrl = image.getAttribute("src");
     if (!artworkUrl || artworkUrl !== task.thumbnail_url) return;
-    setArtworkState({
-      url: artworkUrl,
-      broken: false,
-      focusBroken: false,
-      naturalSize: { width: image.naturalWidth, height: image.naturalHeight },
-      tone: classifyArtworkTone(sampleArtworkLuminance(image)),
-    });
+    setArtworkState((current) =>
+      current.url === artworkUrl
+        ? {
+            ...current,
+            broken: false,
+            focusBroken: false,
+            naturalSize: { width: image.naturalWidth, height: image.naturalHeight },
+          }
+        : current,
+    );
   };
 
   const handleArtworkError = (event: SyntheticEvent<HTMLImageElement>) => {
