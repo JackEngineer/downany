@@ -8,6 +8,7 @@ import { HistorySection } from "./HistorySection";
 import { TaskList } from "./TaskList";
 import { ToastHost } from "./ToastHost";
 import { TopBar } from "./TopBar";
+import { WindowChrome } from "./shell/WindowChrome";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -142,7 +143,8 @@ export function Shell() {
   }
 
   return (
-    <div className="window-shell">
+    <div className="window-shell" data-platform={window.api.platform}>
+      <WindowChrome />
       <TopBar />
       <main className="window-main" id="main">
         {filter === "history" ? <HistorySection /> : <TaskList />}

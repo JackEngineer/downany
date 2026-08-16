@@ -1,0 +1,23 @@
+.window-chrome {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 44px;
+  flex: 0 0 44px;
+  border-bottom: 1px solid var(--color-stroke-subtle);
+  background: var(--color-surface-chrome);
+  -webkit-app-region: drag;
+}
+
+.window-chrome__title {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.window-shell[data-platform="darwin"] .topbar {
+  padding-top: 0;
+  padding-left: 16px;
+  -webkit-app-region: no-drag;
+}

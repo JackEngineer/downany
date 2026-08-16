@@ -1,6 +1,7 @@
 @import "../../design-system/tokens.css";
 @import "./styles/foundations.css";
 @import "./styles/ui.css";
+@import "./styles/shell.css";
 
 /* ── 单窗口布局 ───────────────────────────── */
 

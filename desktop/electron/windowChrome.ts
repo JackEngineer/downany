@@ -5,8 +5,17 @@ type WindowChromeOptions = Pick<
   "titleBarStyle" | "vibrancy" | "transparent" | "frame"
 >;
 
-export function windowChromeOptions(): WindowChromeOptions {
-  if (process.platform === "darwin") {
+export const MAIN_WINDOW_GEOMETRY = {
+  width: 1120,
+  height: 760,
+  minWidth: 760,
+  minHeight: 560,
+} as const;
+
+export function windowChromeOptions(
+  platform: NodeJS.Platform = process.platform,
+): WindowChromeOptions {
+  if (platform === "darwin") {
     return {
       titleBarStyle: "hiddenInset",
       vibrancy: "under-window",

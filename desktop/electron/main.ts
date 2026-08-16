@@ -27,7 +27,7 @@ import type * as http from "node:http";
   type BridgeTaskStatus,
 } from "./bridgeServer";
 import { ClipboardWatcher, extractUrlsFromText } from "./clipboardWatcher";
-import { windowChromeOptions } from "./windowChrome";
+import { MAIN_WINDOW_GEOMETRY, windowChromeOptions } from "./windowChrome";
 import {
   PROTOCOL_SCHEME,
   extractAddsFromArgv,
@@ -473,9 +473,9 @@ function createWindow(): void {
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 720,
-    minHeight: 480,
-    title: "百纳",
+    minWidth: MAIN_WINDOW_GEOMETRY.minWidth,
+    minHeight: MAIN_WINDOW_GEOMETRY.minHeight,
+    title: "Downany · 百纳",
     show: false,
     ...windowChromeOptions(),
     webPreferences: {
