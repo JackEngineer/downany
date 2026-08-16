@@ -211,7 +211,7 @@ button.solid-danger {
   }
 }
 
-.card-thumb {
+.add-confirm-dialog__thumbnail {
   width: 96px;
   height: 54px;
   border-radius: 8px;
@@ -220,7 +220,7 @@ button.solid-danger {
   flex-shrink: 0;
 }
 
-.card-thumb-placeholder {
+.add-confirm-dialog__thumbnail-placeholder {
   display: grid;
   place-items: center;
   color: var(--muted);
@@ -661,7 +661,7 @@ button.danger {
   gap: 8px;
 }
 
-.confirm-row.confirm-row-compact .card-thumb {
+.confirm-row.confirm-row-compact .add-confirm-dialog__thumbnail {
   display: none;
 }
 

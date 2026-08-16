@@ -99,6 +99,17 @@ describe("MediaTaskBanner", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
   });
 
+  it("renders the artwork placeholder immediately when thumbnail_url is empty", () => {
+    const { container } = render(
+      <MediaTaskBanner task={taskFixture({ thumbnail_url: "", platform: "bilibili" })} />,
+    );
+
+    expect(container.querySelector(".media-task-banner__artwork img")).toBeNull();
+    expect(
+      container.querySelector(".media-task-banner__artwork-placeholder"),
+    ).toHaveTextContent("B");
+  });
+
   it("falls back after a broken thumbnail", () => {
     const { container } = render(
       <MediaTaskBanner

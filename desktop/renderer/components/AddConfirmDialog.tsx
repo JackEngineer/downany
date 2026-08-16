@@ -325,7 +325,7 @@ export function AddConfirmDialog() {
         {showThumb ? (
           row.thumbnailUrl ? (
             <img
-              className="card-thumb"
+              className="add-confirm-dialog__thumbnail"
               src={row.thumbnailUrl}
               alt=""
               referrerPolicy="no-referrer"
@@ -333,7 +333,7 @@ export function AddConfirmDialog() {
             />
           ) : (
             <div
-              className="card-thumb card-thumb-placeholder"
+              className="add-confirm-dialog__thumbnail add-confirm-dialog__thumbnail-placeholder"
               aria-hidden
               onClick={toggleSelected}
             >
