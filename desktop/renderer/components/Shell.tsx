@@ -86,8 +86,8 @@ export function Shell() {
         const el = document.getElementById(`task-${taskId}`);
         if (!el) return;
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("card-flash");
-        window.setTimeout(() => el.classList.remove("card-flash"), 1800);
+        el.classList.add("media-task-banner--flash");
+        window.setTimeout(() => el.classList.remove("media-task-banner--flash"), 1800);
       }, 60);
     });
   }, []);

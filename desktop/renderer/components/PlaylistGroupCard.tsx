@@ -4,7 +4,8 @@ import { request } from "../lib/api";
 import { isActiveStatus } from "../lib/format";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import { DownloadCard } from "./DownloadCard";
+import { MediaTaskBanner } from "./task/MediaTaskBanner";
+import { Icon } from "./ui/Icon";
 
 function sortGroupTasks(tasks: TaskSnapshot[]): TaskSnapshot[] {
   return tasks.slice().sort((a, b) => {
@@ -121,7 +122,7 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
           onClick={() => setExpanded((v) => !v)}
         >
           <span className="playlist-group-chevron" aria-hidden>
-            {expanded ? "▾" : "▸"}
+            <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
           </span>
           <div className="playlist-group-heading">
             <strong className="playlist-group-title">{title}</strong>
@@ -251,7 +252,7 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
       {expanded ? (
         <ul className="playlist-group-list">
           {ordered.map((task) => (
-            <DownloadCard key={task.id} task={task} />
+            <MediaTaskBanner key={task.id} task={task} density="compact" />
           ))}
         </ul>
       ) : null}

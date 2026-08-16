@@ -2,6 +2,7 @@
 @import "./styles/foundations.css";
 @import "./styles/ui.css";
 @import "./styles/shell.css";
+@import "./styles/media-task-banner.css";
 
 /* ── 单窗口布局 ───────────────────────────── */
 
@@ -40,12 +41,6 @@
 }
 
 /* ── 下载卡片 ───────────────────────────── */
-
-.download-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 
 .playlist-group {
   margin: 10px 0 16px;
@@ -206,16 +201,6 @@ button.solid-danger {
   border-top: 1px solid var(--line);
 }
 
-.playlist-group-list .download-card {
-  padding: 8px 10px;
-  border-radius: 10px;
-}
-
-.playlist-group-list .card-thumb {
-  width: 80px;
-  height: 45px;
-}
-
 @media (max-width: 640px) {
   .playlist-group-delete {
     grid-template-columns: 1fr;
@@ -224,32 +209,6 @@ button.solid-danger {
   .playlist-group-delete-actions {
     justify-content: flex-end;
   }
-}
-
-.download-card {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: 12px;
-}
-
-.download-card:hover {
-  background: var(--hover);
-}
-
-@keyframes card-flash {
-  0%,
-  60% {
-    background: var(--accent-soft);
-  }
-  100% {
-    background: transparent;
-  }
-}
-
-.download-card.card-flash {
-  animation: card-flash 1.8s ease-out;
 }
 
 .card-thumb {
@@ -268,31 +227,6 @@ button.solid-danger {
   font-size: 20px;
 }
 
-.card-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.card-title {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.card-subtitle {
-  font-size: 12px;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.card-meta {
-  font-size: 12px;
-}
-
 .card-actions {
   display: flex;
   flex-direction: column;
@@ -304,98 +238,6 @@ button.solid-danger {
 .card-actions button {
   padding: 4px 10px;
   font-size: 12px;
-}
-
-.card-badges {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
-
-.badge {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-
-.badge-accent {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: transparent;
-}
-
-.card-title-input {
-  width: 100%;
-  font-weight: 600;
-  padding: 4px 8px;
-}
-
-.card-menu {
-  position: relative;
-}
-
-.card-menu summary {
-  list-style: none;
-  appearance: none;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-  text-align: center;
-}
-
-.card-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.card-menu[open] summary {
-  background: var(--hover);
-}
-
-.card-menu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  min-width: 168px;
-  background: var(--panel-solid);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 40;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-}
-
-.card-menu-list button {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  white-space: nowrap;
-  border-radius: 6px;
-  padding: 7px 10px;
-}
-
-.card-menu-list button:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.card-menu-list button.menu-checked {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.card-menu-list button.menu-danger {
-  color: var(--danger);
 }
 
 .confirm-options {
@@ -621,21 +463,6 @@ button.primary {
 
 button.danger {
   color: var(--danger);
-}
-
-.progress-bar {
-  height: 5px;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-  margin: 8px 0 6px;
-}
-
-.progress-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
 }
 
 /* ── 设置窗口 ───────────────────────────── */

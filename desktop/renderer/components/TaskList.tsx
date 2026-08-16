@@ -6,7 +6,7 @@ import { isActiveStatus } from "../lib/format";
 import { getLocale, t } from "../i18n";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
-import { DownloadCard } from "./DownloadCard";
+import { MediaTaskBanner } from "./task/MediaTaskBanner";
 
 type QueueItem =
   | { kind: "task"; task: TaskSnapshot }
@@ -109,7 +109,7 @@ export function TaskList() {
         item.kind === "group" ? (
           <PlaylistGroupCard key={item.groupId} tasks={item.tasks} />
         ) : (
-          <DownloadCard key={item.task.id} task={item.task} />
+          <MediaTaskBanner key={item.task.id} task={item.task} density="normal" />
         ),
       )}
     </ul>
