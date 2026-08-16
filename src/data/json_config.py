@@ -81,7 +81,7 @@ class JsonConfig:
             "proxy_url": "",
             "default_quality": "best",
             "download_subtitles": False,
-            "theme_mode": "system",
+            "theme_mode": "dark",
             "auto_start_downloads": True,
             "clipboard_monitor": False,
             "postprocessing": "none",

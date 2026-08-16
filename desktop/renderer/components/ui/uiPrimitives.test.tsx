@@ -7,11 +7,35 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import "../../styles.css";
 import { Button, IconButton } from "./Button";
 import { FilterTab } from "./FilterTab";
 import { TextField } from "./TextField";
 
-afterEach(cleanup);
+const testDirectory = dirname(fileURLToPath(import.meta.url));
+const designTokens = readFileSync(
+  resolve(testDirectory, "../../../../design-system/tokens.css"),
+  "utf8",
+);
+const uiStyles = readFileSync(resolve(testDirectory, "../../styles/ui.css"), "utf8");
+const appStyles = readFileSync(
+  resolve(testDirectory, "../../styles.css"),
+  "utf8",
+).replace(/^@import .*;$/gm, "");
+
+function installUiCascade(): void {
+  const style = document.createElement("style");
+  style.dataset.testStyles = "ui-primitives-cascade";
+  style.textContent = `${designTokens}\n${uiStyles}\n${appStyles}`;
+  document.head.append(style);
+}
+
+afterEach(() => {
+  cleanup();
+  document
+    .querySelectorAll('[data-test-styles="ui-primitives-cascade"]')
+    .forEach((style) => style.remove());
+});
 
 describe("UI primitives", () => {
   it("keeps a loading button named and disabled", () => {
@@ -71,14 +95,26 @@ describe("UI primitives", () => {
     expect(document.querySelector('[data-icon="link"]')).toBeInTheDocument();
   });
 
-  it("defines visible focus rules for interactive primitives", () => {
-    const testFilePath = fileURLToPath(import.meta.url);
-    const cssPath = resolve(dirname(testFilePath), "../../styles/ui.css");
-    const css = readFileSync(cssPath, "utf8");
+  it("uses the TextField shell as the only visible input chrome", () => {
+    installUiCascade();
+    render(<TextField aria-label="视频链接" leadingIcon="link" />);
+    const input = screen.getByRole("textbox", { name: "视频链接" });
+    const shell = input.closest(".ui-text-field");
+    input.focus();
+    const computed = getComputedStyle(input);
 
-    expect(css).toContain(".ui-button:focus-visible");
-    expect(css).toContain(".ui-icon-button:focus-visible");
-    expect(css).toContain(".ui-filter-tab:focus-visible");
-    expect(css).toContain("box-shadow: 0 0 0 2px var(--color-focus-ring);");
+    expect(document.querySelectorAll(".ui-text-field")).toHaveLength(1);
+    expect(shell).not.toBeNull();
+    expect(shell?.querySelectorAll("input")).toHaveLength(1);
+    expect(computed.appearance).toBe("none");
+    expect(computed.borderTopWidth).toBe("0px");
+    expect(computed.boxShadow).toBe("none");
+  });
+
+  it("defines visible focus rules for interactive primitives", () => {
+    expect(uiStyles).toContain(".ui-button:focus-visible");
+    expect(uiStyles).toContain(".ui-icon-button:focus-visible");
+    expect(uiStyles).toContain(".ui-filter-tab:focus-visible");
+    expect(uiStyles).toContain("box-shadow: 0 0 0 2px var(--color-focus-ring);");
   });
 });

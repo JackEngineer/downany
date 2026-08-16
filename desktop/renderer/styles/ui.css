@@ -86,14 +86,19 @@
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-.ui-text-field input {
+label.ui-text-field > input {
   min-width: 0;
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
   outline: 0;
   padding: 0;
   background: transparent;
   color: var(--color-text-primary);
+  font: inherit;
 }
 
 .ui-filter-tab {
