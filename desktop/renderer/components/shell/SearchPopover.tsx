@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { t, type Locale } from "../../i18n";
 import type { SearchMode } from "../../lib/types";
@@ -31,17 +31,35 @@ interface SearchPopoverProps {
 }
 
 export function SearchPopover(props: SearchPopoverProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (props.open) queueMicrotask(() => props.inputRef.current?.focus());
   }, [props.inputRef, props.open]);
+
+  useEffect(() => {
+    if (!props.open) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const root = rootRef.current;
+      const target = event.target;
+      if (!root || !(target instanceof Node)) return;
+      if (root.contains(target)) return;
+      props.onClose();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [props.onClose, props.open]);
 
   if (!props.open) return null;
 
   return (
     <div
+      ref={rootRef}
       className="search-popover"
       role="dialog"
-      aria-label="搜索任务"
+      aria-label={t("search.dialog", props.locale)}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -49,7 +67,11 @@ export function SearchPopover(props: SearchPopoverProps) {
         }
       }}
     >
-      <div className="search-popover__modes" role="group" aria-label="搜索模式">
+      <div
+        className="search-popover__modes"
+        role="group"
+        aria-label={t("search.modes.label", props.locale)}
+      >
         {SEARCH_MODES.map((mode) => (
           <Button
             key={mode.key}
@@ -64,7 +86,7 @@ export function SearchPopover(props: SearchPopoverProps) {
       </div>
       {props.mode === "network" ? (
         <select
-          aria-label="搜索平台"
+          aria-label={t("search.platform.label", props.locale)}
           value={props.platform}
           onChange={(event) => props.onPlatformChange(event.target.value)}
         >
@@ -79,7 +101,7 @@ export function SearchPopover(props: SearchPopoverProps) {
         ref={props.inputRef}
         leadingIcon="search"
         type="search"
-        aria-label="搜索任务"
+        aria-label={t("search.input.label", props.locale)}
         placeholder={
           props.mode === "network"
             ? t("search.network.placeholder", props.locale)
@@ -94,7 +116,11 @@ export function SearchPopover(props: SearchPopoverProps) {
           }
         }}
       />
-      <IconButton icon="close" label="关闭搜索" onClick={props.onClose} />
+      <IconButton
+        icon="close"
+        label={t("search.close", props.locale)}
+        onClick={props.onClose}
+      />
     </div>
   );
 }

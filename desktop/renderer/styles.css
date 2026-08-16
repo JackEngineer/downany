@@ -21,7 +21,7 @@
   text-decoration: underline;
 }
 
-.segment {
+.settings-tabs > button {
   border: 1px solid transparent;
   background: transparent;
   border-radius: 999px;
@@ -29,11 +29,11 @@
   color: var(--muted);
 }
 
-.segment:hover {
+.settings-tabs > button:hover {
   background: var(--hover);
 }
 
-.segment.active {
+.settings-tabs > button.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
