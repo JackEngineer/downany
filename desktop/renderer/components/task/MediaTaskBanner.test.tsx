@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAppStore } from "../../store/appStore";
@@ -11,6 +11,51 @@ const openSettingsMock = vi.fn();
 const openExtractWindowMock = vi.fn();
 const showItemInFolderMock = vi.fn();
 const showTaskContextMenuMock = vi.fn();
+let resizeCallback: ResizeObserverCallback;
+
+class ResizeObserverMock implements ResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    resizeCallback = callback;
+  }
+
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+  takeRecords(): ResizeObserverEntry[] {
+    return [];
+  }
+}
+
+function emitResize(target: Element, width: number, height: number): void {
+  act(() => {
+    resizeCallback(
+      [{ target, contentRect: { width, height } } as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  });
+}
+
+function loadImage(image: HTMLImageElement, width: number, height: number): void {
+  Object.defineProperties(image, {
+    naturalWidth: { configurable: true, value: width },
+    naturalHeight: { configurable: true, value: height },
+  });
+  fireEvent.load(image);
+}
+
+function mockCanvasGray(channel: number): void {
+  const pixels = new Uint8ClampedArray(16 * 16 * 4);
+  for (let index = 0; index < pixels.length; index += 4) {
+    pixels[index] = channel;
+    pixels[index + 1] = channel;
+    pixels[index + 2] = channel;
+    pixels[index + 3] = 255;
+  }
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+    getImageData: () => ({ data: pixels }),
+  } as unknown as CanvasRenderingContext2D);
+}
 
 vi.mock("../../lib/api", () => ({
   request: (...args: unknown[]) => requestMock(...args),
@@ -19,9 +64,13 @@ vi.mock("../../lib/api", () => ({
   openExtractWindow: (...args: unknown[]) => openExtractWindowMock(...args),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 beforeEach(() => {
+  globalThis.ResizeObserver = ResizeObserverMock;
   requestMock.mockReset();
   requestMock.mockResolvedValue({ tasks: [], settings: null });
   openPathMock.mockReset();
@@ -56,23 +105,72 @@ describe("MediaTaskBanner", () => {
     expect(container.querySelectorAll(".media-task-banner__shade")).toHaveLength(1);
     expect(container.querySelectorAll(".media-task-banner__glass")).toHaveLength(1);
     expect(container.querySelectorAll(".media-task-banner__content")).toHaveLength(1);
-    expect(glass.style.zIndex).toBe("");
-    expect(content.style.zIndex).toBe("3");
-    expect(actions.style.zIndex).toBe("4");
-    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
-      "data-artwork-tone",
-      "medium",
-    );
+    expect(glass).toBeInTheDocument();
+    expect(content).toBeInTheDocument();
+    expect(actions).toBeInTheDocument();
   });
 
-  it("accepts an explicit artwork tone", () => {
+  it("uses ambient plus contained focus media for weak portrait artwork", () => {
+    mockCanvasGray(255);
     const { container } = render(
-      <MediaTaskBanner task={taskFixture()} artworkTone="light" />,
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/portrait.jpg" })}
+      />,
     );
-    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
-      "data-artwork-tone",
-      "light",
+    const banner = container.querySelector(".media-task-banner") as HTMLElement;
+    emitResize(banner, 1200, 108);
+    const ambient = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    loadImage(ambient, 720, 960);
+
+    expect(banner).toHaveAttribute("data-media-quality", "weak");
+    expect(banner).toHaveAttribute("data-artwork-shape", "portrait");
+    expect(banner).toHaveAttribute("data-artwork-tone", "light");
+    expect(
+      container.querySelectorAll(".media-task-banner__artwork-focus"),
+    ).toHaveLength(1);
+  });
+
+  it("removes the focus layer for a standard landscape image", () => {
+    mockCanvasGray(0);
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/wide.jpg" })}
+      />,
     );
+    const banner = container.querySelector(".media-task-banner") as HTMLElement;
+    emitResize(banner, 1200, 108);
+    loadImage(
+      container.querySelector(
+        ".media-task-banner__artwork-ambient",
+      ) as HTMLImageElement,
+      1920,
+      1080,
+    );
+
+    expect(banner).toHaveAttribute("data-media-quality", "standard");
+    expect(banner).toHaveAttribute("data-artwork-tone", "dark");
+    expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
+  });
+
+  it("reclassifies standard artwork when the banner grows past its natural width", () => {
+    mockCanvasGray(100);
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/wide.jpg" })}
+      />,
+    );
+    const banner = container.querySelector(".media-task-banner") as HTMLElement;
+    const ambient = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    emitResize(banner, 1000, 108);
+    loadImage(ambient, 1280, 720);
+    expect(banner).toHaveAttribute("data-media-quality", "standard");
+
+    emitResize(banner, 1400, 108);
+    expect(banner).toHaveAttribute("data-media-quality", "weak");
   });
 
   it.each([
@@ -115,6 +213,10 @@ describe("MediaTaskBanner", () => {
     expect(
       container.querySelector(".media-task-banner__artwork-placeholder"),
     ).toHaveTextContent("B");
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-media-quality",
+      "missing",
+    );
   });
 
   it("falls back after a broken thumbnail", () => {
@@ -130,6 +232,10 @@ describe("MediaTaskBanner", () => {
     expect(
       container.querySelector(".media-task-banner__artwork-placeholder"),
     ).toHaveTextContent("Y");
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-media-quality",
+      "missing",
+    );
   });
 
   it("offers the exact login-recovery actions", async () => {

@@ -6,8 +6,20 @@ import {
   installGalleryApiMock,
 } from "./DesktopCoreGallery";
 
+class ResizeObserverMock implements ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+  takeRecords(): ResizeObserverEntry[] {
+    return [];
+  }
+}
+
 afterEach(cleanup);
-beforeEach(installGalleryApiMock);
+beforeEach(() => {
+  globalThis.ResizeObserver = ResizeObserverMock;
+  installGalleryApiMock();
+});
 
 describe("DesktopCoreGallery", () => {
   it("renders all canonical task states", () => {
@@ -37,11 +49,12 @@ describe("DesktopCoreGallery", () => {
 
     expect(container.querySelectorAll(".media-task-banner")).toHaveLength(9);
 
-    for (const tone of ["dark", "medium", "light"]) {
-      expect(
-        container.querySelector(`[data-artwork-tone="${tone}"]`),
-      ).not.toBeNull();
-    }
+    expect(
+      container.querySelectorAll('[data-media-quality="weak"]'),
+    ).toHaveLength(8);
+    expect(
+      container.querySelectorAll('[data-media-quality="missing"]'),
+    ).toHaveLength(1);
 
     expect(
       screen.getByRole("region", { name: "紧凑密度（无毛玻璃降级）" }),

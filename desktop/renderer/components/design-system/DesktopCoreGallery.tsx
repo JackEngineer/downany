@@ -6,10 +6,7 @@ import { useAppStore } from "../../store/appStore";
 import { ActionBar } from "../shell/ActionBar";
 import { FilterBar } from "../shell/FilterBar";
 import { WindowChrome } from "../shell/WindowChrome";
-import {
-  MediaTaskBanner,
-  type ArtworkTone,
-} from "../task/MediaTaskBanner";
+import { MediaTaskBanner } from "../task/MediaTaskBanner";
 import courtyardGate from "../../design-system-assets/courtyard-gate.png";
 import mountainSunrise from "../../design-system-assets/mountain-sunrise.png";
 import techSpeaker from "../../design-system-assets/tech-speaker.png";
@@ -105,15 +102,6 @@ const PRODUCT_TASKS: TaskSnapshot[] = [
   }),
 ];
 
-const GALLERY_TONES: Record<string, ArtworkTone> = {
-  pending: "dark",
-  downloading: "medium",
-  paused: "light",
-  completed: "medium",
-  failed: "dark",
-  cancelled: "light",
-};
-
 export function installGalleryApiMock(): void {
   const mock = {
     platform: "darwin",
@@ -169,7 +157,6 @@ function GallerySection({
             key={task.id}
             task={task}
             density={density}
-            artworkTone={GALLERY_TONES[task.id] ?? "medium"}
           />
         ))}
       </ul>
@@ -227,17 +214,7 @@ export function DesktopCoreGallery() {
         <main className="window-main design-system-gallery__main">
           <ul className="download-list design-system-gallery__product-queue">
             {PRODUCT_TASKS.map((task) => (
-              <MediaTaskBanner
-                key={task.id}
-                task={task}
-                artworkTone={
-                  task.id === "gallery-courtyard"
-                    ? "dark"
-                    : task.id === "gallery-karpathy"
-                      ? "light"
-                      : "medium"
-                }
-              />
+              <MediaTaskBanner key={task.id} task={task} />
             ))}
           </ul>
 
