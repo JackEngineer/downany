@@ -1,4 +1,7 @@
 import "@testing-library/jest-dom/vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,7 +47,7 @@ beforeEach(() => {
 });
 
 describe("ActionBar", () => {
-  it("keeps the quiet Add action visibly focused for keyboard users", () => {
+  it("keeps the quiet Add action's visible keyboard focus ring contract", () => {
     render(<ActionBar />);
 
     const addButton = screen.getByRole("button", { name: "添加" });
@@ -52,6 +55,25 @@ describe("ActionBar", () => {
 
     expect(addButton).toHaveFocus();
     expect(addButton.matches(":focus-visible")).toBe(true);
+
+    const testFilePath = fileURLToPath(import.meta.url);
+    const shellStyles = readFileSync(
+      resolve(dirname(testFilePath), "../../styles/shell.css"),
+      "utf8",
+    );
+    const quietPrimaryRule = shellStyles.match(
+      /\.action-bar \.ui-button--primary\s*\{([^}]*)\}/,
+    );
+    const focusedPrimaryRule = shellStyles.match(
+      /\.action-bar \.ui-button--primary:focus-visible\s*\{([^}]*)\}/,
+    );
+
+    expect(quietPrimaryRule).not.toBeNull();
+    expect(quietPrimaryRule?.[1]).toContain("box-shadow: none;");
+    expect(focusedPrimaryRule).not.toBeNull();
+    expect(focusedPrimaryRule?.[1]).toContain(
+      "box-shadow: 0 0 0 2px var(--color-focus-ring);",
+    );
   });
 
   it("submits the link from the explicit Add action", async () => {
