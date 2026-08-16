@@ -52,6 +52,13 @@
   background: var(--color-surface-control-pressed);
 }
 
+.ui-button:focus-visible,
+.ui-icon-button:focus-visible {
+  outline: 0;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
 .ui-button:disabled {
   opacity: 0.42;
   cursor: default;
@@ -100,6 +107,12 @@
 
 .ui-filter-tab[aria-selected="true"] {
   color: var(--color-text-primary);
+}
+
+.ui-filter-tab:focus-visible {
+  outline: 0;
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .ui-filter-tab__count {
