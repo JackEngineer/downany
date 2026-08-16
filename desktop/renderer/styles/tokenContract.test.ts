@@ -3,7 +3,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const tokenPath = path.resolve(process.cwd(), "..", "design-system", "tokens.css");
+const tokenPath = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../../design-system/tokens.css",
+);
 
 const requiredTokens = [
   "--gray-1000",
@@ -20,13 +23,26 @@ const requiredTokens = [
   "--color-text-on-media-secondary",
   "--color-text-on-media-tertiary",
   "--color-stroke-subtle",
+  "--color-stroke-strong",
   "--color-accent",
+  "--color-accent-soft",
   "--color-success",
   "--color-warning",
   "--color-danger",
   "--color-focus-ring",
+  "--space-0-5",
+  "--space-1",
+  "--space-2",
+  "--space-3",
+  "--space-4",
+  "--space-5",
+  "--space-6",
+  "--space-8",
+  "--space-10",
+  "--radius-small",
   "--material-task-glass-width",
   "--material-task-glass-blur",
+  "--material-task-glass-saturate",
   "--material-task-glass-tint",
   "--material-task-glass-tint-dark",
   "--material-task-glass-tint-medium",
@@ -41,9 +57,30 @@ const requiredTokens = [
   "--material-media-placeholder-end",
   "--motion-fast",
   "--motion-normal",
+  "--motion-slow",
+  "--ease-standard",
   "--radius-control",
   "--radius-banner",
+  "--radius-popover",
+  "--radius-dialog",
+  "--control-height-small",
   "--control-height",
+] as const;
+
+const aliasPairs = [
+  ["--bg", "--color-surface-window"],
+  ["--panel", "--color-surface-control"],
+  ["--panel-solid", "--color-surface-raised"],
+  ["--text", "--color-text-primary"],
+  ["--muted", "--color-text-secondary"],
+  ["--line", "--color-stroke-subtle"],
+  ["--accent", "--color-accent"],
+  ["--accent-soft", "--color-accent-soft"],
+  ["--danger", "--color-danger"],
+  ["--hover", "--color-surface-control-hover"],
+  ["--success", "--color-success"],
+  ["--warning", "--color-warning"],
+  ["--focus-ring", "--color-focus-ring"],
 ] as const;
 
 describe("design token contract", () => {
@@ -56,8 +93,8 @@ describe("design token contract", () => {
     for (const token of requiredTokens) expect(css).toContain(`${token}:`);
     expect(css).toContain('html[data-theme="dark"]');
     expect(css).toContain('html[data-theme="light"]');
-    expect(css).toContain("--bg: var(--color-surface-window)");
-    expect(css).toContain("--panel: var(--color-surface-control)");
-    expect(css).toContain("--text: var(--color-text-primary)");
+    for (const [alias, target] of aliasPairs) {
+      expect(css).toContain(`${alias}: var(${target})`);
+    }
   });
 });
