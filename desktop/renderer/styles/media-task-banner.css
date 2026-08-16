@@ -428,3 +428,9 @@ html[data-reduce-transparency="true"] .media-task-banner__glass {
     display: none;
   }
 }
+
+@media (max-width: 760px) {
+  .media-task-banner__actions {
+    min-width: 0;
+  }
+}

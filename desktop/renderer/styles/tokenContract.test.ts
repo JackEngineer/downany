@@ -40,6 +40,7 @@ const requiredTokens = [
   "--space-8",
   "--space-10",
   "--radius-small",
+  "--layout-task-narrow-viewport",
   "--material-task-glass-width",
   "--material-task-glass-blur",
   "--material-task-glass-saturate",

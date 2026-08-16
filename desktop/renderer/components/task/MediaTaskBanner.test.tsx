@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,18 +16,64 @@ const openExtractWindowMock = vi.fn();
 const showItemInFolderMock = vi.fn();
 const showTaskContextMenuMock = vi.fn();
 const resizeDisconnectMock = vi.fn();
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const mediaBannerStyles = readFileSync(
-  path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    "../../styles/media-task-banner.css",
-  ),
+  path.resolve(testDirectory, "../../styles/media-task-banner.css"),
   "utf8",
 );
 const appStyles = readFileSync(
-  path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../styles.css"),
+  path.resolve(testDirectory, "../../styles.css"),
   "utf8",
 ).replace(/^@import .*;$/gm, "");
+const designTokens = readFileSync(
+  path.resolve(testDirectory, "../../../../design-system/tokens.css"),
+  "utf8",
+);
 let resizeCallback: ResizeObserverCallback;
+
+function getCssBlock(css: string, header: string): string | null {
+  const headerStart = css.indexOf(header);
+  if (headerStart < 0) return null;
+  const blockStart = css.indexOf("{", headerStart + header.length);
+  if (blockStart < 0) return null;
+
+  let depth = 0;
+  for (let index = blockStart; index < css.length; index += 1) {
+    if (css[index] === "{") depth += 1;
+    if (css[index] === "}") depth -= 1;
+    if (depth === 0) return css.slice(blockStart + 1, index);
+  }
+  return null;
+}
+
+function expectTaskLayoutContract(tokens: string, styles: string): void {
+  expect(tokens).toMatch(/^\s*--material-task-glass-width:\s*58%;\s*$/m);
+  expect(tokens).toMatch(/^\s*--layout-task-narrow-viewport:\s*760px;\s*$/m);
+
+  const bannerRules = getCssBlock(styles, ".media-task-banner");
+  expect(bannerRules).toMatch(
+    /grid-template-columns:\s*minmax\(0, var\(--material-task-glass-width\)\) minmax\(112px, 1fr\);/,
+  );
+  const glassRules = getCssBlock(styles, ".media-task-banner__glass");
+  expect(glassRules).toMatch(/width:\s*var\(--material-task-glass-width\);/);
+  const contentRules = getCssBlock(styles, ".media-task-banner__content");
+  expect(contentRules).toMatch(/min-width:\s*0;/);
+  expect(contentRules).toMatch(/width:\s*100%;/);
+  expect(contentRules).toMatch(/box-sizing:\s*border-box;/);
+  const actionRules = getCssBlock(styles, ".media-task-banner__actions");
+  expect(actionRules).toMatch(/flex-wrap:\s*wrap;/);
+
+  const compactRules = getCssBlock(styles, "@media (max-width: 760px)");
+  expect(compactRules).not.toBeNull();
+  expect(getCssBlock(compactRules ?? "", ".media-task-banner__actions")).toMatch(
+    /min-width:\s*0;/,
+  );
+  expect(compactRules).not.toContain(".media-task-banner__glass");
+
+  const narrowRules = getCssBlock(styles, "@media (max-width: 900px)");
+  expect(narrowRules).not.toBeNull();
+  expect(narrowRules).not.toContain(".media-task-banner__glass");
+}
 
 function installBannerCascade(): void {
   const style = document.createElement("style");
@@ -161,23 +208,32 @@ describe("MediaTaskBanner", () => {
     );
   });
 
-  it("binds the text track and Reading Glass to the same 58 percent geometry", () => {
-    expect(mediaBannerStyles).toMatch(
-      /\.media-task-banner\s*\{[^}]*grid-template-columns:\s*minmax\(0, var\(--material-task-glass-width\)\) minmax\(112px, 1fr\);/s,
-    );
-    expect(mediaBannerStyles).toMatch(
-      /\.media-task-banner__content\s*\{[^}]*width:\s*100%;[^}]*box-sizing:\s*border-box;/s,
-    );
+  it("locks the 58 percent Reading Glass and 760px no-overflow layout contract", () => {
+    expectTaskLayoutContract(designTokens, mediaBannerStyles);
     expect(mediaBannerStyles).toMatch(
       /\.media-task-banner__artwork-focus\s*\{[^}]*mask-image:\s*linear-gradient\([^}]*var\(--material-task-focus-feather\)/s,
     );
     expect(mediaBannerStyles).toMatch(
       /data-artwork-shape="portrait"[^}]*\.media-task-banner__artwork-focus,[^}]*data-artwork-shape="unknown"[^}]*\.media-task-banner__artwork-focus\s*\{[^}]*object-fit:\s*contain;/s,
     );
-    const narrowRules = mediaBannerStyles.match(
-      /@media \(max-width: 900px\)\s*\{([\s\S]*)\}\s*$/,
-    );
-    expect(narrowRules?.[1]).not.toContain(".media-task-banner__glass");
+  });
+
+  it("rejects mutations to the 58 percent and 760px layout contracts", () => {
+    expect(() =>
+      expectTaskLayoutContract(
+        designTokens.replace(
+          "--material-task-glass-width: 58%;",
+          "--material-task-glass-width: 68%;",
+        ),
+        mediaBannerStyles,
+      ),
+    ).toThrow();
+    expect(() =>
+      expectTaskLayoutContract(
+        designTokens,
+        mediaBannerStyles.replace(/@media \(max-width: 760px\)[\s\S]*$/, ""),
+      ),
+    ).toThrow();
   });
 
   it("waits for ambient measurement before mounting a lazy focus layer", () => {
