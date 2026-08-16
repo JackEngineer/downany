@@ -110,7 +110,7 @@ label.ui-text-field > input {
   color: var(--color-text-secondary);
 }
 
-.ui-filter-tab[aria-selected="true"] {
+.ui-filter-tab[aria-pressed="true"] {
   color: var(--color-text-primary);
 }
 
@@ -136,6 +136,6 @@ label.ui-text-field > input {
   background: transparent;
 }
 
-.ui-filter-tab[aria-selected="true"] .ui-filter-tab__indicator {
+.ui-filter-tab[aria-pressed="true"] .ui-filter-tab__indicator {
   background: var(--color-accent);
 }

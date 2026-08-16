@@ -32,7 +32,7 @@ export function FilterBar() {
   };
 
   return (
-    <nav className="filter-bar" role="tablist" aria-label="任务筛选">
+    <div className="filter-bar" role="group" aria-label="任务筛选">
       {FILTERS.map((item) => (
         <FilterTab
           key={item.key}
@@ -42,6 +42,6 @@ export function FilterBar() {
           onSelect={() => setFilter(item.key)}
         />
       ))}
-    </nav>
+    </div>
   );
 }

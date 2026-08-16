@@ -165,8 +165,8 @@
 .window-shell .net-results {
   margin-top: 0;
   border: 1px solid var(--color-stroke-subtle);
-  border-radius: var(--radius-large);
-  background: var(--color-surface-panel);
+  border-radius: var(--radius-popover);
+  background: var(--color-surface-raised);
   padding: var(--space-3);
   max-height: 320px;
   overflow-y: auto;

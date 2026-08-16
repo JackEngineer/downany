@@ -23,18 +23,22 @@ beforeEach(() => {
 describe("FilterBar", () => {
   it("shows counts and a single selected tab", () => {
     render(<FilterBar />);
-    expect(screen.getByRole("tab", { name: "全部 3" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("group", { name: "任务筛选" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部 3" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("tab", { name: "进行中 2" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "已完成 1" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "下载记录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "进行中 2" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "已完成 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载记录" })).toBeInTheDocument();
   });
 
   it("changes the store filter", () => {
     render(<FilterBar />);
-    fireEvent.click(screen.getByRole("tab", { name: "进行中 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "进行中 2" }));
     expect(useAppStore.getState().filter).toBe("active");
   });
 });

@@ -17,9 +17,8 @@ export function FilterTab({
   return (
     <button
       type="button"
-      role="tab"
       className="ui-filter-tab"
-      aria-selected={selected}
+      aria-pressed={selected}
       aria-label={accessibleName}
       onClick={onSelect}
     >

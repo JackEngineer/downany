@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +8,18 @@ const tokenPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../design-system/tokens.css",
 );
+const rendererRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+
+function cssFiles(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const target = path.join(root, entry.name);
+    if (entry.isDirectory()) return cssFiles(target);
+    return entry.isFile() && entry.name.endsWith(".css") ? [target] : [];
+  });
+}
 
 const requiredTokens = [
   "--gray-1000",
@@ -62,6 +74,14 @@ const requiredTokens = [
   "--material-task-shade",
   "--material-task-progress-track",
   "--material-action-glass-highlight",
+  "--material-action-media-fill",
+  "--material-action-media-fill-hover",
+  "--material-action-media-fill-pressed",
+  "--material-action-media-fill-opaque",
+  "--material-action-media-stroke",
+  "--material-action-media-stroke-focus",
+  "--material-action-media-text",
+  "--material-action-media-highlight",
   "--material-media-placeholder-start",
   "--material-media-placeholder-middle",
   "--material-media-placeholder-end",
@@ -106,5 +126,30 @@ describe("design token contract", () => {
     for (const [alias, target] of aliasPairs) {
       expect(css).toContain(`${alias}: var(${target})`);
     }
+  });
+
+  it("defines every CSS custom property reference or provides an inline fallback", () => {
+    const files = [tokenPath, ...cssFiles(rendererRoot)];
+    const sources = files.map((file) => ({ file, css: readFileSync(file, "utf8") }));
+    const definitions = new Set<string>();
+    for (const { css } of sources) {
+      for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) {
+        definitions.add(match[1]);
+      }
+    }
+
+    const missing: string[] = [];
+    for (const { file, css } of sources) {
+      for (const match of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?=,|\))/gi)) {
+        const token = match[1];
+        const afterToken = css.slice((match.index ?? 0) + match[0].length).trimStart();
+        const hasFallback = afterToken.startsWith(",");
+        if (!definitions.has(token) && !hasFallback) {
+          missing.push(`${path.relative(rendererRoot, file)}: ${token}`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
   });
 });
