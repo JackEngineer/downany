@@ -61,7 +61,7 @@ export function ActionBar() {
       if (menu.open) {
         document
           .querySelectorAll<HTMLDetailsElement>(
-            "details.card-menu[open], details.action-bar-menu[open]",
+            "details.action-bar-menu[open]",
           )
           .forEach((other) => {
             if (other !== menu) other.open = false;

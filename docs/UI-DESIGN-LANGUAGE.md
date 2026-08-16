@@ -464,7 +464,7 @@ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
 
 1. `TopBar` 拆分为标题层、`ActionBar` 和 `FilterBar` 的明确结构。
 2. 将通用按钮、图标按钮和玻璃按钮抽为可复用组件。
-3. 将 `DownloadCard` 演进为 `MediaTaskBanner`，保留现有业务状态和右键菜单行为。
+3. `MediaTaskBanner` 持续保留既有业务状态和任务操作，并遵循媒体优先的横幅表达。
 
 ### 阶段 C：状态与辅助界面
 

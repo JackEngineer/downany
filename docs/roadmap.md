@@ -63,7 +63,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 | 1.3 | **Cookie 导入**：yt-dlp `cookiesfrombrowser`（Chrome / Safari / Firefox / Edge）+ 手动 Netscape 文件导入 | 扩展 `src/core/ytdlp_cookies.py` |
 | 1.4 | 站点凭据管理页，密钥存 Keychain | 新增设置 Tab |
 | 1.5 | **结构化错误码**：need_login / geo_blocked / private / removed / network / ytdlp_outdated / need_po_token / unsupported，替代裸 `error_message` | `download_task.py`、`downloader.py`、`protocol.py` |
-| 1.6 | 失败卡片行内可操作按钮：导入 Cookie、用浏览器抓取、更新 yt-dlp、换代理重试 | `DownloadCard.tsx` |
+| 1.6 | 失败横幅行内可操作按钮：导入 Cookie、用浏览器抓取、更新 yt-dlp、换代理重试 | `MediaTaskBanner.tsx` |
 | 1.7 | yt-dlp 健康自检：启动时静默检查版本与 EJS/deno 运行时可用性，可选 nightly 通道 | `ytdlp_opts.py`、`ytdlp_updater.py` |
 | 1.8 | 扩展适配 Firefox / Edge（Safari 需 Xcode wrapper，延后至 M4） | `browser-extension/` |
 

@@ -25,7 +25,7 @@
 
 | 能力 | 状态 |
 |------|------|
-| 结构化错误码 + DownloadCard 操作按钮 | 已落地；补强分类边界 |
+| 结构化错误码 + MediaTaskBanner 操作按钮 | 已落地；补强分类边界 |
 | 内置浏览器抓取 (`extractWindow` / `mediaSniff`) | 已落地；`parseM3U8` 仅单测，未接入嗅探主路径（中） |
 | 播放列表选集 / 分组 | `AddConfirmDialog` + `PlaylistGroupCard`；单任务仍 `noplaylist`（先展开再下） |
 | 元数据嵌入 | `embed_metadata` 默认开，opts 完整 |
