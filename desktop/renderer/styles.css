@@ -316,10 +316,6 @@ button.solid-danger {
   grid-column: 1 / -1;
 }
 
-.drop-hint p {
-  margin: 0;
-}
-
 .list-empty {
   text-align: center;
   margin-top: 48px;
