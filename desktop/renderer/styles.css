@@ -266,25 +266,6 @@ button.solid-danger {
 
 /* ── 空态 / 拖拽提示 ─────────────────────── */
 
-.drop-hint {
-  height: 100%;
-  display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 8px;
-  color: var(--muted);
-  -webkit-app-region: drag;
-}
-
-.drop-hint-icon {
-  font-size: 44px;
-  line-height: 1;
-}
-
-.drop-hint p {
-  margin: 0;
-}
-
 .empty-state {
   height: 100%;
   display: grid;
@@ -292,31 +273,30 @@ button.solid-danger {
   text-align: center;
   gap: 12px;
   padding: 24px;
+  max-width: 360px;
+  margin: 0 auto;
   -webkit-app-region: drag;
 }
 
 .empty-state-icon {
-  font-size: 44px;
-  line-height: 1;
+  color: var(--accent);
+  margin: 0 auto;
 }
 
 .empty-state-title {
   margin: 0;
   font-size: 18px;
+  line-height: 24px;
 }
 
-.empty-state-steps {
-  margin: 0 auto;
-  padding-left: 1.2rem;
-  text-align: left;
+.empty-state-copy {
+  margin: 0;
   color: var(--muted);
-  max-width: 420px;
+  line-height: 1.5;
 }
 
-.empty-state-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
+.empty-state .ui-button {
+  justify-self: center;
   -webkit-app-region: no-drag;
 }
 

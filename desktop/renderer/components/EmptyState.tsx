@@ -1,51 +1,28 @@
 import { useEffect, useState } from "react";
 
-import { getLocale, t } from "../i18n";
-
-const DISMISS_KEY = "downany.onboarding.dismissed";
-
-export function isOnboardingDismissed(): boolean {
-  try {
-    return localStorage.getItem(DISMISS_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function dismissOnboarding(): void {
-  localStorage.setItem(DISMISS_KEY, "1");
-  window.dispatchEvent(new CustomEvent("downany:onboarding"));
-}
+import { getLocale, t, type Locale } from "../i18n";
+import { useAppStore } from "../store/appStore";
+import { Button } from "./ui/Button";
+import { Icon } from "./ui/Icon";
 
 export function EmptyState() {
-  const [, bump] = useState(0);
-  const locale = getLocale();
+  const requestAddFocus = useAppStore((state) => state.requestAddFocus);
+  const [locale, setLocaleState] = useState<Locale>(() => getLocale());
 
   useEffect(() => {
-    const onLocale = () => bump((n) => n + 1);
-    window.addEventListener("downany:locale", onLocale);
-    return () => window.removeEventListener("downany:locale", onLocale);
+    const updateLocale = () => setLocaleState(getLocale());
+    window.addEventListener("downany:locale", updateLocale);
+    return () => window.removeEventListener("downany:locale", updateLocale);
   }, []);
 
   return (
     <div className="empty-state">
-      <div className="empty-state-icon" aria-hidden>
-        ⇩
-      </div>
-      <h2 className="empty-state-title">{t("onboarding.title", locale)}</h2>
-      <ul className="empty-state-steps">
-        <li>{t("onboarding.paste", locale)}</li>
-        <li>{t("onboarding.extension", locale)}</li>
-        <li>{t("onboarding.settings", locale)}</li>
-      </ul>
-      <div className="empty-state-actions">
-        <button type="button" className="primary" onClick={() => void window.api.openSettings()}>
-          {t("settings.open", locale)}
-        </button>
-        <button type="button" onClick={dismissOnboarding}>
-          {t("onboarding.dismiss", locale)}
-        </button>
-      </div>
+      <Icon name="download" size={32} className="empty-state-icon" />
+      <h2 className="empty-state-title">{t("empty.title", locale)}</h2>
+      <p className="empty-state-copy">{t("empty.copy", locale)}</p>
+      <Button variant="primary" leadingIcon="link" onClick={requestAddFocus}>
+        {t("empty.action", locale)}
+      </Button>
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { EmptyState, isOnboardingDismissed } from "./EmptyState";
+import { EmptyState } from "./EmptyState";
 import { PlaylistGroupCard } from "./PlaylistGroupCard";
 import { isActiveStatus } from "../lib/format";
-import { getLocale, t } from "../i18n";
+import { getLocale, t, type Locale } from "../i18n";
 import type { TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { MediaTaskBanner } from "./task/MediaTaskBanner";
@@ -54,17 +54,12 @@ export function TaskList() {
   const filter = useAppStore((s) => s.filter);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const searchMode = useAppStore((s) => s.searchMode);
-  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDismissed());
-  const locale = getLocale();
+  const [locale, setLocaleState] = useState<Locale>(() => getLocale());
 
   useEffect(() => {
-    const refresh = () => setShowOnboarding(!isOnboardingDismissed());
-    window.addEventListener("downany:onboarding", refresh);
-    window.addEventListener("downany:locale", refresh);
-    return () => {
-      window.removeEventListener("downany:onboarding", refresh);
-      window.removeEventListener("downany:locale", refresh);
-    };
+    const updateLocale = () => setLocaleState(getLocale());
+    window.addEventListener("downany:locale", updateLocale);
+    return () => window.removeEventListener("downany:locale", updateLocale);
   }, []);
 
   const visible = useMemo(() => {
@@ -85,18 +80,7 @@ export function TaskList() {
   }, [tasks, filter, searchQuery, searchMode]);
 
   if (tasks.length === 0) {
-    if (showOnboarding) {
-      return <EmptyState />;
-    }
-    return (
-      <div className="drop-hint">
-        <div className="drop-hint-icon" aria-hidden>
-          ⇩
-        </div>
-        <p>{t("onboarding.paste", locale)}</p>
-        <p className="muted">{t("onboarding.extension", locale)}</p>
-      </div>
-    );
+    return <EmptyState />;
   }
 
   if (visible.length === 0) {
