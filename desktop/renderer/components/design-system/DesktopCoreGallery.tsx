@@ -10,32 +10,13 @@ import {
   MediaTaskBanner,
   type ArtworkTone,
 } from "../task/MediaTaskBanner";
-
-const ARTWORK_COLORS: Record<ArtworkTone, [string, string, string]> = {
-  dark: ["#11151b", "#242c36", "#090b0e"],
-  medium: ["#314050", "#8c765b", "#1d242c"],
-  light: ["#d7d0c1", "#8797a3", "#4d5660"],
-};
-
-function galleryArtwork(title: string, tone: ArtworkTone): string {
-  const [start, middle, end] = ARTWORK_COLORS[tone];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="${start}"/>
-      <stop offset="0.55" stop-color="${middle}"/>
-      <stop offset="1" stop-color="${end}"/>
-    </linearGradient></defs>
-    <rect width="1200" height="240" fill="url(#g)"/>
-    <circle cx="930" cy="70" r="130" fill="rgba(255,255,255,.12)"/>
-    <path d="M0 190 C220 120 390 230 610 160 S940 110 1200 170 V240 H0Z" fill="rgba(0,0,0,.24)"/>
-    <text x="880" y="208" fill="rgba(255,255,255,.72)" font-size="28" font-family="sans-serif">${title}</text>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
+import courtyardGate from "../../design-system-assets/courtyard-gate.png";
+import mountainSunrise from "../../design-system-assets/mountain-sunrise.png";
+import techSpeaker from "../../design-system-assets/tech-speaker.png";
 
 function galleryTask(
   status: TaskSnapshot["status"],
-  tone: ArtworkTone,
+  thumbnailUrl: string,
   progress: number,
   overrides: Partial<TaskSnapshot> = {},
 ): TaskSnapshot {
@@ -44,7 +25,7 @@ function galleryTask(
     url: `https://example.com/${status}`,
     title: `Downany ${status} 状态示例`,
     platform: "youtube",
-    thumbnail_url: galleryArtwork(status, tone),
+    thumbnail_url: thumbnailUrl,
     status,
     progress,
     downloaded_bytes: Math.round((128_600_000 * progress) / 100),
@@ -67,24 +48,24 @@ function galleryTask(
 }
 
 export const GALLERY_TASKS: TaskSnapshot[] = [
-  galleryTask("pending", "dark", 0, {
+  galleryTask("pending", courtyardGate, 0, {
     title: "准备下载的媒体",
     started_at: null,
   }),
-  galleryTask("downloading", "medium", 58, { title: "正在下载的媒体" }),
-  galleryTask("paused", "light", 42, { title: "暂停中的媒体" }),
-  galleryTask("completed", "medium", 100, {
+  galleryTask("downloading", mountainSunrise, 58, { title: "正在下载的媒体" }),
+  galleryTask("paused", techSpeaker, 42, { title: "暂停中的媒体" }),
+  galleryTask("completed", mountainSunrise, 100, {
     title: "已完成的媒体",
     downloaded_bytes: 128_600_000,
     file_path: "/gallery/completed.mp4",
     completed_at: "2026-08-16T11:32:00Z",
   }),
-  galleryTask("failed", "dark", 31, {
+  galleryTask("failed", courtyardGate, 31, {
     title: "需要处理的媒体",
     error_code: "need_login",
     error_message: "Sign in to confirm your age",
   }),
-  galleryTask("cancelled", "light", 0, {
+  galleryTask("cancelled", techSpeaker, 0, {
     title: "已取消的媒体",
     thumbnail_url: "",
     platform: "bilibili",
@@ -93,7 +74,7 @@ export const GALLERY_TASKS: TaskSnapshot[] = [
 ];
 
 const PRODUCT_TASKS: TaskSnapshot[] = [
-  galleryTask("completed", "dark", 100, {
+  galleryTask("completed", courtyardGate, 100, {
     id: "gallery-courtyard",
     title: "四合院门楼的大门也是整个合院的一个灵魂，安装之后效果立马呈现！#唐河四合院",
     platform: "douyin",
@@ -102,7 +83,7 @@ const PRODUCT_TASKS: TaskSnapshot[] = [
     completed_at: "2026-08-16T18:32:00Z",
     quality: "1080p",
   }),
-  galleryTask("completed", "medium", 100, {
+  galleryTask("completed", mountainSunrise, 100, {
     id: "gallery-ark",
     title: "火山方舟 - 体验",
     platform: "web",
@@ -112,7 +93,7 @@ const PRODUCT_TASKS: TaskSnapshot[] = [
     completed_at: "2026-08-16T18:18:00Z",
     quality: "1080p",
   }),
-  galleryTask("completed", "light", 100, {
+  galleryTask("completed", techSpeaker, 100, {
     id: "gallery-karpathy",
     title: "Andrej Karpathy 在 OpenAI 和 Tesla 工作了 8 年",
     platform: "twitter",

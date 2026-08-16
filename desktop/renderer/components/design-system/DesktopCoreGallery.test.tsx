@@ -57,6 +57,27 @@ describe("DesktopCoreGallery", () => {
     ).not.toBeNull();
   });
 
+  it("uses the local media assets for the visible product previews", () => {
+    render(<DesktopCoreGallery />);
+
+    const visibleAssets = [
+      [
+        "四合院门楼的大门也是整个合院的一个灵魂，安装之后效果立马呈现！#唐河四合院",
+        "courtyard-gate.png",
+      ],
+      ["火山方舟 - 体验", "mountain-sunrise.png"],
+      ["Andrej Karpathy 在 OpenAI 和 Tesla 工作了 8 年", "tech-speaker.png"],
+    ] as const;
+
+    for (const [title, assetName] of visibleAssets) {
+      const banner = screen.getByText(title).closest(".media-task-banner");
+      expect(banner?.querySelector("img")).toHaveAttribute(
+        "src",
+        expect.stringContaining(assetName),
+      );
+    }
+  });
+
   it("provides deterministic theme and transparency controls", () => {
     render(<DesktopCoreGallery />);
 
