@@ -35,6 +35,11 @@ function buildExtractAssets(): { name: string; closeBundle: () => Promise<void> 
 
 export default defineConfig({
   root: path.resolve(__dirname, "renderer"),
+  server: {
+    fs: {
+      allow: [path.resolve(__dirname, "..")],
+    },
+  },
   plugins: [
     react(),
     electron({
