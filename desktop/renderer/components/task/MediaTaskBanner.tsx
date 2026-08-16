@@ -32,6 +32,24 @@ export interface MediaTaskBannerProps {
   density?: "normal" | "compact";
 }
 
+interface ArtworkState {
+  url: string;
+  broken: boolean;
+  focusBroken: boolean;
+  naturalSize: ArtworkDimensions | null;
+  tone: ArtworkTone;
+}
+
+function initialArtworkState(url: string): ArtworkState {
+  return {
+    url,
+    broken: false,
+    focusBroken: false,
+    naturalSize: null,
+    tone: "light",
+  };
+}
+
 function runPrimaryAction(
   action: Exclude<TaskPrimaryAction, null>,
   commands: TaskCommands,
@@ -160,10 +178,17 @@ export function MediaTaskBanner({
   const view = useMemo(() => presentTask(task), [task]);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
-  const [thumbnailBroken, setThumbnailBroken] = useState(false);
-  const [naturalSize, setNaturalSize] = useState<ArtworkDimensions | null>(null);
+  const [renderedArtworkUrl, setRenderedArtworkUrl] = useState(
+    task.thumbnail_url,
+  );
+  const [artworkState, setArtworkState] = useState<ArtworkState>(() =>
+    initialArtworkState(task.thumbnail_url),
+  );
+  if (renderedArtworkUrl !== task.thumbnail_url) {
+    setRenderedArtworkUrl(task.thumbnail_url);
+    setArtworkState(initialArtworkState(task.thumbnail_url));
+  }
   const [bannerSize, setBannerSize] = useState<ArtworkDimensions | null>(null);
-  const [artworkTone, setArtworkTone] = useState<ArtworkTone>("light");
   const rootRef = useRef<HTMLLIElement>(null);
   const editRef = useRef<HTMLInputElement>(null);
 
@@ -180,12 +205,6 @@ export function MediaTaskBanner({
   }, [editing]);
 
   useEffect(() => {
-    setThumbnailBroken(false);
-    setNaturalSize(null);
-    setArtworkTone("light");
-  }, [task.thumbnail_url]);
-
-  useEffect(() => {
     const node = rootRef.current;
     if (!node) return;
     const update = (width: number, height: number) => {
@@ -200,9 +219,19 @@ export function MediaTaskBanner({
     return () => observer.disconnect();
   }, []);
 
-  const unavailable = !task.thumbnail_url || thumbnailBroken;
-  const mediaQuality = classifyArtwork(naturalSize, bannerSize, unavailable);
-  const artworkShape = classifyArtworkShape(naturalSize);
+  const currentArtworkState =
+    artworkState.url === task.thumbnail_url
+      ? artworkState
+      : initialArtworkState(task.thumbnail_url);
+  const currentNaturalSize = currentArtworkState.naturalSize;
+  const artworkTone = currentArtworkState.tone;
+  const unavailable = !task.thumbnail_url || currentArtworkState.broken;
+  const mediaQuality = classifyArtwork(
+    currentNaturalSize,
+    bannerSize,
+    unavailable,
+  );
+  const artworkShape = classifyArtworkShape(currentNaturalSize);
 
   const initial = (platformLabel(task.platform) || task.title || "视").slice(0, 1);
 
@@ -225,8 +254,36 @@ export function MediaTaskBanner({
 
   const handleArtworkLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
-    setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight });
-    setArtworkTone(classifyArtworkTone(sampleArtworkLuminance(image)));
+    const artworkUrl = image.getAttribute("src");
+    if (!artworkUrl || artworkUrl !== task.thumbnail_url) return;
+    setArtworkState({
+      url: artworkUrl,
+      broken: false,
+      focusBroken: false,
+      naturalSize: { width: image.naturalWidth, height: image.naturalHeight },
+      tone: classifyArtworkTone(sampleArtworkLuminance(image)),
+    });
+  };
+
+  const handleArtworkError = (event: SyntheticEvent<HTMLImageElement>) => {
+    const artworkUrl = event.currentTarget.getAttribute("src");
+    if (artworkUrl && artworkUrl === task.thumbnail_url) {
+      setArtworkState({
+        ...initialArtworkState(artworkUrl),
+        broken: true,
+      });
+    }
+  };
+
+  const handleFocusError = (event: SyntheticEvent<HTMLImageElement>) => {
+    const artworkUrl = event.currentTarget.getAttribute("src");
+    if (artworkUrl && artworkUrl === task.thumbnail_url) {
+      setArtworkState((current) =>
+        current.url === artworkUrl
+          ? { ...current, focusBroken: true }
+          : current,
+      );
+    }
   };
 
   const handleRenameKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -264,20 +321,26 @@ export function MediaTaskBanner({
         ) : (
           <>
             <img
+              key={`ambient:${task.thumbnail_url}`}
               className="media-task-banner__artwork-ambient"
               src={task.thumbnail_url}
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
               onLoad={handleArtworkLoad}
-              onError={() => setThumbnailBroken(true)}
+              onError={handleArtworkError}
             />
-            {mediaQuality === "weak" ? (
+            {mediaQuality === "weak" &&
+            currentNaturalSize &&
+            !currentArtworkState.focusBroken ? (
               <img
+                key={`focus:${task.thumbnail_url}`}
                 className="media-task-banner__artwork-focus"
                 src={task.thumbnail_url}
                 alt=""
+                loading="lazy"
                 referrerPolicy="no-referrer"
+                onError={handleFocusError}
               />
             ) : null}
           </>

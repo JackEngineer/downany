@@ -49,9 +49,16 @@ describe("DesktopCoreGallery", () => {
 
     expect(container.querySelectorAll(".media-task-banner")).toHaveLength(9);
 
+    const ambientArtwork = container.querySelectorAll(
+      ".media-task-banner__artwork-ambient",
+    );
+    expect(ambientArtwork).toHaveLength(8);
+    for (const image of ambientArtwork) {
+      expect(image).toHaveAttribute("loading", "lazy");
+    }
     expect(
-      container.querySelectorAll('[data-media-quality="weak"]'),
-    ).toHaveLength(8);
+      container.querySelectorAll(".media-task-banner__artwork-focus"),
+    ).toHaveLength(0);
     expect(
       container.querySelectorAll('[data-media-quality="missing"]'),
     ).toHaveLength(1);

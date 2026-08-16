@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +14,26 @@ const openSettingsMock = vi.fn();
 const openExtractWindowMock = vi.fn();
 const showItemInFolderMock = vi.fn();
 const showTaskContextMenuMock = vi.fn();
+const resizeDisconnectMock = vi.fn();
+const mediaBannerStyles = readFileSync(
+  path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    "../../styles/media-task-banner.css",
+  ),
+  "utf8",
+);
+const appStyles = readFileSync(
+  path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../styles.css"),
+  "utf8",
+).replace(/^@import .*;$/gm, "");
 let resizeCallback: ResizeObserverCallback;
+
+function installBannerCascade(): void {
+  const style = document.createElement("style");
+  style.dataset.testStyles = "media-task-banner-cascade";
+  style.textContent = `${mediaBannerStyles}\n${appStyles}`;
+  document.head.append(style);
+}
 
 class ResizeObserverMock implements ResizeObserver {
   constructor(callback: ResizeObserverCallback) {
@@ -20,7 +42,9 @@ class ResizeObserverMock implements ResizeObserver {
 
   observe(): void {}
   unobserve(): void {}
-  disconnect(): void {}
+  disconnect(): void {
+    resizeDisconnectMock();
+  }
   takeRecords(): ResizeObserverEntry[] {
     return [];
   }
@@ -67,10 +91,15 @@ vi.mock("../../lib/api", () => ({
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  document.documentElement.removeAttribute("data-theme");
+  document
+    .querySelectorAll('[data-test-styles="media-task-banner-cascade"]')
+    .forEach((node) => node.remove());
 });
 
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock;
+  resizeDisconnectMock.mockReset();
   requestMock.mockReset();
   requestMock.mockResolvedValue({ tasks: [], settings: null });
   openPathMock.mockReset();
@@ -110,6 +139,60 @@ describe("MediaTaskBanner", () => {
     expect(actions).toBeInTheDocument();
   });
 
+  it("keeps the rename field owned by dark media styling in the light theme", () => {
+    installBannerCascade();
+    document.documentElement.dataset.theme = "light";
+    render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.doubleClick(screen.getByText("示例视频"));
+
+    const input = screen.getByRole("textbox", {
+      name: "重命名任务",
+    }) as HTMLInputElement;
+    input.focus();
+    const computed = getComputedStyle(input);
+
+    expect(computed.boxSizing).toBe("border-box");
+    expect(computed.maxWidth).toBe("560px");
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner input\.media-task-banner__title-input\s*\{[^}]*background:\s*var\(--task-glass-tint,[^}]*color:\s*var\(--color-text-on-media\);/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner input\.media-task-banner__title-input:focus(?:-visible)?\s*\{[^}]*border-color:\s*var\(--color-focus-ring\);[^}]*box-shadow:\s*0 0 0 2px var\(--color-focus-ring\);/s,
+    );
+  });
+
+  it("binds the text track and Reading Glass to the same 58 percent geometry", () => {
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner\s*\{[^}]*grid-template-columns:\s*minmax\(0, var\(--material-task-glass-width\)\) minmax\(112px, 1fr\);/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner__content\s*\{[^}]*width:\s*100%;[^}]*box-sizing:\s*border-box;/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /\.media-task-banner__artwork-focus\s*\{[^}]*mask-image:\s*linear-gradient\([^}]*var\(--material-task-focus-feather\)/s,
+    );
+    expect(mediaBannerStyles).toMatch(
+      /data-artwork-shape="portrait"[^}]*\.media-task-banner__artwork-focus,[^}]*data-artwork-shape="unknown"[^}]*\.media-task-banner__artwork-focus\s*\{[^}]*object-fit:\s*contain;/s,
+    );
+    const narrowRules = mediaBannerStyles.match(
+      /@media \(max-width: 900px\)\s*\{([\s\S]*)\}\s*$/,
+    );
+    expect(narrowRules?.[1]).not.toContain(".media-task-banner__glass");
+  });
+
+  it("waits for ambient measurement before mounting a lazy focus layer", () => {
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/portrait.jpg" })}
+      />,
+    );
+
+    expect(
+      container.querySelector(".media-task-banner__artwork-ambient"),
+    ).toHaveAttribute("loading", "lazy");
+    expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
+  });
+
   it("uses ambient plus contained focus media for weak portrait artwork", () => {
     mockCanvasGray(255);
     const { container } = render(
@@ -130,6 +213,138 @@ describe("MediaTaskBanner", () => {
     expect(
       container.querySelectorAll(".media-task-banner__artwork-focus"),
     ).toHaveLength(1);
+    expect(
+      container.querySelector(".media-task-banner__artwork-focus"),
+    ).toHaveAttribute("loading", "lazy");
+  });
+
+  it("hides only a failed focus layer while preserving ambient media", () => {
+    mockCanvasGray(180);
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/portrait.jpg" })}
+      />,
+    );
+    const ambient = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    emitResize(container.querySelector(".media-task-banner") as HTMLElement, 1200, 108);
+    loadImage(ambient, 720, 960);
+
+    const focus = container.querySelector(
+      ".media-task-banner__artwork-focus",
+    ) as HTMLImageElement;
+    fireEvent.error(focus);
+
+    expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
+    expect(container.querySelector(".media-task-banner__artwork-ambient")).toBe(ambient);
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-media-quality",
+      "weak",
+    );
+  });
+
+  it("ignores late load and error events from the previous artwork URL", () => {
+    mockCanvasGray(255);
+    const firstTask = taskFixture({
+      thumbnail_url: "https://example.com/first.jpg",
+    });
+    const { container, rerender } = render(<MediaTaskBanner task={firstTask} />);
+    const banner = container.querySelector(".media-task-banner") as HTMLElement;
+    const staleAmbient = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    Object.defineProperties(staleAmbient, {
+      naturalWidth: { configurable: true, value: 720 },
+      naturalHeight: { configurable: true, value: 960 },
+    });
+
+    rerender(
+      <MediaTaskBanner
+        task={{ ...firstTask, thumbnail_url: "https://example.com/second.jpg" }}
+      />,
+    );
+    const currentAmbient = container.querySelector(
+      ".media-task-banner__artwork-ambient",
+    ) as HTMLImageElement;
+    fireEvent.load(staleAmbient);
+    fireEvent.error(staleAmbient);
+
+    expect(currentAmbient).not.toBe(staleAmbient);
+    expect(banner).toHaveAttribute("data-media-quality", "weak");
+    expect(banner).toHaveAttribute("data-artwork-shape", "unknown");
+    expect(banner).toHaveAttribute("data-artwork-tone", "light");
+    expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
+    expect(currentAmbient).toHaveAttribute(
+      "src",
+      "https://example.com/second.jpg",
+    );
+  });
+
+  it("retries a previously broken artwork URL when it becomes current again", () => {
+    const firstTask = taskFixture({
+      thumbnail_url: "https://example.com/first.jpg",
+    });
+    const { container, rerender } = render(<MediaTaskBanner task={firstTask} />);
+    fireEvent.error(
+      container.querySelector(
+        ".media-task-banner__artwork-ambient",
+      ) as HTMLImageElement,
+    );
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-media-quality",
+      "missing",
+    );
+
+    rerender(
+      <MediaTaskBanner
+        task={{ ...firstTask, thumbnail_url: "https://example.com/second.jpg" }}
+      />,
+    );
+    expect(
+      container.querySelector(".media-task-banner__artwork-ambient"),
+    ).toHaveAttribute("src", "https://example.com/second.jpg");
+
+    rerender(<MediaTaskBanner task={firstTask} />);
+    expect(
+      container.querySelector(".media-task-banner__artwork-ambient"),
+    ).toHaveAttribute("src", "https://example.com/first.jpg");
+    expect(container.querySelector(".media-task-banner")).toHaveAttribute(
+      "data-media-quality",
+      "weak",
+    );
+  });
+
+  it("treats zero-sized artwork as missing without mounting focus media", () => {
+    mockCanvasGray(100);
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ thumbnail_url: "https://example.com/invalid.jpg" })}
+      />,
+    );
+    const banner = container.querySelector(".media-task-banner") as HTMLElement;
+    emitResize(banner, 1200, 108);
+    loadImage(
+      container.querySelector(
+        ".media-task-banner__artwork-ambient",
+      ) as HTMLImageElement,
+      0,
+      0,
+    );
+
+    expect(banner).toHaveAttribute("data-media-quality", "missing");
+    expect(container.querySelector(".media-task-banner__artwork-focus")).toBeNull();
+    expect(
+      container.querySelector(".media-task-banner__artwork-placeholder"),
+    ).toBeInTheDocument();
+  });
+
+  it("disconnects its banner observer on unmount", () => {
+    const { unmount } = render(<MediaTaskBanner task={taskFixture()} />);
+
+    unmount();
+
+    expect(resizeDisconnectMock).toHaveBeenCalledTimes(1);
   });
 
   it("removes the focus layer for a standard landscape image", () => {
