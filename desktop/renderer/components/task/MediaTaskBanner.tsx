@@ -198,15 +198,26 @@ export function MediaTaskBanner({
   useEffect(() => {
     const artworkUrl = task.thumbnail_url;
     if (!artworkUrl) return;
+    const controller = new AbortController();
     let active = true;
-    void artworkToneSampler.sample(artworkUrl).then((tone) => {
-      if (!active) return;
-      setArtworkState((current) =>
-        current.url === artworkUrl ? { ...current, tone } : current,
-      );
-    });
+    void artworkToneSampler
+      .sample(artworkUrl, controller.signal)
+      .then((tone) => {
+        if (!active) return;
+        setArtworkState((current) =>
+          current.url === artworkUrl ? { ...current, tone } : current,
+        );
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (!active) return;
+        setArtworkState((current) =>
+          current.url === artworkUrl ? { ...current, tone: "light" } : current,
+        );
+      });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [task.thumbnail_url]);
 

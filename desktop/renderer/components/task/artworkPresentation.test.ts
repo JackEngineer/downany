@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   averageRelativeLuminance,
@@ -13,15 +13,25 @@ interface ControlledImage {
   crossOrigin: string | null;
   referrerPolicy: string;
   src: string;
+  srcAssignments: string[];
   onload: ((event: Event) => void) | null;
   onerror: ((event: Event | string) => void) | null;
 }
 
 function controlledImage(): ControlledImage {
+  let src = "";
+  const srcAssignments: string[] = [];
   return {
     crossOrigin: null,
     referrerPolicy: "",
-    src: "",
+    get src() {
+      return src;
+    },
+    set src(value: string) {
+      src = value;
+      srcAssignments.push(value);
+    },
+    srcAssignments,
     onload: null,
     onerror: null,
   };
@@ -139,9 +149,13 @@ describe("artwork presentation", () => {
     });
 
     const first = sampler.sample("https://example.com/a.jpg");
-    expect(sampler.sample("https://example.com/a.jpg")).toBe(first);
+    const sharedFirst = sampler.sample("https://example.com/a.jpg");
+    expect(images).toHaveLength(1);
     images[0].onload?.(new Event("load"));
-    await first;
+    await expect(Promise.all([first, sharedFirst])).resolves.toEqual([
+      "dark",
+      "dark",
+    ]);
 
     const second = sampler.sample("https://example.com/b.jpg");
     images[1].onload?.(new Event("load"));
@@ -154,5 +168,135 @@ describe("artwork presentation", () => {
     expect(images).toHaveLength(4);
     images[3].onload?.(new Event("load"));
     await expect(firstAgain).resolves.toBe("dark");
+  });
+
+  it("times out a sampler that never loads and releases the image request", async () => {
+    const image = controlledImage();
+    let timeoutCallback: (() => void) | null = null;
+    const clearTimeout = vi.fn();
+    const sampler = createArtworkToneSampler({
+      timeoutMs: 25,
+      createImage: () => image as unknown as HTMLImageElement,
+      setTimeout: (callback) => {
+        timeoutCallback = callback;
+        return 7;
+      },
+      clearTimeout,
+    });
+
+    const sampled = sampler.sample("https://example.com/hangs.jpg");
+    expect(timeoutCallback).not.toBeNull();
+    timeoutCallback?.();
+
+    await expect(sampled).resolves.toBe("light");
+    expect(clearTimeout).toHaveBeenCalledWith(7);
+    expect(image.onload).toBeNull();
+    expect(image.onerror).toBeNull();
+    expect(image.srcAssignments).toEqual([
+      "https://example.com/hangs.jpg",
+      "",
+    ]);
+  });
+
+  it("cancels and settles an in-flight entry when the shared bound evicts it", async () => {
+    const images: ControlledImage[] = [];
+    const sampler = createArtworkToneSampler({
+      maxEntries: 1,
+      createImage: () => {
+        const image = controlledImage();
+        images.push(image);
+        return image as unknown as HTMLImageElement;
+      },
+      sampleLuminance: () => null,
+    });
+
+    const first = sampler.sample("https://example.com/a.jpg");
+    const second = sampler.sample("https://example.com/b.jpg");
+
+    await expect(first).resolves.toBe("light");
+    expect(images[0].srcAssignments.at(-1)).toBe("");
+    expect(images[0].onload).toBeNull();
+    expect(images[0].onerror).toBeNull();
+    images[1].onerror?.(new Event("error"));
+    await expect(second).resolves.toBe("light");
+  });
+
+  it("bounds an A B A sequence without leaving the evicted requests alive", async () => {
+    const images: ControlledImage[] = [];
+    const sampler = createArtworkToneSampler({
+      maxEntries: 1,
+      createImage: () => {
+        const image = controlledImage();
+        images.push(image);
+        return image as unknown as HTMLImageElement;
+      },
+      sampleLuminance: () => null,
+    });
+
+    const firstA = sampler.sample("https://example.com/a.jpg");
+    const b = sampler.sample("https://example.com/b.jpg");
+    const secondA = sampler.sample("https://example.com/a.jpg");
+
+    expect(images).toHaveLength(3);
+    await expect(firstA).resolves.toBe("light");
+    await expect(b).resolves.toBe("light");
+    expect(images[0].srcAssignments.at(-1)).toBe("");
+    expect(images[1].srcAssignments.at(-1)).toBe("");
+    images[2].onload?.(new Event("load"));
+    await expect(secondA).resolves.toBe("light");
+  });
+
+  it("keeps a shared request alive when only one subscriber aborts", async () => {
+    const image = controlledImage();
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const sampler = createArtworkToneSampler({
+      createImage: () => image as unknown as HTMLImageElement,
+      sampleLuminance: () => 0.1,
+    });
+
+    const first = sampler.sample(
+      "https://example.com/shared.jpg",
+      firstController.signal,
+    );
+    const second = sampler.sample(
+      "https://example.com/shared.jpg",
+      secondController.signal,
+    );
+    firstController.abort();
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    expect(image.src).toBe("https://example.com/shared.jpg");
+    expect(image.onload).not.toBeNull();
+    image.onload?.(new Event("load"));
+    await expect(second).resolves.toBe("dark");
+  });
+
+  it("aborts the underlying request after its final subscriber cancels", async () => {
+    const images: ControlledImage[] = [];
+    const controller = new AbortController();
+    const sampler = createArtworkToneSampler({
+      createImage: () => {
+        const image = controlledImage();
+        images.push(image);
+        return image as unknown as HTMLImageElement;
+      },
+    });
+
+    const sampled = sampler.sample(
+      "https://example.com/cancel.jpg",
+      controller.signal,
+    );
+    controller.abort();
+
+    await expect(sampled).rejects.toMatchObject({ name: "AbortError" });
+    expect(images[0].onload).toBeNull();
+    expect(images[0].onerror).toBeNull();
+    expect(images[0].srcAssignments.at(-1)).toBe("");
+
+    const retry = sampler.sample("https://example.com/cancel.jpg");
+    expect(images).toHaveLength(2);
+    images[1].onerror?.(new Event("error"));
+    await expect(retry).resolves.toBe("light");
   });
 });

@@ -426,6 +426,32 @@ describe("MediaTaskBanner", () => {
     );
   });
 
+  it("cancels tone sampling when the artwork URL changes and on unmount", () => {
+    const signals: AbortSignal[] = [];
+    vi.mocked(artworkToneSampler.sample).mockImplementation((_url, signal) => {
+      if (signal) signals.push(signal);
+      return new Promise(() => undefined);
+    });
+    const firstTask = taskFixture({
+      thumbnail_url: "https://example.com/first.jpg",
+    });
+    const { rerender, unmount } = render(<MediaTaskBanner task={firstTask} />);
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(false);
+    rerender(
+      <MediaTaskBanner
+        task={{ ...firstTask, thumbnail_url: "https://example.com/second.jpg" }}
+      />,
+    );
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+    unmount();
+    expect(signals[1].aborted).toBe(true);
+  });
+
   it("keeps the display thumbnail visible when anonymous sampling falls back", () => {
     vi.mocked(artworkToneSampler.sample).mockResolvedValue("light");
     const { container } = render(

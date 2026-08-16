@@ -83,61 +83,213 @@ export function classifyArtworkTone(relativeLuminance: number | null): ArtworkTo
 }
 
 export interface ArtworkToneSampler {
-  sample(url: string): Promise<ArtworkTone>;
+  sample(url: string, signal?: AbortSignal): Promise<ArtworkTone>;
 }
 
 interface ArtworkToneSamplerOptions {
   maxEntries?: number;
+  timeoutMs?: number;
   createImage?: () => HTMLImageElement;
   sampleLuminance?: (image: HTMLImageElement) => number | null;
+  setTimeout?: (callback: () => void, timeoutMs: number) => number;
+  clearTimeout?: (handle: number) => void;
+}
+
+interface ArtworkToneSubscriber {
+  resolve: (tone: ArtworkTone) => void;
+  reject: (error: DOMException) => void;
+  signal?: AbortSignal;
+  abortHandler?: () => void;
+}
+
+interface ArtworkToneInFlight {
+  url: string;
+  image: HTMLImageElement;
+  subscribers: Set<ArtworkToneSubscriber>;
+  timer: number;
+  active: boolean;
+}
+
+function abortError(): DOMException {
+  return new DOMException("Artwork tone sampling aborted", "AbortError");
 }
 
 export function createArtworkToneSampler({
   maxEntries = 64,
+  timeoutMs = 8_000,
   createImage = () => new Image(),
   sampleLuminance = sampleArtworkLuminance,
+  setTimeout: scheduleTimeout = (callback, delay) =>
+    window.setTimeout(callback, delay),
+  clearTimeout: cancelTimeout = (handle) => window.clearTimeout(handle),
 }: ArtworkToneSamplerOptions = {}): ArtworkToneSampler {
-  const cache = new Map<string, Promise<ArtworkTone>>();
+  const settled = new Map<string, ArtworkTone>();
+  const inFlight = new Map<string, ArtworkToneInFlight>();
+  const order = new Map<string, "settled" | "in-flight">();
   const limit = Math.max(1, Math.floor(maxEntries));
+  const samplingTimeout = Math.max(0, timeoutMs);
+
+  const touch = (url: string, kind: "settled" | "in-flight") => {
+    order.delete(url);
+    order.set(url, kind);
+  };
+
+  const detachSubscriber = (subscriber: ArtworkToneSubscriber) => {
+    if (subscriber.signal && subscriber.abortHandler) {
+      subscriber.signal.removeEventListener("abort", subscriber.abortHandler);
+    }
+  };
+
+  const releaseImage = (entry: ArtworkToneInFlight, abortRequest: boolean) => {
+    entry.image.onload = null;
+    entry.image.onerror = null;
+    cancelTimeout(entry.timer);
+    if (abortRequest) {
+      try {
+        entry.image.src = "";
+      } catch {
+        // Some test doubles or browser implementations can reject an empty src.
+      }
+    }
+  };
+
+  const finish = (
+    entry: ArtworkToneInFlight,
+    tone: ArtworkTone,
+    cacheResult: boolean,
+    abortRequest: boolean,
+  ) => {
+    if (!entry.active) return;
+    entry.active = false;
+    releaseImage(entry, abortRequest);
+    if (inFlight.get(entry.url) === entry) {
+      inFlight.delete(entry.url);
+      order.delete(entry.url);
+    }
+    if (cacheResult) {
+      settled.set(entry.url, tone);
+      touch(entry.url, "settled");
+    }
+    for (const subscriber of entry.subscribers) {
+      detachSubscriber(subscriber);
+      subscriber.resolve(tone);
+    }
+    entry.subscribers.clear();
+  };
+
+  const cancelIfUnused = (entry: ArtworkToneInFlight) => {
+    if (!entry.active || entry.subscribers.size > 0) return;
+    entry.active = false;
+    releaseImage(entry, true);
+    if (inFlight.get(entry.url) === entry) {
+      inFlight.delete(entry.url);
+      order.delete(entry.url);
+    }
+  };
+
+  const trim = () => {
+    while (order.size > limit) {
+      const oldest = order.entries().next().value as
+        | [string, "settled" | "in-flight"]
+        | undefined;
+      if (!oldest) return;
+      const [url, kind] = oldest;
+      if (kind === "settled") {
+        settled.delete(url);
+        order.delete(url);
+        continue;
+      }
+      const entry = inFlight.get(url);
+      if (!entry) {
+        order.delete(url);
+        continue;
+      }
+      finish(entry, "light", false, true);
+    }
+  };
+
+  const subscribe = (
+    entry: ArtworkToneInFlight,
+    signal?: AbortSignal,
+  ): Promise<ArtworkTone> => {
+    if (signal?.aborted) return Promise.reject(abortError());
+    return new Promise<ArtworkTone>((resolve, reject) => {
+      const subscriber: ArtworkToneSubscriber = { resolve, reject, signal };
+      if (signal) {
+        subscriber.abortHandler = () => {
+          if (!entry.subscribers.delete(subscriber)) return;
+          detachSubscriber(subscriber);
+          reject(abortError());
+          cancelIfUnused(entry);
+        };
+        signal.addEventListener("abort", subscriber.abortHandler, { once: true });
+      }
+      entry.subscribers.add(subscriber);
+    });
+  };
 
   return {
-    sample(url: string): Promise<ArtworkTone> {
-      const cached = cache.get(url);
-      if (cached) {
-        cache.delete(url);
-        cache.set(url, cached);
-        return cached;
+    sample(url: string, signal?: AbortSignal): Promise<ArtworkTone> {
+      if (signal?.aborted) return Promise.reject(abortError());
+
+      const cached = settled.get(url);
+      if (cached !== undefined) {
+        touch(url, "settled");
+        return Promise.resolve(cached);
       }
 
-      const sampled = new Promise<ArtworkTone>((resolve) => {
+      const pending = inFlight.get(url);
+      if (pending) {
+        touch(url, "in-flight");
+        return subscribe(pending, signal);
+      }
+
+      let image: HTMLImageElement;
+      try {
+        image = createImage();
+      } catch {
+        return Promise.resolve("light");
+      }
+
+      const entry = {
+        url,
+        image,
+        subscribers: new Set<ArtworkToneSubscriber>(),
+        timer: 0,
+        active: true,
+      } satisfies ArtworkToneInFlight;
+      const sampled = subscribe(entry, signal);
+      if (!entry.active) return sampled;
+
+      image.crossOrigin = "anonymous";
+      image.referrerPolicy = "no-referrer";
+      image.onload = () => {
         try {
-          const image = createImage();
-          const finish = (tone: ArtworkTone) => {
-            image.onload = null;
-            image.onerror = null;
-            resolve(tone);
-          };
-          image.crossOrigin = "anonymous";
-          image.referrerPolicy = "no-referrer";
-          image.onload = () => {
-            try {
-              finish(classifyArtworkTone(sampleLuminance(image)));
-            } catch {
-              finish("light");
-            }
-          };
-          image.onerror = () => finish("light");
+          finish(
+            entry,
+            classifyArtworkTone(sampleLuminance(image)),
+            true,
+            false,
+          );
+        } catch {
+          finish(entry, "light", true, false);
+        }
+      };
+      image.onerror = () => finish(entry, "light", true, false);
+      entry.timer = scheduleTimeout(
+        () => finish(entry, "light", true, true),
+        samplingTimeout,
+      );
+
+      inFlight.set(url, entry);
+      touch(url, "in-flight");
+      trim();
+      if (entry.active) {
+        try {
           image.src = url;
         } catch {
-          resolve("light");
+          finish(entry, "light", true, false);
         }
-      });
-
-      cache.set(url, sampled);
-      while (cache.size > limit) {
-        const oldest = cache.keys().next().value as string | undefined;
-        if (oldest === undefined) break;
-        cache.delete(oldest);
       }
       return sampled;
     },
