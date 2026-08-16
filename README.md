@@ -18,7 +18,8 @@ Telegram 的绑定与发送说明见 [`docs/TELEGRAM.md`](docs/TELEGRAM.md)。�
 本地 Bot API 的 2 GB 文件能力需要随平台安装包提供已构建并验收的原生资源。
 - **CLI**：`./scripts/downany add <url> [--audio] [--quality 1080p] [--detach]`
 
-路线图见 [docs/roadmap.md](docs/roadmap.md)。
+路线图见 [docs/roadmap.md](docs/roadmap.md)，桌面界面实现遵循
+[UI 设计语言](docs/UI-DESIGN-LANGUAGE.md)。
 
 ## 快速开始
 
