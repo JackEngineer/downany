@@ -13,6 +13,17 @@ describe("DesktopCoreGallery", () => {
   it("renders all canonical task states", () => {
     const { container } = render(<DesktopCoreGallery />);
 
+    expect(
+      screen.getByText(
+        "四合院门楼的大门也是整个合院的一个灵魂，安装之后效果立马呈现！#唐河四合院",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("火山方舟 - 体验")).toBeInTheDocument();
+    expect(
+      screen.getByText("Andrej Karpathy 在 OpenAI 和 Tesla 工作了 8 年"),
+    ).toBeInTheDocument();
+    expect(container.querySelectorAll(".design-system-gallery__traffic-light")).toHaveLength(3);
+
     for (const label of [
       "等待中",
       "下载中",
@@ -24,7 +35,7 @@ describe("DesktopCoreGallery", () => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
 
-    expect(container.querySelectorAll(".media-task-banner")).toHaveLength(6);
+    expect(container.querySelectorAll(".media-task-banner")).toHaveLength(9);
 
     for (const tone of ["dark", "medium", "light"]) {
       expect(
@@ -35,6 +46,12 @@ describe("DesktopCoreGallery", () => {
     expect(
       screen.getByRole("region", { name: "紧凑密度（无毛玻璃降级）" }),
     ).toBeInTheDocument();
+    const inspector = screen.getByText("开发检查").closest("details");
+    expect(inspector).not.toBeNull();
+    expect(inspector).not.toHaveAttribute("open");
+    expect(inspector).toContainElement(
+      container.querySelector('[data-backdrop-mode="none"]'),
+    );
     expect(
       container.querySelector(".media-task-banner__artwork-placeholder"),
     ).not.toBeNull();

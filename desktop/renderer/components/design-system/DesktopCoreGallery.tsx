@@ -67,22 +67,60 @@ function galleryTask(
 }
 
 export const GALLERY_TASKS: TaskSnapshot[] = [
-  galleryTask("pending", "dark", 0, { started_at: null }),
-  galleryTask("downloading", "medium", 58),
-  galleryTask("paused", "light", 42),
+  galleryTask("pending", "dark", 0, {
+    title: "准备下载的媒体",
+    started_at: null,
+  }),
+  galleryTask("downloading", "medium", 58, { title: "正在下载的媒体" }),
+  galleryTask("paused", "light", 42, { title: "暂停中的媒体" }),
   galleryTask("completed", "medium", 100, {
+    title: "已完成的媒体",
     downloaded_bytes: 128_600_000,
     file_path: "/gallery/completed.mp4",
     completed_at: "2026-08-16T11:32:00Z",
   }),
   galleryTask("failed", "dark", 31, {
+    title: "需要处理的媒体",
     error_code: "need_login",
     error_message: "Sign in to confirm your age",
   }),
   galleryTask("cancelled", "light", 0, {
+    title: "已取消的媒体",
     thumbnail_url: "",
     platform: "bilibili",
     started_at: null,
+  }),
+];
+
+const PRODUCT_TASKS: TaskSnapshot[] = [
+  galleryTask("completed", "dark", 100, {
+    id: "gallery-courtyard",
+    title: "四合院门楼的大门也是整个合院的一个灵魂，安装之后效果立马呈现！#唐河四合院",
+    platform: "douyin",
+    downloaded_bytes: 128_600_000,
+    file_path: "/gallery/courtyard.mp4",
+    completed_at: "2026-08-16T18:32:00Z",
+    quality: "1080p",
+  }),
+  galleryTask("completed", "medium", 100, {
+    id: "gallery-ark",
+    title: "火山方舟 - 体验",
+    platform: "web",
+    downloaded_bytes: 86_400_000,
+    total_bytes: 86_400_000,
+    file_path: "/gallery/ark.mp4",
+    completed_at: "2026-08-16T18:18:00Z",
+    quality: "1080p",
+  }),
+  galleryTask("completed", "light", 100, {
+    id: "gallery-karpathy",
+    title: "Andrej Karpathy 在 OpenAI 和 Tesla 工作了 8 年",
+    platform: "twitter",
+    downloaded_bytes: 52_100_000,
+    total_bytes: 52_100_000,
+    file_path: "/gallery/karpathy.mp4",
+    completed_at: "2026-08-16T17:58:00Z",
+    quality: "720p",
   }),
 ];
 
@@ -193,55 +231,80 @@ export function DesktopCoreGallery() {
 
   return (
     <div className="design-system-gallery">
-      <aside
-        className="design-system-gallery__controls"
-        aria-label="视觉检查控制"
-      >
-        <span aria-label="当前视口宽度">{viewportWidth}px</span>
-        <button
-          type="button"
-          aria-pressed={theme === "dark"}
-          onClick={() => setTheme("dark")}
-        >
-          深色
-        </button>
-        <button
-          type="button"
-          aria-pressed={theme === "light"}
-          onClick={() => setTheme("light")}
-        >
-          浅色
-        </button>
-        <button
-          type="button"
-          aria-pressed={reduceTransparency}
-          onClick={() => setReduceTransparency((value) => !value)}
-        >
-          减少透明
-        </button>
-      </aside>
-
       <div
         className="window-shell design-system-gallery__window"
         data-platform="darwin"
       >
+        <div className="design-system-gallery__traffic-lights" aria-hidden>
+          <span className="design-system-gallery__traffic-light design-system-gallery__traffic-light--close" />
+          <span className="design-system-gallery__traffic-light design-system-gallery__traffic-light--minimize" />
+          <span className="design-system-gallery__traffic-light design-system-gallery__traffic-light--zoom" />
+        </div>
         <WindowChrome platform="darwin" />
         <ActionBar />
         <FilterBar />
         <main className="window-main design-system-gallery__main">
-          <GallerySection
-            title="标准密度"
-            description="保留完整玻璃层，覆盖等待、下载中与已暂停三态。"
-            density="normal"
-            tasks={GALLERY_TASKS.slice(0, 3)}
-          />
-          <GallerySection
-            title="紧凑密度（无毛玻璃降级）"
-            description="固定展示 completed、failed、cancelled，并用真实 token 强制无 backdrop-filter。"
-            density="compact"
-            tasks={GALLERY_TASKS.slice(3)}
-            backdropMode="none"
-          />
+          <ul className="download-list design-system-gallery__product-queue">
+            {PRODUCT_TASKS.map((task) => (
+              <MediaTaskBanner
+                key={task.id}
+                task={task}
+                artworkTone={
+                  task.id === "gallery-courtyard"
+                    ? "dark"
+                    : task.id === "gallery-karpathy"
+                      ? "light"
+                      : "medium"
+                }
+              />
+            ))}
+          </ul>
+
+          <details className="design-system-gallery__inspector">
+            <summary>开发检查</summary>
+            <div className="design-system-gallery__inspector-panel">
+              <aside
+                className="design-system-gallery__controls"
+                aria-label="视觉检查控制"
+              >
+                <span aria-label="当前视口宽度">{viewportWidth}px</span>
+                <button
+                  type="button"
+                  aria-pressed={theme === "dark"}
+                  onClick={() => setTheme("dark")}
+                >
+                  深色
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={theme === "light"}
+                  onClick={() => setTheme("light")}
+                >
+                  浅色
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={reduceTransparency}
+                  onClick={() => setReduceTransparency((value) => !value)}
+                >
+                  减少透明
+                </button>
+              </aside>
+              <GallerySection
+                title="标准密度"
+                description="保留完整玻璃层，覆盖等待、下载中与已暂停三态。"
+                density="normal"
+                tasks={GALLERY_TASKS.slice(0, 3)}
+              />
+              <GallerySection
+                title="紧凑密度（无毛玻璃降级）"
+                description="固定展示 completed、failed、cancelled，并用真实 token 强制无 backdrop-filter。"
+                density="compact"
+                tasks={GALLERY_TASKS.slice(3)}
+                backdropMode="none"
+              />
+            </div>
+          </details>
         </main>
       </div>
     </div>
