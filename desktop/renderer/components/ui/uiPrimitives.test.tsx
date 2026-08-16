@@ -66,24 +66,24 @@ describe("UI primitives", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("exposes a selected filter tab and its count", () => {
+  it("exposes a pressed filter button and its count", () => {
     render(
       <FilterTab selected label="进行中" count={2} onSelect={() => undefined} />,
     );
-    expect(screen.getByRole("tab", { name: "进行中 2" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "进行中 2" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
   });
 
-  it("supports keyboard activation for filter tabs", async () => {
+  it("supports keyboard activation for filter buttons", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
 
     render(<FilterTab selected={false} label="全部" onSelect={onSelect} />);
     await user.tab();
-    const tab = screen.getByRole("tab", { name: "全部" });
-    expect(tab).toHaveFocus();
+    const button = screen.getByRole("button", { name: "全部" });
+    expect(button).toHaveFocus();
 
     await user.keyboard("[Space]");
     expect(onSelect).toHaveBeenCalledTimes(1);
