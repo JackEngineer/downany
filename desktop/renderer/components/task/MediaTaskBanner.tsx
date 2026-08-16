@@ -102,7 +102,7 @@ const SHADE_BASE_STYLE: CSSProperties = {
 
 const CONTENT_STYLE: CSSProperties = {
   position: "relative",
-  zIndex: 1,
+  zIndex: 3,
   minWidth: 0,
   display: "grid",
   gap: "var(--space-2)",
@@ -185,7 +185,7 @@ const DETAIL_STYLE: CSSProperties = {
 
 const ACTIONS_STYLE: CSSProperties = {
   position: "relative",
-  zIndex: 1,
+  zIndex: 4,
   display: "flex",
   flexWrap: "wrap",
   justifyContent: "flex-end",

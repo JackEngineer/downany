@@ -48,10 +48,17 @@ describe("MediaTaskBanner", () => {
         task={taskFixture({ thumbnail_url: "https://example.com/thumb.jpg" })}
       />,
     );
+    const glass = container.querySelector(".media-task-banner__glass") as HTMLDivElement;
+    const content = container.querySelector(".media-task-banner__content") as HTMLDivElement;
+    const actions = container.querySelector(".media-task-banner__actions") as HTMLDivElement;
+
     expect(container.querySelectorAll(".media-task-banner__artwork")).toHaveLength(1);
     expect(container.querySelectorAll(".media-task-banner__shade")).toHaveLength(1);
     expect(container.querySelectorAll(".media-task-banner__glass")).toHaveLength(1);
     expect(container.querySelectorAll(".media-task-banner__content")).toHaveLength(1);
+    expect(glass.style.zIndex).toBe("");
+    expect(content.style.zIndex).toBe("3");
+    expect(actions.style.zIndex).toBe("4");
     expect(container.querySelector(".media-task-banner")).toHaveAttribute(
       "data-artwork-tone",
       "medium",
