@@ -5,9 +5,11 @@ import { useAppStore } from "../store/appStore";
 import { AddConfirmDialog } from "./AddConfirmDialog";
 import { ConnectionGate } from "./ConnectionGate";
 import { HistorySection } from "./HistorySection";
+import { NetSearchPanel } from "./NetSearchPanel";
 import { TaskList } from "./TaskList";
 import { ToastHost } from "./ToastHost";
-import { TopBar } from "./TopBar";
+import { ActionBar } from "./shell/ActionBar";
+import { FilterBar } from "./shell/FilterBar";
 import { WindowChrome } from "./shell/WindowChrome";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -145,7 +147,9 @@ export function Shell() {
   return (
     <div className="window-shell" data-platform={window.api.platform}>
       <WindowChrome />
-      <TopBar />
+      <ActionBar />
+      <FilterBar />
+      <NetSearchPanel />
       <main className="window-main" id="main">
         {filter === "history" ? <HistorySection /> : <TaskList />}
       </main>
