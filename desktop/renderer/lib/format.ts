@@ -21,11 +21,11 @@ export function statusLabel(status: string): string {
     case "completed":
       return "已完成";
     case "failed":
-      return "失败";
+      return "下载失败";
     case "cancelled":
       return "已取消";
     default:
-      return status;
+      return "状态未知";
   }
 }
 
