@@ -229,6 +229,7 @@
 }
 
 .media-task-banner__actions .ui-button {
+  height: 30px;
   border-color: var(--material-action-glass-stroke);
   background: var(--material-action-glass-fill);
   color: var(--color-text-on-media);

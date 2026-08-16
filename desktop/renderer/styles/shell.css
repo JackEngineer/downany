@@ -34,6 +34,33 @@
   min-width: 180px;
 }
 
+.action-bar .ui-button--primary {
+  border-color: var(--color-stroke-strong);
+  background: var(--color-surface-control);
+  color: var(--color-text-primary);
+  box-shadow: none;
+}
+
+.action-bar .ui-button--primary:hover:not(:disabled) {
+  border-color: var(--color-stroke-strong);
+  background: var(--color-surface-control-hover);
+  color: var(--color-text-primary);
+}
+
+.action-bar__recognize {
+  position: relative;
+  margin-left: var(--space-2);
+}
+
+.action-bar__recognize::before {
+  position: absolute;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  left: calc(var(--space-2) * -1);
+  border-left: 1px solid var(--color-stroke-subtle);
+  content: "";
+}
+
 .filter-bar {
   display: flex;
   align-items: flex-end;
