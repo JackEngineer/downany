@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 
 import type { ContextMenuTemplateItem } from "../../../electron/preload";
 import type { TaskSnapshot } from "../../lib/types";
@@ -34,9 +44,7 @@ const menuShellStyle = {
 } as const;
 
 const menuPanelStyle = {
-  position: "absolute",
-  top: "calc(100% + 8px)",
-  right: 0,
+  position: "fixed",
   zIndex: 30,
   minWidth: 196,
   padding: 8,
@@ -47,6 +55,57 @@ const menuPanelStyle = {
   boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
   backdropFilter: "blur(22px) saturate(1.15)",
 } as const;
+
+interface TaskMenuPosition {
+  left: number;
+  top: number;
+  maxHeight: number;
+  placement: "top" | "bottom";
+}
+
+const MENU_GAP = 8;
+const VIEWPORT_PADDING = 8;
+
+export function calculateTaskMenuPosition(
+  trigger: DOMRect,
+  menu: DOMRect,
+  viewportWidth: number,
+  viewportHeight: number,
+): TaskMenuPosition {
+  const availableBelow = Math.max(
+    0,
+    viewportHeight - trigger.bottom - MENU_GAP - VIEWPORT_PADDING,
+  );
+  const availableAbove = Math.max(
+    0,
+    trigger.top - MENU_GAP - VIEWPORT_PADDING,
+  );
+  const placement =
+    availableBelow < menu.height && availableAbove > availableBelow
+      ? "top"
+      : "bottom";
+  const maxHeight = Math.max(
+    0,
+    placement === "top" ? availableAbove : availableBelow,
+  );
+  const visibleHeight = Math.min(menu.height, maxHeight);
+  const top =
+    placement === "top"
+      ? Math.max(VIEWPORT_PADDING, trigger.top - MENU_GAP - visibleHeight)
+      : Math.min(
+          trigger.bottom + MENU_GAP,
+          viewportHeight - VIEWPORT_PADDING - visibleHeight,
+        );
+  const maxLeft = Math.max(
+    VIEWPORT_PADDING,
+    viewportWidth - VIEWPORT_PADDING - menu.width,
+  );
+  const left = Math.min(
+    maxLeft,
+    Math.max(VIEWPORT_PADDING, trigger.right - menu.width),
+  );
+  return { left, top, maxHeight, placement };
+}
 
 const menuItemStyle = {
   display: "flex",
@@ -184,6 +243,7 @@ export function TaskActionsMenu({
   onRename,
 }: TaskActionsMenuProps) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<TaskMenuPosition | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -192,7 +252,9 @@ export function TaskActionsMenu({
 
   const focusMenuItem = (target: "first" | "last") => {
     const focusable = Array.from(
-      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+      menuRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"], [role="menuitemradio"]',
+      ) ?? [],
     ).filter((button) => !button.disabled);
     if (focusable.length === 0) return;
     if (target === "last") {
@@ -211,8 +273,34 @@ export function TaskActionsMenu({
 
   const openMenu = (focusTarget: "first" | "last" | null = null) => {
     pendingFocusRef.current = focusTarget;
+    setPosition(null);
     setOpen(true);
   };
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    setPosition(
+      calculateTaskMenuPosition(
+        trigger.getBoundingClientRect(),
+        menu.getBoundingClientRect(),
+        window.innerWidth,
+        window.innerHeight,
+      ),
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [items.length, open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -233,7 +321,11 @@ export function TaskActionsMenu({
     }
 
     const closeForOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !rootRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -270,7 +362,9 @@ export function TaskActionsMenu({
 
   const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const focusable = Array.from(
-      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+      menuRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"], [role="menuitemradio"]',
+      ) ?? [],
     ).filter((button) => !button.disabled);
     if (focusable.length === 0) return;
     const currentIndex = focusable.findIndex((button) => button === document.activeElement);
@@ -312,6 +406,7 @@ export function TaskActionsMenu({
         label="更多操作"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? `task-actions-menu-${task.id}` : undefined}
         onClick={() => {
           if (open) {
             closeMenu();
@@ -321,46 +416,69 @@ export function TaskActionsMenu({
         }}
         onKeyDown={handleTriggerKeyDown}
       />
-      {open ? (
-        <div
-          ref={menuRef}
-          className="task-actions-menu__panel"
-          role="menu"
-          data-task-id={task.id}
-          style={menuPanelStyle}
-          onKeyDown={handleMenuKeyDown}
-        >
-          {items.map((item) =>
-            item.separator ? (
-              <div
-                key={item.id}
-                className="task-actions-menu__separator"
-                aria-hidden="true"
-                style={menuSeparatorStyle}
-              />
-            ) : (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                disabled={!item.enabled}
-                className="task-actions-menu__item"
-                style={{
-                  ...menuItemStyle,
-                  ...(!item.enabled ? menuItemDisabledStyle : {}),
-                }}
-                onClick={() => {
-                  setOpen(false);
-                  void dispatchTaskAction(item.id, task, commands, onRename);
-                }}
-              >
-                {item.checked ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}
-                <span>{item.label}</span>
-              </button>
-            ),
-          )}
-        </div>
-      ) : null}
+      {open
+        ? createPortal(
+            <div
+              id={`task-actions-menu-${task.id}`}
+              ref={menuRef}
+              className="task-actions-menu__panel"
+              role="menu"
+              data-task-id={task.id}
+              data-placement={position?.placement}
+              style={
+                {
+                  ...menuPanelStyle,
+                  left: position?.left ?? 0,
+                  top: position?.top ?? 0,
+                  maxHeight: position?.maxHeight,
+                  overflowY: "auto",
+                  visibility: position ? "visible" : "hidden",
+                } satisfies CSSProperties
+              }
+              onKeyDown={handleMenuKeyDown}
+            >
+              {items.map((item) => {
+                if (item.separator) {
+                  return (
+                    <div
+                      key={item.id}
+                      className="task-actions-menu__separator"
+                      aria-hidden="true"
+                      style={menuSeparatorStyle}
+                    />
+                  );
+                }
+                const radio = item.id.startsWith("pp:");
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role={radio ? "menuitemradio" : "menuitem"}
+                    aria-checked={radio ? item.checked : undefined}
+                    disabled={!item.enabled}
+                    className="task-actions-menu__item"
+                    style={{
+                      ...menuItemStyle,
+                      ...(!item.enabled ? menuItemDisabledStyle : {}),
+                    }}
+                    onClick={() => {
+                      setOpen(false);
+                      void dispatchTaskAction(item.id, task, commands, onRename);
+                    }}
+                  >
+                    {item.checked ? (
+                      <Icon name="check" size={14} />
+                    ) : (
+                      <span style={{ width: 14 }} />
+                    )}
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

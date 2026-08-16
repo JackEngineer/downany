@@ -308,10 +308,8 @@
 
 .task-actions-menu__panel,
 .task-actions-menu__popover {
-  position: absolute !important;
-  top: calc(100% + var(--space-2)) !important;
-  right: 0 !important;
-  z-index: 20 !important;
+  position: fixed !important;
+  z-index: 100 !important;
   display: grid;
   min-width: 190px !important;
   padding: var(--space-1) !important;

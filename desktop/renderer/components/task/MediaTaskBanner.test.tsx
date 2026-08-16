@@ -114,6 +114,25 @@ function loadImage(image: HTMLImageElement, width: number, height: number): void
   fireEvent.load(image);
 }
 
+function rect(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 function mockCanvasGray(channel: number): void {
   const pixels = new Uint8ClampedArray(16 * 16 * 4);
   for (let index = 0; index < pixels.length; index += 4) {
@@ -638,6 +657,76 @@ describe("MediaTaskBanner", () => {
     expect(screen.getByRole("menu")).toHaveAttribute("data-task-id", "two");
   });
 
+  it("portals the task menu outside the clipped banner and flips it into the viewport", async () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getBoundingClientRect() {
+        if (this.getAttribute("aria-label") === "更多操作") {
+          return rect(720, 700, 28, 28);
+        }
+        if (this.classList.contains("task-actions-menu__panel")) {
+          return rect(0, 0, 196, 300);
+        }
+        return rect(0, 0, 0, 0);
+      },
+    );
+
+    const { container } = render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => expect(menu).toHaveAttribute("data-placement", "top"));
+    expect(menu.parentElement).toBe(document.body);
+    expect(container.contains(menu)).toBe(false);
+    expect(menu).toHaveStyle({ position: "fixed", left: "552px", top: "392px" });
+  });
+
+  it("keeps portal menu pointer events inside and closes outside trigger plus menu", async () => {
+    render(
+      <div>
+        <button type="button">outside</button>
+        <MediaTaskBanner task={taskFixture()} />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const rename = await screen.findByRole("menuitem", { name: "重命名" });
+
+    fireEvent.pointerDown(rename);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "outside" }));
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+
+  it("repositions the portal menu when the viewport scrolls", async () => {
+    let triggerRect = rect(700, 100, 28, 28);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getBoundingClientRect() {
+        if (this.getAttribute("aria-label") === "更多操作") return triggerRect;
+        if (this.classList.contains("task-actions-menu__panel")) {
+          return rect(0, 0, 196, 300);
+        }
+        return rect(0, 0, 0, 0);
+      },
+    );
+
+    render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => expect(menu).toHaveStyle({ top: "136px" }));
+
+    triggerRect = rect(700, 600, 28, 28);
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(menu).toHaveAttribute("data-placement", "top");
+      expect(menu).toHaveStyle({ top: "292px" });
+    });
+  });
+
   it("closes the menu on Escape and restores trigger focus", async () => {
     render(<MediaTaskBanner task={taskFixture()} />);
     const trigger = screen.getByRole("button", { name: "更多操作" });
@@ -688,7 +777,9 @@ describe("MediaTaskBanner", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "取消下载" }));
 
     fireEvent.keyDown(menu, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "自定义脚本" }));
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitemradio", { name: "自定义脚本" }),
+    );
 
     fireEvent.keyDown(menu, { key: "Home" });
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "重命名" }));
@@ -700,13 +791,15 @@ describe("MediaTaskBanner", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
 
-    const mp4Item = screen.getByRole("menuitem", { name: "转换为 MP4" });
-    const noneItem = screen.getByRole("menuitem", { name: "无后处理" });
+    const mp4Item = screen.getByRole("menuitemradio", { name: "转换为 MP4" });
+    const noneItem = screen.getByRole("menuitemradio", { name: "无后处理" });
 
     expect(mp4Item.querySelector('svg[data-icon="check"]')).not.toBeNull();
     expect(noneItem.querySelector('svg[data-icon="check"]')).toBeNull();
+    expect(mp4Item).toHaveAttribute("aria-checked", "true");
+    expect(noneItem).toHaveAttribute("aria-checked", "false");
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "提取音频 (MP3)" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "提取音频 (MP3)" }));
 
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("download.updateTask", {
