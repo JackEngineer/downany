@@ -1,7 +1,8 @@
-# Downany · 百纳 UI 设计语言 v1.0
+# Downany · 百纳 Desktop UI Profile v1.0
 
 - 状态：已确定视觉方向，待实现
-- 适用范围：Electron 主窗口、历史、设置、对话框、Toast 与抓取窗口
+- 上位规范：[Downany Design System](DESIGN-SYSTEM.md)
+- Profile 范围：Electron 主窗口、历史、设置、对话框、Toast 与抓取窗口
 - 视觉基准：[主窗口强高斯玻璃原型](assets/downany-main-window-glass-v1.png)
 - 核心句：**媒体是内容，玻璃承载信息，窗口镀铬保持安静。**
 
@@ -498,7 +499,8 @@ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
 发生冲突时按以下顺序处理：
 
 1. 已有产品行为、安全边界和可访问性要求。
-2. 本文的语义规则与逻辑尺寸。
-3. 视觉基准图的气质、层级和材质表现。
+2. [Downany Design System](DESIGN-SYSTEM.md) 的全产品原则与语义。
+3. 本文的桌面端规则与逻辑尺寸。
+4. 视觉基准图的气质、层级和材质表现。
 
 视觉基准图不是功能规格。实现不得为了像素模仿而删除现有暂停、继续、失败恢复、历史、批量操作、键盘和右键菜单能力。
