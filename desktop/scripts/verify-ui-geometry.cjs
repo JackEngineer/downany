@@ -1,6 +1,12 @@
 const path = require("node:path");
 
 const { app, BrowserWindow } = require("electron");
+const {
+  createProductionLayoutHarness,
+} = require("./electron-layout/production-harness.cjs");
+const {
+  verifyProductionPath,
+} = require("./electron-layout/production-verify.cjs");
 
 const VIEWPORT_WIDTH = 760;
 const VIEWPORT_HEIGHT = 760;
@@ -194,20 +200,21 @@ async function inspectReducedTransparencyFocus(win) {
 }
 
 async function run() {
-  await app.whenReady();
-  const win = new BrowserWindow({
-    width: VIEWPORT_WIDTH,
-    height: VIEWPORT_HEIGHT,
-    frame: false,
-    show: false,
-    backgroundColor: "#0b0d10",
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
+  const productionHarness = createProductionLayoutHarness();
+  let win = null;
   try {
+    await app.whenReady();
+    win = new BrowserWindow({
+      width: VIEWPORT_WIDTH,
+      height: VIEWPORT_HEIGHT,
+      frame: false,
+      show: false,
+      backgroundColor: "#0b0d10",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
     await win.loadFile(path.join(__dirname, "..", "dist", "design-system.html"));
     await waitFor(
       win,
@@ -257,14 +264,17 @@ async function run() {
     assert(focus.boxShadow.includes("inset"), "媒体动作缺少内高光", focus);
     assert(focus.backdropFilter === "none", "减少透明时仍启用了 backdrop-filter", focus);
 
+    const production = await verifyProductionPath(productionHarness);
+
     process.stdout.write(
-      `${JSON.stringify({ ok: true, geometry, focus }, null, 2)}\n`,
+      `${JSON.stringify({ ok: true, gallery: { geometry, focus }, production }, null, 2)}\n`,
     );
   } finally {
-    if (win.webContents.debugger.isAttached()) {
+    if (win?.webContents.debugger.isAttached()) {
       win.webContents.debugger.detach();
     }
-    if (!win.isDestroyed()) win.destroy();
+    if (win && !win.isDestroyed()) win.destroy();
+    await productionHarness.dispose();
   }
 }
 
