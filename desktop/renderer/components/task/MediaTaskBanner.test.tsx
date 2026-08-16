@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAppStore } from "../../store/appStore";
@@ -153,6 +153,33 @@ describe("MediaTaskBanner", () => {
     );
   });
 
+  it("focuses and selects the title when rename starts from the more menu", async () => {
+    render(<MediaTaskBanner task={taskFixture()} />);
+    const trigger = screen.getByRole("button", { name: "更多操作" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+
+    await waitFor(() => {
+      const input = screen.getByRole("textbox", { name: "重命名任务" }) as HTMLInputElement;
+      expect(document.activeElement).toBe(input);
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe("示例视频".length);
+    });
+  });
+
+  it("focuses and selects the title when rename starts from the native context menu", async () => {
+    showTaskContextMenuMock.mockResolvedValueOnce("rename");
+    const { container } = render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.contextMenu(container.querySelector("#task-task-1") as HTMLElement);
+
+    await waitFor(() => {
+      const input = screen.getByRole("textbox", { name: "重命名任务" }) as HTMLInputElement;
+      expect(document.activeElement).toBe(input);
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe("示例视频".length);
+    });
+  });
+
   it("sends the exact pending template to the native context menu", () => {
     const { container } = render(<MediaTaskBanner task={taskFixture()} />);
     fireEvent.contextMenu(container.querySelector("#task-task-1") as HTMLElement);
@@ -214,5 +241,83 @@ describe("MediaTaskBanner", () => {
     fireEvent.click(triggers[1]);
     expect(screen.getAllByRole("menu")).toHaveLength(1);
     expect(screen.getByRole("menu")).toHaveAttribute("data-task-id", "two");
+  });
+
+  it("closes the menu on Escape and restores trigger focus", async () => {
+    render(<MediaTaskBanner task={taskFixture()} />);
+    const trigger = screen.getByRole("button", { name: "更多操作" });
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole("menu");
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    expect(menu).not.toBeInTheDocument();
+  });
+
+  it("closes the menu on outside pointerdown", async () => {
+    render(
+      <div>
+        <button type="button">outside</button>
+        <MediaTaskBanner task={taskFixture()} />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "outside" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("supports ArrowUp Down Home End keyboard navigation inside the menu", async () => {
+    render(<MediaTaskBanner task={taskFixture()} />);
+    const trigger = screen.getByRole("button", { name: "更多操作" });
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "重命名" }));
+    });
+
+    const menu = screen.getByRole("menu");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "网页识别" }));
+
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "取消下载" }));
+
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "自定义脚本" }));
+
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "重命名" }));
+  });
+
+  it("renders a check icon for the active postprocessing item and dispatches updates", async () => {
+    render(
+      <MediaTaskBanner task={taskFixture({ postprocessing: "mp4", status: "paused" })} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+
+    const mp4Item = screen.getByRole("menuitem", { name: "转换为 MP4" });
+    const noneItem = screen.getByRole("menuitem", { name: "无后处理" });
+
+    expect(mp4Item.querySelector('svg[data-icon="check"]')).not.toBeNull();
+    expect(noneItem.querySelector('svg[data-icon="check"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "提取音频 (MP3)" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("download.updateTask", {
+        taskId: "task-1",
+        postprocessing: "mp3",
+      }),
+    );
   });
 });

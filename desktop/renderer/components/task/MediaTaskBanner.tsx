@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -336,10 +337,19 @@ export function MediaTaskBanner({
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
   const [thumbnailBroken, setThumbnailBroken] = useState(false);
+  const editRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDraftTitle(task.title);
   }, [task.title]);
+
+  useEffect(() => {
+    if (!editing) return;
+    queueMicrotask(() => {
+      editRef.current?.focus();
+      editRef.current?.select();
+    });
+  }, [editing]);
 
   useEffect(() => {
     setThumbnailBroken(false);
@@ -424,6 +434,7 @@ export function MediaTaskBanner({
       <div className="media-task-banner__content" style={CONTENT_STYLE}>
         {editing ? (
           <input
+            ref={editRef}
             className="media-task-banner__title-input"
             aria-label="重命名任务"
             value={draftTitle}
