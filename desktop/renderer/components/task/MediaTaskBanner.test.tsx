@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "../../store/appStore";
 import { taskFixture } from "../../test/taskFixture";
 import { MediaTaskBanner } from "./MediaTaskBanner";
+import { calculateTaskMenuPosition } from "./TaskActionsMenu";
 import { artworkToneSampler } from "./artworkPresentation";
 
 const requestMock = vi.fn();
@@ -184,6 +185,17 @@ afterEach(() => {
 
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function getBoundingClientRect() {
+      if (this.getAttribute("aria-label") === "更多操作") {
+        return rect(700, 100, 28, 28);
+      }
+      if (this.classList.contains("task-actions-menu__panel")) {
+        return rect(0, 0, 196, 300);
+      }
+      return rect(0, 0, 0, 0);
+    },
+  );
   resizeDisconnectMock.mockReset();
   requestMock.mockReset();
   requestMock.mockResolvedValue({ tasks: [], settings: null });
@@ -858,6 +870,35 @@ describe("MediaTaskBanner", () => {
     expect(screen.getByRole("menu")).toHaveAttribute("data-task-id", "two");
   });
 
+  it.each([
+    ["above", rect(700, -80, 28, 28)],
+    ["below", rect(700, 780, 28, 28)],
+    ["left", rect(-60, 100, 28, 28)],
+    ["right", rect(780, 100, 28, 28)],
+  ])("does not position a menu for a trigger fully %s the viewport", (_side, trigger) => {
+    expect(
+      calculateTaskMenuPosition(trigger, rect(0, 0, 196, 300), 760, 760),
+    ).toBeNull();
+  });
+
+  it("clamps a partially visible trigger on both axes", () => {
+    const left = calculateTaskMenuPosition(
+      rect(-10, 120, 28, 28),
+      rect(0, 0, 196, 300),
+      760,
+      760,
+    );
+    const right = calculateTaskMenuPosition(
+      rect(748, 120, 28, 28),
+      rect(0, 0, 196, 300),
+      760,
+      760,
+    );
+
+    expect(left).toMatchObject({ left: 8, top: 156, placement: "bottom" });
+    expect(right).toMatchObject({ left: 556, top: 156, placement: "bottom" });
+  });
+
   it("portals the task menu outside the clipped banner and flips it into the viewport", async () => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
@@ -925,6 +966,70 @@ describe("MediaTaskBanner", () => {
     await waitFor(() => {
       expect(menu).toHaveAttribute("data-placement", "top");
       expect(menu).toHaveStyle({ top: "292px" });
+    });
+  });
+
+  it("closes the portal menu when scrolling moves its trigger fully offscreen", async () => {
+    let triggerRect = rect(700, 100, 28, 28);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(560);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getBoundingClientRect() {
+        if (this.getAttribute("aria-label") === "更多操作") return triggerRect;
+        if (this.classList.contains("task-actions-menu__panel")) {
+          return rect(0, 0, 196, 300);
+        }
+        return rect(0, 0, 0, 0);
+      },
+    );
+
+    render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await screen.findByRole("menu");
+
+    triggerRect = rect(700, -80, 28, 28);
+    fireEvent.scroll(window);
+
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+
+  it("remeasures the menu natural height after a constrained viewport expands", async () => {
+    let viewportHeight = 360;
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
+    vi.spyOn(window, "innerHeight", "get").mockImplementation(
+      () => viewportHeight,
+    );
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getBoundingClientRect() {
+        if (this.getAttribute("aria-label") === "更多操作") {
+          return rect(700, 220, 28, 28);
+        }
+        if (this.classList.contains("task-actions-menu__panel")) {
+          return rect(0, 0, 196, 100);
+        }
+        return rect(0, 0, 0, 0);
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+      function scrollHeight() {
+        return this.classList.contains("task-actions-menu__panel") ? 300 : 0;
+      },
+    );
+
+    render(<MediaTaskBanner task={taskFixture()} />);
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => {
+      expect(menu).toHaveAttribute("data-placement", "top");
+      expect(menu).toHaveStyle({ top: "8px", maxHeight: "204px" });
+    });
+
+    viewportHeight = 760;
+    fireEvent.resize(window);
+
+    await waitFor(() => {
+      expect(menu).toHaveAttribute("data-placement", "bottom");
+      expect(menu).toHaveStyle({ top: "256px", maxHeight: "496px" });
     });
   });
 

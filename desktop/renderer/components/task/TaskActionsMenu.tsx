@@ -68,10 +68,19 @@ const VIEWPORT_PADDING = 8;
 
 export function calculateTaskMenuPosition(
   trigger: DOMRect,
-  menu: DOMRect,
+  menu: Pick<DOMRect, "width" | "height">,
   viewportWidth: number,
   viewportHeight: number,
-): TaskMenuPosition {
+): TaskMenuPosition | null {
+  if (
+    trigger.bottom <= 0 ||
+    trigger.top >= viewportHeight ||
+    trigger.right <= 0 ||
+    trigger.left >= viewportWidth
+  ) {
+    return null;
+  }
+
   const availableBelow = Math.max(
     0,
     viewportHeight - trigger.bottom - MENU_GAP - VIEWPORT_PADDING,
@@ -89,13 +98,18 @@ export function calculateTaskMenuPosition(
     placement === "top" ? availableAbove : availableBelow,
   );
   const visibleHeight = Math.min(menu.height, maxHeight);
-  const top =
+  const preferredTop =
     placement === "top"
-      ? Math.max(VIEWPORT_PADDING, trigger.top - MENU_GAP - visibleHeight)
-      : Math.min(
-          trigger.bottom + MENU_GAP,
-          viewportHeight - VIEWPORT_PADDING - visibleHeight,
-        );
+      ? trigger.top - MENU_GAP - visibleHeight
+      : trigger.bottom + MENU_GAP;
+  const maxTop = Math.max(
+    VIEWPORT_PADDING,
+    viewportHeight - VIEWPORT_PADDING - visibleHeight,
+  );
+  const top = Math.min(
+    maxTop,
+    Math.max(VIEWPORT_PADDING, preferredTop),
+  );
   const maxLeft = Math.max(
     VIEWPORT_PADDING,
     viewportWidth - VIEWPORT_PADDING - menu.width,
@@ -281,14 +295,22 @@ export function TaskActionsMenu({
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     if (!trigger || !menu) return;
-    setPosition(
-      calculateTaskMenuPosition(
-        trigger.getBoundingClientRect(),
-        menu.getBoundingClientRect(),
-        window.innerWidth,
-        window.innerHeight,
-      ),
+    const menuRect = menu.getBoundingClientRect();
+    const nextPosition = calculateTaskMenuPosition(
+      trigger.getBoundingClientRect(),
+      {
+        width: Math.max(menu.scrollWidth, menuRect.width),
+        height: Math.max(menu.scrollHeight, menuRect.height),
+      },
+      window.innerWidth,
+      window.innerHeight,
     );
+    if (!nextPosition) {
+      setPosition(null);
+      setOpen(false);
+      return;
+    }
+    setPosition(nextPosition);
   }, []);
 
   useLayoutEffect(() => {
