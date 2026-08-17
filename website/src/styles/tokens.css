@@ -1,0 +1,69 @@
+:root {
+  color-scheme: dark;
+
+  --color-surface-window: #0b0d10;
+  --color-surface-chrome: #101318;
+  --color-surface-raised: #15191f;
+  --color-surface-control: rgba(255, 255, 255, 0.035);
+  --color-surface-control-hover: rgba(255, 255, 255, 0.065);
+  --color-text-primary: rgba(255, 255, 255, 0.92);
+  --color-text-secondary: rgba(255, 255, 255, 0.64);
+  --color-text-tertiary: rgba(255, 255, 255, 0.42);
+  --color-stroke-subtle: rgba(255, 255, 255, 0.08);
+  --color-stroke-strong: rgba(255, 255, 255, 0.14);
+  --color-accent: #397bff;
+  --color-accent-hover: #4f89ff;
+  --color-accent-soft: rgba(57, 123, 255, 0.16);
+  --color-success: #42e6c6;
+  --color-focus-ring: rgba(91, 124, 250, 0.46);
+  --color-glass-tint: rgba(15, 17, 20, 0.4);
+  --color-glass-fallback: rgba(15, 17, 20, 0.92);
+  --color-shadow-product: rgba(0, 0, 0, 0.36);
+  --color-mask-opaque: #000;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+
+  --type-display-size: 40px;
+  --type-display-line: 52px;
+  --type-section-size: 32px;
+  --type-section-line: 42px;
+  --type-list-size: 18px;
+  --type-list-line: 26px;
+  --type-body-size: 16px;
+  --type-body-line: 26px;
+  --type-control-size: 15px;
+  --type-control-line: 20px;
+  --type-meta-size: 13px;
+  --type-meta-line: 20px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  --radius-button: 8px;
+  --radius-media: 10px;
+  --radius-panel: 14px;
+
+  --layout-max: 1180px;
+  --layout-gutter: 24px;
+  --layout-gutter-mobile: 16px;
+
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --material-reading-width: 58%;
+  --material-reading-blur: 36px;
+  --material-reading-saturate: 1.2;
+  --material-reading-feather: 96px;
+  --elevation-product: 0 24px 64px var(--color-shadow-product);
+}

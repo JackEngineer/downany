@@ -124,15 +124,15 @@
 - Create: `website/src/components/core-interactions.test.tsx`
 - Create: `website/src/App.test.tsx`
 
-- [ ] 写失败测试，验证首屏允许文案、无虚假统计/eyebrow、Release 各状态下的按钮文案和链接、Windows 缺失时的准备中状态。
+- [x] 写失败测试，验证首屏允许文案、无虚假统计/eyebrow、Release 各状态下的按钮文案和链接、Windows 缺失时的准备中状态。
 
-- [ ] 写失败测试，验证 FAQ 一次只展开一项、再次点击关闭、`aria-expanded` 正确。
+- [x] 写失败测试，验证 FAQ 一次只展开一项、再次点击关闭、`aria-expanded` 正确。
 
-- [ ] 写失败测试，验证移动菜单可打开、Escape 关闭、点击导航后关闭、关闭后焦点返回菜单按钮。
+- [x] 写失败测试，验证移动菜单可打开、Escape 关闭、点击导航后关闭、关闭后焦点返回菜单按钮。
 
-- [ ] 实现 `siteContent.ts` 和最小组件逻辑，使上述测试逐个变绿；禁止在组件中复制大段文案。
+- [x] 实现 `siteContent.ts` 和最小组件逻辑，使上述测试逐个变绿；禁止在组件中复制大段文案。
 
-- [ ] 运行聚焦测试：
+- [x] 运行聚焦测试：
 
   ```bash
   cd website && npm test -- --run src/components/core-interactions.test.tsx src/App.test.tsx
@@ -155,15 +155,15 @@
 - Create: `website/public/assets/recognition-media.png`
 - Modify: `website/index.html`
 
-- [ ] 将仓库品牌标志与已确认产品预览复制为独立生产资源；使用内置图片生成能力制作与视觉方案一致、无文字和 UI 的网页识别媒体图，并逐张目视检查。
+- [x] 将仓库品牌标志与已确认产品预览复制为独立生产资源；使用内置图片生成能力制作与视觉方案一致、无文字和 UI 的网页识别媒体图，并逐张目视检查。
 
-- [ ] 实现 `SiteHeader → Hero → Workflow → RecognitionSpotlight → CapabilityList → DownloadPanel → Faq → SiteFooter` 的固定结构；每个分区只承担一个职责。
+- [x] 实现 `SiteHeader → Hero → Workflow → RecognitionSpotlight → CapabilityList → DownloadPanel → Faq → SiteFooter` 的固定结构；每个分区只承担一个职责。
 
-- [ ] 用 Phosphor `regular` 图标实现流程、能力和平台语义；品牌标志继续使用仓库 SVG。
+- [x] 用 Phosphor `regular` 图标实现流程、能力和平台语义；品牌标志继续使用仓库 SVG。
 
-- [ ] 补充标题、description、Open Graph、favicon 与稳定的图片尺寸；首屏产品图预加载，非首屏媒体懒加载。
+- [x] 补充标题、description、Open Graph、favicon 与稳定的图片尺寸；首屏产品图预加载，非首屏媒体懒加载。
 
-- [ ] 运行：
+- [x] 运行：
 
   ```bash
   cd website && npm test -- --run && npm run typecheck
@@ -180,13 +180,13 @@
 - Create: `website/src/styles/site.css`
 - Modify: `website/src/main.tsx`
 
-- [ ] 将规格中的颜色、排版、间距、圆角与焦点样式建立为语义 Token；组件样式只引用 Token。
+- [x] 将规格中的颜色、排版、间距、圆角与焦点样式建立为语义 Token；组件样式只引用 Token。
 
-- [ ] 完成桌面 `1440 × 900`、平板与移动 `390 × 844` 布局；桌面首屏采用 `36% / 64%`，移动端采用纵向 CTA 和时间线。
+- [x] 完成桌面 `1440 × 900`、平板与移动 `390 × 844` 布局；桌面首屏采用 `36% / 64%`，移动端采用纵向 CTA 和时间线。
 
-- [ ] 仅在 `RecognitionSpotlight` 实现一次 Reading Glass；加入 `backdrop-filter` 不支持、`prefers-reduced-motion` 与 `prefers-reduced-transparency` 的实色降级。
+- [x] 仅在 `RecognitionSpotlight` 实现一次 Reading Glass；加入 `backdrop-filter` 不支持、`prefers-reduced-motion` 与 `prefers-reduced-transparency` 的实色降级。
 
-- [ ] 检查所有交互目标至少 `44 × 44px`、焦点环可见、页面无横向滚动；普通表面不使用投影，产品窗口只保留轻微抬升阴影。
+- [x] 检查所有交互目标至少 `44 × 44px`、焦点环可见、页面无横向滚动；普通表面不使用投影，产品窗口只保留轻微抬升阴影。
 
 ### Task 7: 自动化验证与生产构建
 
@@ -194,7 +194,7 @@
 
 - Modify: 仅针对验证发现的问题修改 `website/src/**`
 
-- [ ] 运行完整验证：
+- [x] 运行完整验证：
 
   ```bash
   cd website && npm test -- --run && npm run typecheck && npm run build && npm run test:sites
@@ -202,7 +202,7 @@
 
   Expected: 全部命令退出码为 0，Sites-ready 三个产物存在。
 
-- [ ] 检查生产包不含概念总览图或开发占位词：
+- [x] 检查生产包不含概念总览图或开发占位词：
 
   ```bash
   rg -n "downany-website-concept|TODO|TBD|placeholder" website/dist/client website/src
@@ -210,7 +210,7 @@
 
   Expected: 无匹配；若有匹配，必须修正后重新构建。
 
-- [ ] 运行 `git diff --check`，确认无空白错误，并检查未暂存内容不含密钥、私有配置或无关产物。
+- [x] 运行 `git diff --check`，确认无空白错误，并检查未暂存内容不含密钥、私有配置或无关产物。
 
 ### Task 8: 内置浏览器与 Design QA
 
