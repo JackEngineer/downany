@@ -223,18 +223,18 @@
 - Create: `website/qa/comparison-mobile.png`
 - Modify: 仅针对视觉验收发现的问题修改 `website/src/**`
 
-- [ ] 启动本地预览，使用 Codex 内置 Browser 的 IAB 实例打开网站；不得静默切换为外部 Chrome。
+- [x] 启动本地预览，使用 Codex 内置 Browser 的 IAB 实例打开网站；不得静默切换为外部 Chrome。
 
-- [ ] 在 `1440 × 900` 验证导航、两个平台 CTA、Release 降级、FAQ、外链、控制台和横向溢出，并保存桌面截图。
+- [x] 在 `1440 × 900` 验证导航、两个平台 CTA、Release 降级、FAQ、外链、控制台和横向溢出，并保存桌面截图。
 
-- [ ] 在 `390 × 844` 验证移动菜单、Escape、CTA、时间线、Reading Glass、FAQ 和横向溢出，并保存移动截图。
+- [x] 在 `390 × 844` 验证移动菜单、Escape、CTA、时间线、Reading Glass、FAQ 和横向溢出，并保存移动截图。
 
-- [ ] 将参考图与同尺寸实现截图合成到同一比较输入；至少记录首屏、三步流程、网页识别、能力/下载/FAQ、移动端五项视觉差异，修正后重新比较。
+- [x] 将参考图与同尺寸实现截图合成到同一比较输入；至少记录首屏、三步流程、网页识别、能力/下载/FAQ、移动端五项视觉差异，修正后重新比较。
 
-- [ ] 在 `website/design-qa.md` 记录来源、浏览器、视口、交互、可见偏差与修正，最后一行必须是：
+- [x] 在 `website/design-qa.md` 记录来源、浏览器、视口、交互、可见偏差与修正，最后一行必须是：
 
   ```text
   final result: passed
   ```
 
-- [ ] 再运行一次完整测试、类型检查、构建、Sites 测试与 `git diff --check`，仅在全部通过后提交网站实现；不推送远端。
+- [x] 再运行一次完整测试、类型检查、构建、Sites 测试与 `git diff --check`，仅在全部通过后提交网站实现；不推送远端。
