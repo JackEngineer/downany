@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.node.json --noEmit && vite build",
     "test": "vitest run --config vitest.config.ts",
-    "test:electron-layout:unit": "node --test scripts/electron-layout/cleanup.test.cjs",
+    "test:electron-layout:unit": "node --test scripts/electron-layout/cleanup.test.cjs scripts/electron-layout/verification-utils.test.cjs",
     "test:electron-layout": "vite build --mode development && electron scripts/verify-ui-geometry.cjs",
     "start": "electron .",
     "dist:mac": "electron-builder --mac --config electron-builder.yml",

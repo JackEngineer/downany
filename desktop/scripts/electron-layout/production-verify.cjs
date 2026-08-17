@@ -1,15 +1,10 @@
+const { assert, waitFor } = require("./verification-utils.cjs");
+
 const VIEWPORT_WIDTH = 760;
 const PRODUCTION_SMALL_HEIGHT = 560;
 const PRODUCTION_CONSTRAINED_HEIGHT = 400;
 const PRODUCTION_LARGE_WIDTH = 1120;
 const PRODUCTION_LARGE_HEIGHT = 760;
-
-function assert(condition, message, details) {
-  if (!condition) {
-    const suffix = details ? `\n${JSON.stringify(details, null, 2)}` : "";
-    throw new Error(`${message}${suffix}`);
-  }
-}
 
 function assertOpaqueRgb(color, expected, message, details) {
   const match = color.match(
@@ -24,28 +19,6 @@ function assertOpaqueRgb(color, expected, message, details) {
     message,
     details,
   );
-}
-
-async function waitFor(win, expression, label) {
-  const result = await win.webContents.executeJavaScript(
-    `new Promise((resolve, reject) => {
-      const startedAt = performance.now();
-      const probe = () => {
-        if (${expression}) {
-          resolve(true);
-          return;
-        }
-        if (performance.now() - startedAt > 10000) {
-          reject(new Error(${JSON.stringify(`等待 ${label} 超时`)}));
-          return;
-        }
-        requestAnimationFrame(probe);
-      };
-      probe();
-    })`,
-    true,
-  );
-  assert(result === true, `${label} 未就绪`);
 }
 
 async function inspectProductionGeometry(win) {
