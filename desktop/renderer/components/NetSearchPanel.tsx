@@ -12,7 +12,6 @@ import { TextField } from "./ui/TextField";
 const SEARCH_PLATFORMS = [
   { key: "youtube", label: "YouTube" },
   { key: "bilibili", label: "Bilibili" },
-  { key: "pornhub", label: "Pornhub" },
 ] as const;
 
 function formatDuration(seconds: number): string {

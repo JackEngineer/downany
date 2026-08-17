@@ -54,6 +54,10 @@ describe("NetSearchPanel", () => {
 
     expect(screen.getByRole("heading", { name: "网络视频" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "搜索平台" })).toHaveValue("youtube");
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "YouTube",
+      "Bilibili",
+    ]);
     expect(screen.getByRole("searchbox", { name: "搜索网络视频" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "搜索" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "返回下载列表" })).toBeInTheDocument();

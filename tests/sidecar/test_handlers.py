@@ -383,6 +383,24 @@ def test_search_query_validation(tmp_path):
     assert Platform.TWITTER.value == "twitter"
 
 
+def test_search_query_rejects_removed_pornhub_search(tmp_path, monkeypatch):
+    ctx, _ = _ctx(tmp_path)
+    _inline_threads(monkeypatch)
+    monkeypatch.setattr(
+        "src.sidecar.handlers.SearchEngine.search",
+        lambda *_args, **_kwargs: [],
+    )
+
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(
+            ctx,
+            Method.SEARCH_QUERY.value,
+            {"query": "x", "platform": "pornhub"},
+        )
+
+    assert exc_info.value.code == ErrorCode.INVALID_PARAMS
+
+
 def test_download_reorder(tmp_path):
     ctx, _ = _ctx(tmp_path)
     created = dispatch(
