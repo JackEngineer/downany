@@ -7,6 +7,8 @@ import type { AppSnapshot } from "./lib/types";
 import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
+document.documentElement.dataset.platform = window.api.platform;
+
 function Bootstrap() {
   useEffect(() => {
     let alive = true;

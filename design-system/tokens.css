@@ -1,0 +1,195 @@
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --gray-1000: #0b0d10;
+  --gray-950: #101318;
+  --gray-900: #15191f;
+  --gray-850: #1b2027;
+  --gray-700: #343a45;
+  --gray-500: #89919d;
+  --gray-300: #c5cad2;
+  --gray-100: #f4f6f8;
+  --blue-500: #5b7cfa;
+  --green-500: #5fcb72;
+  --amber-500: #d8a54b;
+  --red-500: #e56d73;
+
+  --color-surface-window: var(--gray-1000);
+  --color-surface-chrome: rgba(16, 19, 24, 0.94);
+  --color-surface-raised: var(--gray-900);
+  --color-surface-control: rgba(255, 255, 255, 0.035);
+  --color-surface-control-hover: rgba(255, 255, 255, 0.065);
+  --color-surface-control-pressed: rgba(255, 255, 255, 0.09);
+  --color-text-primary: rgba(255, 255, 255, 0.92);
+  --color-text-secondary: rgba(255, 255, 255, 0.64);
+  --color-text-tertiary: rgba(255, 255, 255, 0.42);
+  --color-text-on-media: rgba(255, 255, 255, 0.94);
+  --color-text-on-media-secondary: rgba(255, 255, 255, 0.66);
+  --color-text-on-media-tertiary: rgba(255, 255, 255, 0.42);
+  --color-stroke-subtle: rgba(255, 255, 255, 0.08);
+  --color-stroke-strong: rgba(255, 255, 255, 0.14);
+  --color-accent: var(--blue-500);
+  --color-accent-soft: rgba(91, 124, 250, 0.16);
+  --color-success: var(--green-500);
+  --color-warning: var(--amber-500);
+  --color-danger: var(--red-500);
+  --color-focus-ring: rgba(91, 124, 250, 0.46);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --gray-1000: #0b0d10;
+  --gray-950: #101318;
+  --gray-900: #15191f;
+  --gray-850: #1b2027;
+  --gray-700: #343a45;
+  --gray-500: #89919d;
+  --gray-300: #c5cad2;
+  --gray-100: #f4f6f8;
+  --blue-500: #5b7cfa;
+  --green-500: #5fcb72;
+  --amber-500: #d8a54b;
+  --red-500: #e56d73;
+
+  --color-surface-window: #f2f3f5;
+  --color-surface-chrome: rgba(248, 249, 251, 0.96);
+  --color-surface-raised: #ffffff;
+  --color-surface-control: rgba(17, 19, 23, 0.035);
+  --color-surface-control-hover: rgba(17, 19, 23, 0.065);
+  --color-surface-control-pressed: rgba(17, 19, 23, 0.095);
+  --color-text-primary: rgba(17, 19, 23, 0.92);
+  --color-text-secondary: rgba(17, 19, 23, 0.62);
+  --color-text-tertiary: rgba(17, 19, 23, 0.42);
+  --color-text-on-media: rgba(255, 255, 255, 0.94);
+  --color-text-on-media-secondary: rgba(255, 255, 255, 0.66);
+  --color-text-on-media-tertiary: rgba(255, 255, 255, 0.42);
+  --color-stroke-subtle: rgba(17, 19, 23, 0.09);
+  --color-stroke-strong: rgba(17, 19, 23, 0.15);
+  --color-accent: #4f6ee8;
+  --color-accent-soft: rgba(79, 110, 232, 0.13);
+  --color-success: #3e9f54;
+  --color-warning: #a56d16;
+  --color-danger: #c84f58;
+  --color-focus-ring: rgba(79, 110, 232, 0.38);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --gray-1000: #0b0d10;
+    --gray-950: #101318;
+    --gray-900: #15191f;
+    --gray-850: #1b2027;
+    --gray-700: #343a45;
+    --gray-500: #89919d;
+    --gray-300: #c5cad2;
+    --gray-100: #f4f6f8;
+    --blue-500: #5b7cfa;
+    --green-500: #5fcb72;
+    --amber-500: #d8a54b;
+    --red-500: #e56d73;
+
+    --color-surface-window: #f2f3f5;
+    --color-surface-chrome: rgba(248, 249, 251, 0.96);
+    --color-surface-raised: #ffffff;
+    --color-surface-control: rgba(17, 19, 23, 0.035);
+    --color-surface-control-hover: rgba(17, 19, 23, 0.065);
+    --color-surface-control-pressed: rgba(17, 19, 23, 0.095);
+    --color-text-primary: rgba(17, 19, 23, 0.92);
+    --color-text-secondary: rgba(17, 19, 23, 0.62);
+    --color-text-tertiary: rgba(17, 19, 23, 0.42);
+    --color-text-on-media: rgba(255, 255, 255, 0.94);
+    --color-text-on-media-secondary: rgba(255, 255, 255, 0.66);
+    --color-text-on-media-tertiary: rgba(255, 255, 255, 0.42);
+    --color-stroke-subtle: rgba(17, 19, 23, 0.09);
+    --color-stroke-strong: rgba(17, 19, 23, 0.15);
+    --color-accent: #4f6ee8;
+    --color-accent-soft: rgba(79, 110, 232, 0.13);
+    --color-success: #3e9f54;
+    --color-warning: #a56d16;
+    --color-danger: #c84f58;
+    --color-focus-ring: rgba(79, 110, 232, 0.38);
+  }
+}
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC",
+    sans-serif;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-small: 6px;
+  --radius-control: 8px;
+  --radius-banner: 10px;
+  --radius-popover: 12px;
+  --radius-dialog: 14px;
+  --control-height-small: 28px;
+  --control-height: 32px;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --material-task-glass-width: 58%;
+  --material-task-glass-blur: 40px;
+  --material-task-glass-saturate: 1.2;
+  --material-task-glass-tint-dark: rgba(15, 17, 20, 0.34);
+  --material-task-glass-tint-medium: rgba(15, 17, 20, 0.42);
+  --material-task-glass-tint-light: rgba(15, 17, 20, 0.5);
+  --material-task-glass-tint-weak-dark: rgba(15, 17, 20, 0.38);
+  --material-task-glass-tint-weak-medium: rgba(15, 17, 20, 0.46);
+  --material-task-glass-tint-weak-light: rgba(15, 17, 20, 0.54);
+  --material-task-glass-tint: var(--material-task-glass-tint-medium);
+  --material-task-glass-lift: rgba(255, 255, 255, 0.025);
+  --material-task-glass-fallback: rgba(15, 17, 20, 0.9);
+  --material-task-glass-feather: 108px;
+  --material-task-ambient-weak-blur: 22px;
+  --material-task-ambient-weak-brightness: 0.62;
+  --material-task-ambient-weak-saturate: 0.88;
+  --material-task-ambient-weak-scale: 1.08;
+  --material-task-focus-width: 48%;
+  --material-task-focus-feather: 88px;
+  --material-task-shade: rgba(0, 0, 0, 0.09);
+  --material-task-progress-track: rgba(255, 255, 255, 0.12);
+  --material-action-glass-blur: 24px;
+  --material-action-glass-fill: rgba(255, 255, 255, 0.1);
+  --material-action-glass-stroke: rgba(255, 255, 255, 0.14);
+  --material-action-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --material-action-media-fill: rgba(12, 15, 19, 0.68);
+  --material-action-media-fill-hover: rgba(12, 15, 19, 0.82);
+  --material-action-media-fill-pressed: rgba(12, 15, 19, 0.9);
+  --material-action-media-fill-opaque: #181c22;
+  --material-action-media-fill-opaque-hover: #202630;
+  --material-action-media-fill-opaque-pressed: #11151a;
+  --material-action-media-stroke: rgba(255, 255, 255, 0.3);
+  --material-action-media-stroke-focus: rgba(255, 255, 255, 0.48);
+  --material-action-media-text: rgba(255, 255, 255, 0.96);
+  --material-action-media-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --material-action-media-focus-inner: #0b0d10;
+  --material-action-media-focus-outer: #5b7cfa;
+  --elevation-overlay: 0 14px 36px rgba(0, 0, 0, 0.32);
+  --material-media-placeholder-start: #252b34;
+  --material-media-placeholder-middle: #11151a;
+  --material-media-placeholder-end: #303844;
+
+  /* 迁移期间兼容现有页面；组件完成迁移后单独删除。 */
+  --bg: var(--color-surface-window);
+  --panel: var(--color-surface-control);
+  --panel-solid: var(--color-surface-raised);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-stroke-subtle);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --danger: var(--color-danger);
+  --hover: var(--color-surface-control-hover);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --focus-ring: var(--color-focus-ring);
+}

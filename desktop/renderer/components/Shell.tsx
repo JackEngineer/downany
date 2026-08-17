@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 
 import { submitAddText } from "../lib/addFlow";
+import { useDocumentTheme } from "../lib/documentTheme";
 import { useAppStore } from "../store/appStore";
 import { AddConfirmDialog } from "./AddConfirmDialog";
 import { ConnectionGate } from "./ConnectionGate";
 import { HistorySection } from "./HistorySection";
+import { NetSearchPanel } from "./NetSearchPanel";
 import { TaskList } from "./TaskList";
 import { ToastHost } from "./ToastHost";
-import { TopBar } from "./TopBar";
+import { ActionBar } from "./shell/ActionBar";
+import { FilterBar } from "./shell/FilterBar";
+import { WindowChrome } from "./shell/WindowChrome";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -19,7 +23,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function Shell() {
   const connection = useAppStore((s) => s.connection);
   const filter = useAppStore((s) => s.filter);
+  const searchMode = useAppStore((s) => s.searchMode);
   const settings = useAppStore((s) => s.settings);
+
+  useDocumentTheme(settings?.theme_mode);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -64,11 +71,14 @@ export function Shell() {
     return window.api.onNavigate((next) => {
       const store = useAppStore.getState();
       if (next === "new") {
+        store.setSearchMode("filter");
         store.setFilter("all");
         store.requestAddFocus();
       } else if (next === "queue") {
+        store.setSearchMode("filter");
         store.setFilter("active");
       } else if (next === "history") {
+        store.setSearchMode("filter");
         store.setFilter("history");
       } else if (next === "settings") {
         void window.api.openSettings();
@@ -83,8 +93,8 @@ export function Shell() {
         const el = document.getElementById(`task-${taskId}`);
         if (!el) return;
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("card-flash");
-        window.setTimeout(() => el.classList.remove("card-flash"), 1800);
+        el.classList.add("media-task-banner--flash");
+        window.setTimeout(() => el.classList.remove("media-task-banner--flash"), 1800);
       }, 60);
     });
   }, []);
@@ -111,27 +121,6 @@ export function Shell() {
     });
   }, []);
 
-  useEffect(() => {
-    const applySystem = async (mode?: "light" | "dark") => {
-      const themeMode = useAppStore.getState().settings?.theme_mode || "system";
-      if (themeMode !== "system") return;
-      const resolved = mode || (await window.api.getNativeTheme());
-      document.documentElement.setAttribute("data-theme", resolved);
-    };
-    void applySystem();
-    return window.api.onNativeTheme((mode) => {
-      void applySystem(mode);
-    });
-  }, [settings?.theme_mode]);
-
-  useEffect(() => {
-    const themeMode = settings?.theme_mode || "system";
-    void window.api.setThemeSource(themeMode);
-    if (themeMode !== "system") {
-      document.documentElement.setAttribute("data-theme", themeMode);
-    }
-  }, [settings?.theme_mode]);
-
   if (connection === "failed") {
     return (
       <>
@@ -142,10 +131,21 @@ export function Shell() {
   }
 
   return (
-    <div className="window-shell">
-      <TopBar />
-      <main className="window-main" id="main">
-        {filter === "history" ? <HistorySection /> : <TaskList />}
+    <div className="window-shell" data-platform={window.api.platform}>
+      <WindowChrome />
+      <ActionBar />
+      {searchMode === "filter" ? <FilterBar /> : null}
+      <main
+        className={searchMode === "network" ? "window-main window-main--search" : "window-main"}
+        id="main"
+      >
+        {searchMode === "network" ? (
+          <NetSearchPanel />
+        ) : filter === "history" ? (
+          <HistorySection />
+        ) : (
+          <TaskList />
+        )}
       </main>
       <AddConfirmDialog />
       <ToastHost />

@@ -5,6 +5,7 @@ macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar
 ## 功能
 
 - **平台识别**：YouTube、Bilibili、抖音、TikTok、Twitter、Instagram、Pornhub 等
+- **网络搜索**：支持 YouTube、Bilibili，搜索结果可直接加入下载列表
 - **下载工作台**：单条 / 批量 URL 解析与入队
 - **队列管理**：可配置并发、暂停 / 恢复 / 取消 / 重试、实时进度
 - **历史记录**：SQLite 存储，可检索与重新下载

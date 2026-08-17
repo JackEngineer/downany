@@ -3,6 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { app, BrowserWindow, Rectangle, screen } from "electron";
 
+import { MAIN_WINDOW_GEOMETRY } from "./windowChrome";
+
 export interface WindowState {
   x?: number;
   y?: number;
@@ -12,8 +14,8 @@ export interface WindowState {
 }
 
 const DEFAULT_STATE: WindowState = {
-  width: 1100,
-  height: 720,
+  width: MAIN_WINDOW_GEOMETRY.width,
+  height: MAIN_WINDOW_GEOMETRY.height,
 };
 
 function statePath(): string {

@@ -1,7 +1,11 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, nativeTheme } from "electron";
 import * as path from "node:path";
 
-import { windowChromeOptions } from "./windowChrome";
+import {
+  resolveWindowBackground,
+  windowChromeOptions,
+  type WindowThemeSource,
+} from "./windowChrome";
 
 let settingsWindow: BrowserWindow | null = null;
 
@@ -19,6 +23,14 @@ export function openSettingsWindow(preloadPath: string): BrowserWindow {
     title: "设置",
     show: false,
     ...windowChromeOptions(),
+    ...(process.platform === "darwin"
+      ? {}
+      : {
+          backgroundColor: resolveWindowBackground(
+            nativeTheme.themeSource as WindowThemeSource,
+            nativeTheme.shouldUseDarkColors,
+          ),
+        }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

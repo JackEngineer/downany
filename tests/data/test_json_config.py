@@ -2,6 +2,19 @@ import src.data.json_config as json_config
 from src.data.json_config import JsonConfig
 
 
+def test_new_config_defaults_to_dark(tmp_path):
+    cfg = JsonConfig(str(tmp_path / "config.json"))
+    assert cfg.get_theme_mode() == "dark"
+
+
+def test_saved_theme_modes_are_preserved(tmp_path):
+    for mode in ("light", "dark", "system"):
+        path = tmp_path / mode / "config.json"
+        path.parent.mkdir()
+        path.write_text(f'{{"theme_mode": "{mode}"}}', encoding="utf-8")
+        assert JsonConfig(str(path)).get_theme_mode() == mode
+
+
 def test_defaults_and_roundtrip(tmp_path):
     path = tmp_path / "config.json"
     cfg = JsonConfig(str(path))

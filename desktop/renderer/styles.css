@@ -1,70 +1,8 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f3f4f6;
-  --panel: rgba(255, 255, 255, 0.72);
-  --panel-solid: #ffffff;
-  --text: #111827;
-  --muted: #6b7280;
-  --line: rgba(0, 0, 0, 0.08);
-  --accent: #0a66d8;
-  --accent-soft: rgba(10, 102, 216, 0.12);
-  --danger: #b91c1c;
-  --hover: rgba(0, 0, 0, 0.045);
-  font-family: "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
-}
-
-html[data-theme="light"] {
-  color-scheme: light;
-}
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #0b1220;
-  --panel: rgba(30, 32, 38, 0.66);
-  --panel-solid: #1c1f26;
-  --text: #f9fafb;
-  --muted: #9ca3af;
-  --line: rgba(255, 255, 255, 0.1);
-  --accent: #3b82f6;
-  --accent-soft: rgba(59, 130, 246, 0.2);
-  --hover: rgba(255, 255, 255, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0b1220;
-    --panel: rgba(30, 32, 38, 0.66);
-    --panel-solid: #1c1f26;
-    --text: #f9fafb;
-    --muted: #9ca3af;
-    --line: rgba(255, 255, 255, 0.1);
-    --accent: #3b82f6;
-    --accent-soft: rgba(59, 130, 246, 0.2);
-    --hover: rgba(255, 255, 255, 0.06);
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  background: transparent;
-}
-
-body {
-  margin: 0;
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+@import "../../design-system/tokens.css";
+@import "./styles/foundations.css";
+@import "./styles/ui.css";
+@import "./styles/shell.css";
+@import "./styles/media-task-banner.css";
 
 /* ── 单窗口布局 ───────────────────────────── */
 
@@ -72,159 +10,6 @@ select {
   display: flex;
   flex-direction: column;
   height: 100vh;
-}
-
-.topbar {
-  -webkit-app-region: drag;
-  padding: 14px 16px 0 88px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.topbar input,
-.topbar button,
-.topbar summary,
-.topbar select {
-  -webkit-app-region: no-drag;
-}
-
-.topbar-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.topbar-add {
-  flex: 1;
-  min-width: 0;
-}
-
-.topbar-search {
-  width: 200px;
-  flex-shrink: 0;
-}
-
-.topbar-search-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.search-mode-toggle {
-  display: flex;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.search-mode-toggle .mode {
-  border: none;
-  border-radius: 0;
-  padding: 5px 8px;
-  font-size: 12px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.search-mode-toggle .mode.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.net-platform {
-  flex-shrink: 0;
-  padding: 4px 6px;
-  font-size: 12px;
-}
-
-.net-results {
-  margin-top: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  backdrop-filter: blur(18px);
-  padding: 8px 10px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.net-results-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.net-results-close {
-  font-size: 12px;
-  padding: 2px 8px;
-}
-
-.net-results-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.net-result-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.net-thumb {
-  width: 72px;
-  height: 42px;
-  object-fit: cover;
-  border-radius: 6px;
-  flex-shrink: 0;
-  background: rgba(128, 128, 128, 0.2);
-}
-
-.net-thumb-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.net-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.net-title {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.net-meta {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.net-add {
-  flex-shrink: 0;
-  font-size: 12px;
-  padding: 4px 10px;
-}
-
-.topbar-settings,
-.topbar-extract {
-  flex-shrink: 0;
 }
 
 .link-btn {
@@ -237,66 +22,7 @@ select {
   text-decoration: underline;
 }
 
-.topbar-menu {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.topbar-menu summary {
-  list-style: none;
-  appearance: none;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.topbar-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.topbar-menu[open] summary {
-  background: var(--hover);
-}
-
-.topbar-menu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  min-width: 160px;
-  background: var(--panel-solid);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 40;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-}
-
-.topbar-menu-list button {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  white-space: nowrap;
-  border-radius: 6px;
-  padding: 7px 10px;
-}
-
-.topbar-menu-list button:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.segments {
-  display: flex;
-  gap: 4px;
-}
-
-.segment {
+.settings-tabs > button {
   border: 1px solid transparent;
   background: transparent;
   border-radius: 999px;
@@ -304,29 +30,17 @@ select {
   color: var(--muted);
 }
 
-.segment:hover {
+.settings-tabs > button:hover {
   background: var(--hover);
 }
 
-.segment.active {
+.settings-tabs > button.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
 
-.window-main {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px 16px 28px;
-}
-
 /* ── 下载卡片 ───────────────────────────── */
-
-.download-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 
 .playlist-group {
   margin: 10px 0 16px;
@@ -487,16 +201,6 @@ button.solid-danger {
   border-top: 1px solid var(--line);
 }
 
-.playlist-group-list .download-card {
-  padding: 8px 10px;
-  border-radius: 10px;
-}
-
-.playlist-group-list .card-thumb {
-  width: 80px;
-  height: 45px;
-}
-
 @media (max-width: 640px) {
   .playlist-group-delete {
     grid-template-columns: 1fr;
@@ -507,33 +211,7 @@ button.solid-danger {
   }
 }
 
-.download-card {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: 12px;
-}
-
-.download-card:hover {
-  background: var(--hover);
-}
-
-@keyframes card-flash {
-  0%,
-  60% {
-    background: var(--accent-soft);
-  }
-  100% {
-    background: transparent;
-  }
-}
-
-.download-card.card-flash {
-  animation: card-flash 1.8s ease-out;
-}
-
-.card-thumb {
+.add-confirm-dialog__thumbnail {
   width: 96px;
   height: 54px;
   border-radius: 8px;
@@ -542,36 +220,11 @@ button.solid-danger {
   flex-shrink: 0;
 }
 
-.card-thumb-placeholder {
+.add-confirm-dialog__thumbnail-placeholder {
   display: grid;
   place-items: center;
   color: var(--muted);
   font-size: 20px;
-}
-
-.card-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.card-title {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.card-subtitle {
-  font-size: 12px;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.card-meta {
-  font-size: 12px;
 }
 
 .card-actions {
@@ -585,98 +238,6 @@ button.solid-danger {
 .card-actions button {
   padding: 4px 10px;
   font-size: 12px;
-}
-
-.card-badges {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
-
-.badge {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-
-.badge-accent {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: transparent;
-}
-
-.card-title-input {
-  width: 100%;
-  font-weight: 600;
-  padding: 4px 8px;
-}
-
-.card-menu {
-  position: relative;
-}
-
-.card-menu summary {
-  list-style: none;
-  appearance: none;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-  text-align: center;
-}
-
-.card-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.card-menu[open] summary {
-  background: var(--hover);
-}
-
-.card-menu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  min-width: 168px;
-  background: var(--panel-solid);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 40;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-}
-
-.card-menu-list button {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  white-space: nowrap;
-  border-radius: 6px;
-  padding: 7px 10px;
-}
-
-.card-menu-list button:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.card-menu-list button.menu-checked {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.card-menu-list button.menu-danger {
-  color: var(--danger);
 }
 
 .confirm-options {
@@ -705,25 +266,6 @@ button.solid-danger {
 
 /* ── 空态 / 拖拽提示 ─────────────────────── */
 
-.drop-hint {
-  height: 100%;
-  display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 8px;
-  color: var(--muted);
-  -webkit-app-region: drag;
-}
-
-.drop-hint-icon {
-  font-size: 44px;
-  line-height: 1;
-}
-
-.drop-hint p {
-  margin: 0;
-}
-
 .empty-state {
   height: 100%;
   display: grid;
@@ -731,31 +273,30 @@ button.solid-danger {
   text-align: center;
   gap: 12px;
   padding: 24px;
+  max-width: 360px;
+  margin: 0 auto;
   -webkit-app-region: drag;
 }
 
 .empty-state-icon {
-  font-size: 44px;
-  line-height: 1;
+  color: var(--accent);
+  margin: 0 auto;
 }
 
 .empty-state-title {
   margin: 0;
   font-size: 18px;
+  line-height: 24px;
 }
 
-.empty-state-steps {
-  margin: 0 auto;
-  padding-left: 1.2rem;
-  text-align: left;
+.empty-state-copy {
+  margin: 0;
   color: var(--muted);
-  max-width: 420px;
+  line-height: 1.5;
 }
 
-.empty-state-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
+.empty-state .ui-button {
+  justify-self: center;
   -webkit-app-region: no-drag;
 }
 
@@ -773,10 +314,6 @@ button.solid-danger {
 
 .sites-panel .muted {
   grid-column: 1 / -1;
-}
-
-.drop-hint p {
-  margin: 0;
 }
 
 .list-empty {
@@ -902,21 +439,6 @@ button.primary {
 
 button.danger {
   color: var(--danger);
-}
-
-.progress-bar {
-  height: 5px;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-  margin: 8px 0 6px;
-}
-
-.progress-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
 }
 
 /* ── 设置窗口 ───────────────────────────── */
@@ -1115,7 +637,7 @@ button.danger {
   gap: 8px;
 }
 
-.confirm-row.confirm-row-compact .card-thumb {
+.confirm-row.confirm-row-compact .add-confirm-dialog__thumbnail {
   display: none;
 }
 

@@ -7,6 +7,7 @@ import { TelegramSettingsTab } from "./components/TelegramSettingsTab";
 import { ToastHost } from "./components/ToastHost";
 import { request } from "./lib/api";
 import { getLocale, setLocale, t, type Locale } from "./i18n";
+import { useDocumentTheme } from "./lib/documentTheme";
 import type { AppSettings } from "./lib/types";
 import { useAppStore } from "./store/appStore";
 
@@ -31,6 +32,8 @@ const TABS: { key: TabKey; label: string }[] = [
 
 function useBootstrap() {
   const themeMode = useAppStore((s) => s.settings?.theme_mode);
+
+  useDocumentTheme(themeMode);
 
   useEffect(() => {
     const store = useAppStore.getState();
@@ -57,15 +60,6 @@ function useBootstrap() {
     };
   }, []);
 
-  useEffect(() => {
-    const applyTheme = async () => {
-      const mode = useAppStore.getState().settings?.theme_mode || "system";
-      const resolved = mode === "system" ? await window.api.getNativeTheme() : mode;
-      document.documentElement.setAttribute("data-theme", resolved);
-    };
-    void applyTheme();
-    return window.api.onNativeTheme(() => void applyTheme());
-  }, [themeMode]);
 }
 
 interface TabProps {
@@ -590,7 +584,7 @@ export function SettingsApp() {
           <button
             key={t.key}
             type="button"
-            className={tab === t.key ? "segment active" : "segment"}
+            className={tab === t.key ? "settings-tab active" : "settings-tab"}
             onClick={() => setTab(t.key)}
           >
             {t.label}
