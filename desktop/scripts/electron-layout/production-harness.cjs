@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const { app, BrowserWindow, ipcMain } = require("electron");
 
+const { runBestEffortCleanup } = require("./cleanup.cjs");
 const { createFixtureSnapshot } = require("./fixture.cjs");
 
 const HANDLERS = [
@@ -71,17 +72,43 @@ function createProductionLayoutHarness() {
   }
 
   async function dispose() {
-    if (win?.webContents.debugger.isAttached()) {
-      win.webContents.debugger.detach();
-    }
-    if (win && !win.isDestroyed()) win.destroy();
+    const windowToDispose = win;
+    const shouldRemoveHandlers = handlersInstalled;
     win = null;
-    if (handlersInstalled) {
-      for (const channel of HANDLERS) ipcMain.removeHandler(channel);
-      handlersInstalled = false;
-    }
-    app.setPath("userData", originalUserData);
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    handlersInstalled = false;
+
+    await runBestEffortCleanup([
+      {
+        label: "分离生产窗口调试器",
+        run: () => {
+          if (windowToDispose?.webContents.debugger.isAttached()) {
+            windowToDispose.webContents.debugger.detach();
+          }
+        },
+      },
+      {
+        label: "销毁生产窗口",
+        run: () => {
+          if (windowToDispose && !windowToDispose.isDestroyed()) {
+            windowToDispose.destroy();
+          }
+        },
+      },
+      ...HANDLERS.map((channel) => ({
+        label: `移除 IPC handler ${channel}`,
+        run: () => {
+          if (shouldRemoveHandlers) ipcMain.removeHandler(channel);
+        },
+      })),
+      {
+        label: "恢复 Electron userData 路径",
+        run: () => app.setPath("userData", originalUserData),
+      },
+      {
+        label: "删除生产验收临时目录",
+        run: () => fs.rmSync(tempDir, { recursive: true, force: true }),
+      },
+    ]);
   }
 
   return { open, resize, dispose, tempDir };

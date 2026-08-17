@@ -2,6 +2,9 @@ const path = require("node:path");
 
 const { app, BrowserWindow } = require("electron");
 const {
+  runBestEffortCleanup,
+} = require("./electron-layout/cleanup.cjs");
+const {
   createProductionLayoutHarness,
 } = require("./electron-layout/production-harness.cjs");
 const {
@@ -270,11 +273,26 @@ async function run() {
       `${JSON.stringify({ ok: true, gallery: { geometry, focus }, production }, null, 2)}\n`,
     );
   } finally {
-    if (win?.webContents.debugger.isAttached()) {
-      win.webContents.debugger.detach();
-    }
-    if (win && !win.isDestroyed()) win.destroy();
-    await productionHarness.dispose();
+    await runBestEffortCleanup([
+      {
+        label: "分离 Gallery 调试器",
+        run: () => {
+          if (win?.webContents.debugger.isAttached()) {
+            win.webContents.debugger.detach();
+          }
+        },
+      },
+      {
+        label: "销毁 Gallery 窗口",
+        run: () => {
+          if (win && !win.isDestroyed()) win.destroy();
+        },
+      },
+      {
+        label: "释放生产路径验收资源",
+        run: () => productionHarness.dispose(),
+      },
+    ]);
   }
 }
 
