@@ -33,7 +33,7 @@
 - Rename: `website/src/App.jsx` → `website/src/App.tsx`
 - Create: `website/src/test/setup.ts`
 
-- [ ] 运行模板初始化：
+- [x] 运行模板初始化：
 
   ```bash
   node /Users/jacklee/.codex/plugins/cache/openai-curated-remote/product-design/0.1.52/scripts/bootstrap-prototype.mjs \
@@ -42,9 +42,9 @@
 
   Expected: 输出 `status: created`，且 `website/` 中存在模板的 Sites-ready 文件。
 
-- [ ] 将模板转换为 TypeScript，增加 `test`、`test:watch` 与 `typecheck` 脚本；加入 Vitest、Testing Library、TypeScript、jsdom 与 `@phosphor-icons/react`，但保持 Sites 构建脚本不变。
+- [x] 将模板转换为 TypeScript，增加 `test`、`test:watch` 与 `typecheck` 脚本；加入 Vitest、Testing Library、TypeScript、jsdom 与 `@phosphor-icons/react`，但保持 Sites 构建脚本不变。
 
-- [ ] 安装依赖：
+- [x] 安装依赖：
 
   ```bash
   cd website && npm install --prefer-offline --no-audit --no-fund
@@ -52,7 +52,7 @@
 
   Expected: `package-lock.json` 更新，安装完成且无依赖解析错误。
 
-- [ ] 验证空壳工程：
+- [x] 验证空壳工程：
 
   ```bash
   cd website && npm run typecheck && npm run build && npm run test:sites
@@ -69,9 +69,9 @@
 - Create: `website/src/lib/platform.test.ts`
 - Create: `website/src/lib/platform.ts`
 
-- [ ] 先为 `resolveReleaseAssets` 写测试，覆盖 macOS DMG、Windows EXE、Chrome 扩展、缺失 Windows、空 Release 与 Releases 页面回退。
+- [x] 先为 `resolveReleaseAssets` 写测试，覆盖 macOS DMG、Windows EXE、Chrome 扩展、缺失 Windows、空 Release 与 Releases 页面回退。
 
-- [ ] 运行测试确认 RED：
+- [x] 运行测试确认 RED：
 
   ```bash
   cd website && npm test -- --run src/lib/releases.test.ts
@@ -79,9 +79,9 @@
 
   Expected: 因模块或导出尚不存在而失败，失败信息只指向 Release 解析能力。
 
-- [ ] 实现 `GithubRelease`、`DownloadLinks` 和 `resolveReleaseAssets(release, fallbackUrl)`；资产匹配必须大小写不敏感，并返回原始 `browser_download_url`。
+- [x] 实现 `GithubRelease`、`DownloadLinks` 和 `resolveReleaseAssets(release, fallbackUrl)`；资产匹配必须大小写不敏感，并返回原始 `browser_download_url`。
 
-- [ ] 运行测试确认 GREEN：
+- [x] 运行测试确认 GREEN：
 
   ```bash
   cd website && npm test -- --run src/lib/releases.test.ts
@@ -89,7 +89,7 @@
 
   Expected: Release 解析测试全部通过。
 
-- [ ] 先为 `detectPlatform` 与 `orderPlatforms` 写测试，覆盖 `userAgentData.platform`、传统 `userAgent`、macOS、Windows 与其他平台；确认 RED 后实现最小纯函数并确认 GREEN。
+- [x] 先为 `detectPlatform` 与 `orderPlatforms` 写测试，覆盖 `userAgentData.platform`、传统 `userAgent`、macOS、Windows 与其他平台；确认 RED 后实现最小纯函数并确认 GREEN。
 
 ### Task 3: TDD 实现最新 Release 请求状态
 
@@ -98,9 +98,9 @@
 - Create: `website/src/hooks/useLatestRelease.test.tsx`
 - Create: `website/src/hooks/useLatestRelease.ts`
 
-- [ ] 写 Hook 测试，覆盖初始 `loading`、成功 `ready`、HTTP 非 2xx 的 `error`、JSON/网络失败和卸载时取消请求。
+- [x] 写 Hook 测试，覆盖初始 `loading`、成功 `ready`、HTTP 非 2xx 的 `error`、JSON/网络失败和卸载时取消请求。
 
-- [ ] 运行测试确认 RED：
+- [x] 运行测试确认 RED：
 
   ```bash
   cd website && npm test -- --run src/hooks/useLatestRelease.test.tsx
@@ -108,9 +108,9 @@
 
   Expected: 因 Hook 尚不存在而失败。
 
-- [ ] 实现 `useLatestRelease(fetcher = globalThis.fetch)`，请求 `https://api.github.com/repos/JackEngineer/downany/releases/latest`，使用 `AbortController` 并将异常稳定映射为 `error`。
+- [x] 实现 `useLatestRelease(fetcher = globalThis.fetch)`，请求 `https://api.github.com/repos/JackEngineer/downany/releases/latest`，使用 `AbortController` 并将异常稳定映射为 `error`。
 
-- [ ] 再次运行同一测试，确认 GREEN；重构时不改变状态联合类型 `loading | ready | error`。
+- [x] 再次运行同一测试，确认 GREEN；重构时不改变状态联合类型 `loading | ready | error`。
 
 ### Task 4: TDD 实现内容合同、下载状态与核心交互
 
