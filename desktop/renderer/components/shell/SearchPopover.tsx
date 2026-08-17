@@ -10,23 +10,14 @@ const SEARCH_MODES: Array<{ key: SearchMode; labelKey: string }> = [
   { key: "network", labelKey: "search.network" },
 ];
 
-const SEARCH_PLATFORMS = [
-  { key: "youtube", label: "YouTube" },
-  { key: "bilibili", label: "Bilibili" },
-  { key: "pornhub", label: "Pornhub" },
-] as const;
-
 interface SearchPopoverProps {
   open: boolean;
   mode: SearchMode;
   query: string;
-  platform: string;
   locale: Locale;
   inputRef: RefObject<HTMLInputElement>;
   onModeChange: (mode: SearchMode) => void;
   onQueryChange: (query: string) => void;
-  onPlatformChange: (platform: string) => void;
-  onSubmitNetwork: () => void;
   onClose: () => void;
 }
 
@@ -91,38 +82,17 @@ export function SearchPopover(props: SearchPopoverProps) {
           </Button>
         ))}
       </div>
-      {props.mode === "network" ? (
-        <select
-          aria-label={t("search.platform.label", props.locale)}
-          value={props.platform}
-          onChange={(event) => props.onPlatformChange(event.target.value)}
-        >
-          {SEARCH_PLATFORMS.map((platform) => (
-            <option key={platform.key} value={platform.key}>
-              {platform.label}
-            </option>
-          ))}
-        </select>
+      {props.mode === "filter" ? (
+        <TextField
+          ref={props.inputRef}
+          leadingIcon="search"
+          type="search"
+          aria-label={t("search.input.label", props.locale)}
+          placeholder={t("search.placeholder", props.locale)}
+          value={props.query}
+          onChange={(event) => props.onQueryChange(event.target.value)}
+        />
       ) : null}
-      <TextField
-        ref={props.inputRef}
-        leadingIcon="search"
-        type="search"
-        aria-label={t("search.input.label", props.locale)}
-        placeholder={
-          props.mode === "network"
-            ? t("search.network.placeholder", props.locale)
-            : t("search.placeholder", props.locale)
-        }
-        value={props.query}
-        onChange={(event) => props.onQueryChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && props.mode === "network") {
-            event.preventDefault();
-            props.onSubmitNetwork();
-          }
-        }}
-      />
       <IconButton
         icon="close"
         label={t("search.close", props.locale)}

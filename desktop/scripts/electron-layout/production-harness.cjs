@@ -5,7 +5,10 @@ const path = require("node:path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 
 const { runBestEffortCleanup } = require("./cleanup.cjs");
-const { createFixtureSnapshot } = require("./fixture.cjs");
+const {
+  createFixtureSearchResults,
+  createFixtureSnapshot,
+} = require("./fixture.cjs");
 
 const HANDLERS = [
   "layout-fixture:request",
@@ -19,6 +22,7 @@ function createProductionLayoutHarness() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-layout-"));
   const originalUserData = app.getPath("userData");
   const snapshot = createFixtureSnapshot(tempDir);
+  const searchResults = createFixtureSearchResults();
   let handlersInstalled = false;
   let win = null;
 
@@ -27,8 +31,22 @@ function createProductionLayoutHarness() {
   function installHandlers() {
     if (handlersInstalled) return;
     handlersInstalled = true;
-    ipcMain.handle("layout-fixture:request", (_event, method) => {
+    ipcMain.handle("layout-fixture:request", (_event, method, payload = {}) => {
       if (method === "app.getSnapshot") return snapshot;
+      if (method === "search.query") {
+        const searchId = String(payload.searchId || "");
+        win?.webContents.send("layout-fixture:event", {
+          event: "search.result",
+          payload: {
+            searchId,
+            ok: true,
+            query: String(payload.query || ""),
+            platform: String(payload.platform || "youtube"),
+            items: searchResults,
+          },
+        });
+        return { searchId };
+      }
       return {};
     });
     ipcMain.handle("layout-fixture:getConnectionState", () => "connected");

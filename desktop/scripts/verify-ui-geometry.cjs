@@ -242,7 +242,10 @@ async function run() {
     assert(focus.boxShadow.includes("inset"), "媒体动作缺少内高光", focus);
     assert(focus.backdropFilter === "none", "减少透明时仍启用了 backdrop-filter", focus);
 
-    const production = await verifyProductionPath(productionHarness);
+    const production = await verifyProductionPath(productionHarness, {
+      networkSearchScreenshotPath:
+        process.env.DOWNANY_NETWORK_SEARCH_SCREENSHOT || "",
+    });
 
     process.stdout.write(
       `${JSON.stringify({ ok: true, gallery: { geometry, focus }, production }, null, 2)}\n`,

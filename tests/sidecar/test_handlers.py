@@ -327,6 +327,29 @@ def test_search_query_emits_result(tmp_path, monkeypatch):
     assert payload["items"][0]["platform"] == "youtube"
 
 
+def test_search_query_preserves_client_search_id(tmp_path, monkeypatch):
+    """客户端先登记 searchId，快速返回的事件也不会被当成旧结果。"""
+    ctx, events = _ctx(tmp_path)
+    _inline_threads(monkeypatch)
+    monkeypatch.setattr(
+        "src.sidecar.handlers.SearchEngine.search",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = dispatch(
+        ctx,
+        Method.SEARCH_QUERY.value,
+        {
+            "query": "fast result",
+            "platform": "youtube",
+            "searchId": "client-search-1",
+        },
+    )
+
+    assert result["searchId"] == "client-search-1"
+    assert events[-1][1]["searchId"] == "client-search-1"
+
+
 def test_search_query_failure_emits_error(tmp_path, monkeypatch):
     ctx, events = _ctx(tmp_path)
     _inline_threads(monkeypatch)

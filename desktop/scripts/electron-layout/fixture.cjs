@@ -109,4 +109,25 @@ function createFixtureSnapshot(tempDir) {
   };
 }
 
-module.exports = { createFixtureSnapshot };
+function createFixtureSearchResults() {
+  const palettes = [
+    ["#172033", "#4663a6"],
+    ["#342029", "#9c5267"],
+    ["#1f3029", "#4f8c72"],
+    ["#322b1d", "#aa8644"],
+  ];
+  return Array.from({ length: 12 }, (_, index) => {
+    const [start, end] = palettes[index % palettes.length];
+    const number = index + 1;
+    return {
+      url: `https://example.com/network-video-${number}`,
+      title: `AI 工具实战与工作流拆解 · 第 ${number} 期`,
+      duration: 300 + number * 37,
+      thumbnail_url: svgThumbnail(640, 360, start, end, `VIDEO ${number}`),
+      uploader: `Downany 测试频道 ${number}`,
+      platform: "youtube",
+    };
+  });
+}
+
+module.exports = { createFixtureSearchResults, createFixtureSnapshot };

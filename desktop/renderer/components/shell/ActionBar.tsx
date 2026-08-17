@@ -21,7 +21,6 @@ export function ActionBar() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [netPlatform, setNetPlatform] = useState("youtube");
   const [locale, setLocaleState] = useState<Locale>(() => getLocale());
   const addRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -93,21 +92,6 @@ export function ActionBar() {
       if (urls.length > 0) setText("");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const runNetSearch = async () => {
-    const query = searchQuery.trim();
-    if (!query) return;
-    try {
-      const response = await request<{ searchId: string }>("search.query", {
-        query,
-        platform: netPlatform,
-        maxResults: 12,
-      });
-      useAppStore.getState().startNetSearch(response.searchId);
-    } catch (error) {
-      pushToast({ kind: "error", title: "搜索失败", detail: String(error) });
     }
   };
 
@@ -224,13 +208,13 @@ export function ActionBar() {
         open={searchOpen}
         mode={searchMode}
         query={searchQuery}
-        platform={netPlatform}
         locale={locale}
         inputRef={searchInputRef}
-        onModeChange={setSearchMode}
+        onModeChange={(mode) => {
+          setSearchMode(mode);
+          if (mode === "network") setSearchOpen(false);
+        }}
         onQueryChange={setSearchQuery}
-        onPlatformChange={setNetPlatform}
-        onSubmitNetwork={() => void runNetSearch()}
         onClose={() => {
           setSearchOpen(false);
           searchTriggerRef.current?.focus();

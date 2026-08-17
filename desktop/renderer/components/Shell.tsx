@@ -23,6 +23,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function Shell() {
   const connection = useAppStore((s) => s.connection);
   const filter = useAppStore((s) => s.filter);
+  const searchMode = useAppStore((s) => s.searchMode);
   const settings = useAppStore((s) => s.settings);
 
   useDocumentTheme(settings?.theme_mode);
@@ -70,11 +71,14 @@ export function Shell() {
     return window.api.onNavigate((next) => {
       const store = useAppStore.getState();
       if (next === "new") {
+        store.setSearchMode("filter");
         store.setFilter("all");
         store.requestAddFocus();
       } else if (next === "queue") {
+        store.setSearchMode("filter");
         store.setFilter("active");
       } else if (next === "history") {
+        store.setSearchMode("filter");
         store.setFilter("history");
       } else if (next === "settings") {
         void window.api.openSettings();
@@ -130,10 +134,18 @@ export function Shell() {
     <div className="window-shell" data-platform={window.api.platform}>
       <WindowChrome />
       <ActionBar />
-      <FilterBar />
-      <NetSearchPanel />
-      <main className="window-main" id="main">
-        {filter === "history" ? <HistorySection /> : <TaskList />}
+      {searchMode === "filter" ? <FilterBar /> : null}
+      <main
+        className={searchMode === "network" ? "window-main window-main--search" : "window-main"}
+        id="main"
+      >
+        {searchMode === "network" ? (
+          <NetSearchPanel />
+        ) : filter === "history" ? (
+          <HistorySection />
+        ) : (
+          <TaskList />
+        )}
       </main>
       <AddConfirmDialog />
       <ToastHost />

@@ -152,60 +152,159 @@
   gap: var(--space-1);
 }
 
-.search-popover > select {
-  grid-column: 1 / -1;
-  height: var(--control-height-small);
-  border: 1px solid var(--color-stroke-subtle);
-  border-radius: var(--radius-small);
-  padding: 0 var(--space-2);
-  background: var(--color-surface-control);
-  color: var(--color-text-primary);
+.net-search-workspace {
+  min-height: 100%;
+  background: var(--color-surface-window);
 }
 
-.window-shell .net-results {
-  margin-top: 0;
+.net-search-workspace__header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-stroke-subtle);
+  background: var(--color-surface-chrome);
+}
+
+.net-search-workspace__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.net-search-workspace__title-row > div {
+  min-width: 0;
+}
+
+.net-search-workspace__title-row h1,
+.net-search-workspace__title-row p {
+  margin: 0;
+}
+
+.net-search-workspace__title-row h1 {
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.net-search-workspace__title-row p {
+  margin-top: var(--space-0-5);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.net-search-form {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.net-search-form > select {
+  min-width: 0;
+  height: var(--control-height);
   border: 1px solid var(--color-stroke-subtle);
-  border-radius: var(--radius-popover);
-  background: var(--color-surface-raised);
-  padding: var(--space-3);
-  max-height: 320px;
-  overflow-y: auto;
+  border-radius: var(--radius-control);
+  outline: 0;
+  padding: 0 var(--space-3);
+  background: var(--color-surface-control);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.net-search-form > select:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.net-search-form > .ui-text-field {
+  min-width: 0;
+}
+
+.net-search-workspace__body {
+  padding: var(--space-4) var(--space-4) var(--space-8);
 }
 
 .window-shell .net-results-head {
   display: flex;
-  justify-content: space-between;
+  min-height: var(--control-height-small);
   align-items: center;
-  margin-bottom: var(--space-1);
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
-.window-shell .net-results-close {
+.net-results-summary {
+  color: var(--color-text-secondary);
   font-size: 12px;
-  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.net-search-state {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px dashed var(--color-stroke-subtle);
+  border-radius: var(--radius-banner);
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.net-search-state strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.net-search-state span {
+  max-width: 360px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .window-shell .net-results-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
 .window-shell .net-result-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 82px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-stroke-subtle);
+  border-radius: var(--radius-banner);
+  background: var(--color-surface-control);
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.window-shell .net-result-row:hover {
+  border-color: var(--color-stroke-strong);
+  background: var(--color-surface-control-hover);
 }
 
 .window-shell .net-thumb {
-  width: 72px;
-  height: 42px;
+  width: 112px;
+  height: 64px;
   object-fit: cover;
-  border-radius: 6px;
-  flex-shrink: 0;
-  background: rgba(128, 128, 128, 0.2);
+  border-radius: var(--radius-small);
+  background: var(--color-surface-raised);
 }
 
 .window-shell .net-thumb-placeholder {
@@ -217,29 +316,33 @@
 }
 
 .window-shell .net-info {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .window-shell .net-title {
-  font-size: 13px;
-  white-space: nowrap;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .window-shell .net-meta {
+  overflow: hidden;
   font-size: 12px;
   color: var(--color-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .window-shell .net-add {
-  flex-shrink: 0;
-  font-size: 12px;
-  padding: 4px 10px;
+  align-self: center;
 }
 
 .window-main {
@@ -247,6 +350,16 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.window-main--search {
+  padding: 0;
+}
+
+@media (min-width: 1080px) {
+  .window-shell .net-results-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -267,5 +380,15 @@
 
   .search-popover {
     right: var(--space-3);
+  }
+
+  .net-search-workspace__header,
+  .net-search-workspace__body {
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+  }
+
+  .net-search-form {
+    grid-template-columns: 116px minmax(0, 1fr) auto;
   }
 }

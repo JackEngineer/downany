@@ -150,13 +150,8 @@ describe("ActionBar", () => {
     expect(screen.getByRole("dialog", { name: "Search tasks" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Search modes" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Web" }));
-    expect(
-      screen.getByRole("combobox", { name: "Search platform" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("searchbox", { name: "Search tasks" }),
-    ).toHaveAttribute("placeholder", "Search online videos");
-    expect(screen.getByRole("button", { name: "Close search" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Search tasks" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().searchMode).toBe("network");
   });
 
   it("requires a URL before opening webpage recognition", () => {

@@ -1,3 +1,6 @@
+const fs = require("node:fs");
+const path = require("node:path");
+
 const { assert, waitFor } = require("./verification-utils.cjs");
 
 const VIEWPORT_WIDTH = 760;
@@ -263,7 +266,267 @@ function assertProductionMediaStates(states) {
   assert(states.focus.backdropFilter === "none", "减少透明的 focus 状态仍启用模糊", states);
 }
 
-async function verifyProductionPath(harness) {
+async function openNetworkSearchWorkspace(win) {
+  const openResult = await win.webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      const trigger = [...document.querySelectorAll(
+        ".action-bar button",
+      )].find(
+        (button) => button.querySelector('[data-icon="search"]'),
+      );
+      if (!(trigger instanceof HTMLButtonElement)) {
+        resolve({ triggerFound: false, modeLabels: [] });
+        return;
+      }
+      trigger.click();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const modes = [...document.querySelectorAll(
+          '.search-popover__modes button',
+        )];
+        const networkMode = modes[1];
+        if (!(networkMode instanceof HTMLButtonElement)) {
+          resolve({
+            triggerFound: true,
+            modeLabels: modes.map((button) => button.textContent?.trim() || ""),
+          });
+          return;
+        }
+        networkMode.click();
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve({
+          triggerFound: true,
+          modeLabels: modes.map((button) => button.textContent?.trim() || ""),
+          networkModeFound: true,
+        })));
+      }));
+    })`,
+    true,
+  );
+  assert(openResult.triggerFound, "找不到搜索入口", openResult);
+  assert(openResult.networkModeFound, "找不到网络搜索模式", openResult);
+  await waitFor(
+    win,
+    'document.querySelector(".window-main--search > .net-search-workspace") && !document.querySelector(".filter-bar") && !document.querySelector(".download-list")',
+    "独立网络搜索工作区",
+  );
+}
+
+async function submitFixtureNetworkSearch(win) {
+  const submitResult = await win.webContents.executeJavaScript(
+    `(() => {
+      const input = document.querySelector(
+        '.net-search-form input[aria-label="搜索网络视频"]',
+      );
+      const form = input?.closest("form");
+      const submit = form?.querySelector('button[type="submit"]');
+      if (!(input instanceof HTMLInputElement) ||
+          !(form instanceof HTMLFormElement) ||
+          !(submit instanceof HTMLButtonElement)) {
+        return {
+          inputFound: input instanceof HTMLInputElement,
+          formFound: form instanceof HTMLFormElement,
+          submitFound: submit instanceof HTMLButtonElement,
+        };
+      }
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "AI workflow");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      form.requestSubmit(submit);
+      return { inputFound: true, formFound: true, submitFound: true };
+    })()`,
+    true,
+  );
+  assert(
+    submitResult.inputFound && submitResult.formFound && submitResult.submitFound,
+    "网络搜索表单不完整",
+    submitResult,
+  );
+  await waitFor(
+    win,
+    'document.querySelectorAll(".net-result-row").length === 12 && document.querySelector(".net-results-summary")?.textContent?.includes("12 个结果")',
+    "网络搜索快速结果",
+  );
+}
+
+async function inspectNetworkSearchGeometry(win) {
+  return win.webContents.executeJavaScript(
+    `(() => {
+      const main = document.querySelector(".window-main--search");
+      const workspace = document.querySelector(".net-search-workspace");
+      const header = document.querySelector(".net-search-workspace__header");
+      const body = document.querySelector(".net-search-workspace__body");
+      const list = document.querySelector(".net-results-list");
+      const rows = [...document.querySelectorAll(".net-result-row")];
+      const controls = [...document.querySelectorAll(
+        ".net-search-workspace__header button, .net-search-workspace__header input, .net-search-workspace__header select",
+      )];
+      if (!(main instanceof HTMLElement) ||
+          !(workspace instanceof HTMLElement) ||
+          !(header instanceof HTMLElement) ||
+          !(body instanceof HTMLElement)) {
+        throw new Error("网络搜索工作区结构不完整");
+      }
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        };
+      };
+      return {
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+        },
+        main: {
+          ...rectOf(main),
+          clientHeight: main.clientHeight,
+          scrollHeight: main.scrollHeight,
+          overflowY: getComputedStyle(main).overflowY,
+        },
+        header: rectOf(header),
+        controlRects: controls.map(rectOf),
+        rowRects: rows.map(rectOf),
+        nestedOverflowY: {
+          workspace: getComputedStyle(workspace).overflowY,
+          body: getComputedStyle(body).overflowY,
+          list: list instanceof HTMLElement
+            ? getComputedStyle(list).overflowY
+            : "visible",
+        },
+      };
+    })()`,
+    true,
+  );
+}
+
+function assertNetworkSearchGeometry(geometry, expectedColumns) {
+  assert(
+    geometry.viewport.scrollWidth <= geometry.viewport.clientWidth,
+    "网络搜索产生页面级横向溢出",
+    geometry,
+  );
+  assert(geometry.rowRects.length === 12, "网络搜索没有呈现全部结果", geometry);
+  assert(
+    geometry.controlRects.every(
+      (rect) =>
+        rect.left >= 0 &&
+        rect.right <= geometry.viewport.width &&
+        rect.top >= geometry.main.top &&
+        rect.bottom <= geometry.viewport.height,
+    ),
+    "网络搜索主控件超出首屏",
+    geometry,
+  );
+  assert(geometry.main.overflowY === "auto", "主工作区不是唯一滚动容器", geometry);
+  assert(
+    Object.values(geometry.nestedOverflowY).every(
+      (overflow) => overflow === "visible",
+    ),
+    "网络结果内部形成了第二滚动区",
+    geometry,
+  );
+  const first = geometry.rowRects[0];
+  const second = geometry.rowRects[1];
+  if (expectedColumns === 2) {
+    assert(
+      Math.abs(first.top - second.top) < 1 && second.left > first.left,
+      "宽视口没有形成双列结果布局",
+      geometry,
+    );
+  } else {
+    assert(
+      second.top > first.top && Math.abs(second.left - first.left) < 1,
+      "窄视口没有保持单列结果布局",
+      geometry,
+    );
+  }
+}
+
+async function inspectStickySearchHeader(win) {
+  return win.webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      const main = document.querySelector(".window-main--search");
+      const header = document.querySelector(".net-search-workspace__header");
+      if (!(main instanceof HTMLElement) || !(header instanceof HTMLElement)) {
+        throw new Error("找不到网络搜索滚动结构");
+      }
+      main.scrollTop = Math.min(180, main.scrollHeight - main.clientHeight);
+      main.dispatchEvent(new Event("scroll", { bubbles: true }));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        resolve({
+          mainTop: main.getBoundingClientRect().top,
+          headerTop: header.getBoundingClientRect().top,
+          scrollTop: main.scrollTop,
+        });
+      }));
+    })`,
+    true,
+  );
+}
+
+async function returnToDownloadList(win) {
+  await win.webContents.executeJavaScript(
+    `(() => {
+      const back = [...document.querySelectorAll(
+        ".net-search-workspace__header button",
+      )].find((button) => button.textContent?.trim() === "返回下载列表");
+      if (!(back instanceof HTMLButtonElement)) {
+        throw new Error("找不到返回下载列表按钮");
+      }
+      back.click();
+    })()`,
+    true,
+  );
+  await waitFor(
+    win,
+    'document.querySelector(".filter-bar") && document.querySelector(".download-list") && !document.querySelector(".net-search-workspace")',
+    "返回下载列表",
+  );
+}
+
+async function verifyNetworkSearchWorkspace(win, screenshotPath) {
+  await openNetworkSearchWorkspace(win);
+  const initial = await inspectNetworkSearchGeometry(win);
+  assert(initial.rowRects.length === 0, "初始搜索工作区出现了旧结果", initial);
+
+  await submitFixtureNetworkSearch(win);
+  const large = await inspectNetworkSearchGeometry(win);
+  assertNetworkSearchGeometry(large, 2);
+
+  let savedScreenshot = "";
+  if (screenshotPath) {
+    await win.webContents.executeJavaScript(
+      "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+      true,
+    );
+    fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+    fs.writeFileSync(screenshotPath, (await win.capturePage()).toPNG());
+    savedScreenshot = screenshotPath;
+  }
+
+  const sticky = await inspectStickySearchHeader(win);
+  assert(sticky.scrollTop > 0, "结果数量不足以验证主滚动", sticky);
+  assert(
+    Math.abs(sticky.headerTop - sticky.mainTop) < 1,
+    "滚动后搜索栏没有固定在主工作区顶部",
+    sticky,
+  );
+
+  await returnToDownloadList(win);
+  return { initial, large, sticky, screenshotPath: savedScreenshot };
+}
+
+async function verifyProductionPath(harness, options = {}) {
   const win = await harness.open(VIEWPORT_WIDTH, PRODUCTION_SMALL_HEIGHT);
   await waitFor(
     win,
@@ -346,7 +609,30 @@ async function verifyProductionPath(harness) {
   const states = await inspectProductionMediaStates(win);
   assertProductionMediaStates(states);
 
-  return { small, large, pendingMenu, brightMenu, expandedMenu, offscreen, states };
+  await harness.resize(PRODUCTION_LARGE_WIDTH, PRODUCTION_LARGE_HEIGHT);
+  const networkSearch = await verifyNetworkSearchWorkspace(
+    win,
+    options.networkSearchScreenshotPath,
+  );
+
+  await harness.resize(VIEWPORT_WIDTH, PRODUCTION_SMALL_HEIGHT);
+  await openNetworkSearchWorkspace(win);
+  await submitFixtureNetworkSearch(win);
+  const narrowNetworkSearch = await inspectNetworkSearchGeometry(win);
+  assertNetworkSearchGeometry(narrowNetworkSearch, 1);
+  await returnToDownloadList(win);
+
+  return {
+    small,
+    large,
+    pendingMenu,
+    brightMenu,
+    expandedMenu,
+    offscreen,
+    states,
+    networkSearch,
+    narrowNetworkSearch,
+  };
 }
 
 module.exports = { verifyProductionPath };

@@ -37,6 +37,7 @@ interface AppState {
   setSearchQuery: (query: string) => void;
   setSearchMode: (mode: SearchMode) => void;
   startNetSearch: (searchId: string) => void;
+  failNetSearch: (searchId: string, error: string) => void;
   clearNetSearch: () => void;
   requestAddFocus: () => void;
   setPendingAddUrls: (urls: string[] | null) => void;
@@ -71,6 +72,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSearchMode: (searchMode) => set({ searchMode }),
   startNetSearch: (netSearchId) =>
     set({ netSearchId, netSearching: true, netResults: [], netError: "" }),
+  failNetSearch: (netSearchId, netError) => {
+    if (netSearchId !== get().netSearchId) return;
+    set({ netSearching: false, netResults: [], netError });
+  },
   clearNetSearch: () =>
     set({ netSearchId: "", netSearching: false, netResults: [], netError: "" }),
   requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),

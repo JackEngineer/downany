@@ -151,6 +151,18 @@ describe("appStore", () => {
     expect(state.netResults).toEqual([]);
   });
 
+  it("only applies a request failure to the matching network search", () => {
+    useAppStore.getState().startNetSearch("s-new");
+
+    useAppStore.getState().failNetSearch("s-old", "旧请求失败");
+    expect(useAppStore.getState().netSearching).toBe(true);
+    expect(useAppStore.getState().netError).toBe("");
+
+    useAppStore.getState().failNetSearch("s-new", "网络不可达");
+    expect(useAppStore.getState().netSearching).toBe(false);
+    expect(useAppStore.getState().netError).toBe("网络不可达");
+  });
+
   it("clearNetSearch resets state", () => {
     useAppStore.getState().startNetSearch("s-1");
     useAppStore.getState().clearNetSearch();

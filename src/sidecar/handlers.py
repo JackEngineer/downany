@@ -725,7 +725,12 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         max_results = 10
     max_results = max(1, min(max_results, 30))
     proxy = ctx.config.get_proxy_for_download()
-    search_id = str(uuid.uuid4())
+    # Renderer 在发请求前登记 searchId，避免快速结果先于 response 到达时
+    # 被客户端误判为旧事件。未传时继续生成，保持旧客户端兼容。
+    requested_search_id = str(
+        payload.get("searchId") or payload.get("search_id") or ""
+    ).strip()
+    search_id = requested_search_id or str(uuid.uuid4())
 
     def worker():
         try:
