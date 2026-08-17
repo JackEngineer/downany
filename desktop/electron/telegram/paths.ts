@@ -23,6 +23,10 @@ export type TelegramPrivateDataPaths = Pick<
 
 export type SidecarRecoveryPrivatePaths = Pick<TelegramRuntimePaths, "rootDir" | "sidecarOwnerStateFile">;
 
+function pathForPlatform(platform: "darwin" | "win32"): typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
 export function selectTelegramPrivateDataPaths(paths: TelegramRuntimePaths): TelegramPrivateDataPaths {
   return {
     rootDir: paths.rootDir,
@@ -53,21 +57,22 @@ export function resolveTelegramBotApiPaths(input: {
   downanyDataDir: string;
   env: NodeJS.ProcessEnv;
 }): TelegramRuntimePaths {
-  const resourceBotApi = path.join(input.resourcesPath, "telegram-bot-api", executableName(input.platform));
+  const pathModule = pathForPlatform(input.platform);
+  const resourceBotApi = pathModule.join(input.resourcesPath, "telegram-bot-api", executableName(input.platform));
   const executable = !input.isPackaged && input.env.DOWNANY_TELEGRAM_BOT_API_BIN
-    ? path.resolve(input.env.DOWNANY_TELEGRAM_BOT_API_BIN)
+    ? pathModule.resolve(input.env.DOWNANY_TELEGRAM_BOT_API_BIN)
     : resourceBotApi;
-  const rootDir = path.join(path.resolve(input.downanyDataDir), "telegram");
+  const rootDir = pathModule.join(pathModule.resolve(input.downanyDataDir), "telegram");
   return {
     executable,
-    processHostExecutable: path.join(input.resourcesPath, "process-host", processHostName(input.platform)),
+    processHostExecutable: pathModule.join(input.resourcesPath, "process-host", processHostName(input.platform)),
     rootDir,
-    workDir: path.join(rootDir, "bot-api"),
-    tempDir: path.join(rootDir, "temp"),
-    credentialFile: path.join(rootDir, "bot-token.v1"),
-    appCredentialsFile: path.join(input.resourcesPath, "telegram-bot-api", "app-credentials.json"),
-    ownerStateFile: path.join(rootDir, "owner-state.json"),
-    sidecarOwnerStateFile: path.join(rootDir, "sidecar-owner-state.json"),
+    workDir: pathModule.join(rootDir, "bot-api"),
+    tempDir: pathModule.join(rootDir, "temp"),
+    credentialFile: pathModule.join(rootDir, "bot-token.v1"),
+    appCredentialsFile: pathModule.join(input.resourcesPath, "telegram-bot-api", "app-credentials.json"),
+    ownerStateFile: pathModule.join(rootDir, "owner-state.json"),
+    sidecarOwnerStateFile: pathModule.join(rootDir, "sidecar-owner-state.json"),
   };
 }
 
@@ -91,9 +96,10 @@ export interface TelegramPathSecurityDeps {
   }>;
 }
 
-function canonicalInside(child: string, parent: string): boolean {
-  const relative = path.relative(path.resolve(parent), path.resolve(child));
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+function canonicalInside(child: string, parent: string, platform: "darwin" | "win32"): boolean {
+  const pathModule = pathForPlatform(platform);
+  const relative = pathModule.relative(pathModule.resolve(parent), pathModule.resolve(child));
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${pathModule.sep}`) && !pathModule.isAbsolute(relative));
 }
 
 async function inspectPrivateComponent(component: string, kind: "directory" | "file", deps: TelegramPathSecurityDeps): Promise<void> {
@@ -125,9 +131,10 @@ async function inspectPrivateComponent(component: string, kind: "directory" | "f
 }
 
 export async function ensurePrivateTelegramPaths(paths: TelegramPrivateDataPaths, deps: TelegramPathSecurityDeps): Promise<void> {
-  const root = path.resolve(paths.rootDir);
+  const pathModule = pathForPlatform(deps.platform);
+  const root = pathModule.resolve(paths.rootDir);
   for (const value of [paths.workDir, paths.tempDir, paths.credentialFile, paths.ownerStateFile, paths.sidecarOwnerStateFile]) {
-    if (!canonicalInside(value, root)) throw new Error("Telegram 私有路径越界");
+    if (!canonicalInside(value, root, deps.platform)) throw new Error("Telegram 私有路径越界");
   }
   await inspectPrivateComponent(root, "directory", deps);
   await inspectPrivateComponent(paths.workDir, "directory", deps);
@@ -138,37 +145,40 @@ export async function ensurePrivateTelegramPaths(paths: TelegramPrivateDataPaths
 }
 
 export async function ensurePrivateSidecarRecoveryPaths(paths: SidecarRecoveryPrivatePaths, deps: TelegramPathSecurityDeps): Promise<void> {
-  const root = path.resolve(paths.rootDir);
-  if (!canonicalInside(paths.sidecarOwnerStateFile, root)) throw new Error("Sidecar 恢复路径越界");
+  const pathModule = pathForPlatform(deps.platform);
+  const root = pathModule.resolve(paths.rootDir);
+  if (!canonicalInside(paths.sidecarOwnerStateFile, root, deps.platform)) throw new Error("Sidecar 恢复路径越界");
   await inspectPrivateComponent(root, "directory", deps);
   await inspectPrivateComponent(paths.sidecarOwnerStateFile, "file", deps);
 }
 
 async function ensureResourceFile(filePath: string, root: string, deps: TelegramPathSecurityDeps): Promise<void> {
-  if (!path.isAbsolute(filePath) || !canonicalInside(filePath, root)) throw new Error(`Telegram 资源路径越界：${filePath}`);
+  const pathModule = pathForPlatform(deps.platform);
+  if (!pathModule.isAbsolute(filePath) || !canonicalInside(filePath, root, deps.platform)) throw new Error(`Telegram 资源路径越界：${filePath}`);
   const info = await deps.inspectPath(filePath);
   if (!info.exists || info.kind !== "file" || info.isLinkOrReparsePoint) throw new Error(`Telegram 资源不可执行：${filePath}`);
 }
 
 export async function ensureProcessHostResourceInput(input: { processHostExecutable: string; isPackaged: boolean; resourcesPath: string }, deps: TelegramPathSecurityDeps): Promise<void> {
-  await ensureResourceFile(input.processHostExecutable, path.join(input.resourcesPath, "process-host"), deps);
+  await ensureResourceFile(input.processHostExecutable, pathForPlatform(deps.platform).join(input.resourcesPath, "process-host"), deps);
 }
 
 export async function ensureTelegramResourceInputs(input: { executable: string; appCredentialsFile: string; isPackaged: boolean; resourcesPath: string; envOverrideExecutable: string | null; hasDevelopmentCredentials?: boolean }, deps: TelegramPathSecurityDeps): Promise<void> {
+  const pathModule = pathForPlatform(deps.platform);
   if (input.envOverrideExecutable) {
-    if (input.isPackaged || !path.isAbsolute(input.executable)) throw new Error("Telegram Bot API 开发覆盖必须是绝对路径");
+    if (input.isPackaged || !pathModule.isAbsolute(input.executable)) throw new Error("Telegram Bot API 开发覆盖必须是绝对路径");
     const info = await deps.inspectPath(input.executable);
     if (!info.exists || info.kind !== "file" || info.isLinkOrReparsePoint) throw new Error("Telegram Bot API 开发覆盖不是安全文件");
   } else {
-    await ensureResourceFile(input.executable, path.join(input.resourcesPath, "telegram-bot-api"), deps);
+    await ensureResourceFile(input.executable, pathForPlatform(deps.platform).join(input.resourcesPath, "telegram-bot-api"), deps);
   }
   if (input.isPackaged || !input.hasDevelopmentCredentials) {
-    await ensureResourceFile(input.appCredentialsFile, path.join(input.resourcesPath, "telegram-bot-api"), deps);
+    await ensureResourceFile(input.appCredentialsFile, pathForPlatform(deps.platform).join(input.resourcesPath, "telegram-bot-api"), deps);
   }
 }
 
 export async function ensurePrivateTelegramFile(filePath: string, privateRootDir: string, deps: TelegramPathSecurityDeps): Promise<void> {
-  if (!canonicalInside(filePath, privateRootDir)) throw new Error("Telegram 私有文件路径越界");
+  if (!canonicalInside(filePath, privateRootDir, deps.platform)) throw new Error("Telegram 私有文件路径越界");
   await inspectPrivateComponent(privateRootDir, "directory", deps);
   await inspectPrivateComponent(filePath, "file", deps);
 }
