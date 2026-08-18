@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/FFmpeg/FFmpeg.git",
+  "ref": "n7.1.1",
+  "commit": "db69d06eeeab4f46da15030a80d539efb4503ca8",
+  "version": "7.1.1",
+  "license": "LGPL-2.1-or-later",
+  "target": {
+    "platform": "macos",
+    "architecture": "arm64",
+    "deploymentTarget": "11.0",
+    "static": true
+  },
+  "dependencies": {
+    "lame": {
+      "version": "3.100",
+      "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+      "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+      "license": "LGPL-2.0-or-later"
+    }
+  }
+}

@@ -21,7 +21,7 @@
   而非浮动的 `latest`，保证长期可复现）：
     Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-03-14-02
     资产:    ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-7.1.zip（ffmpeg 7.1.5，与 macOS 端
-             scripts/install_ffmpeg.sh 默认的 7.1.1 同一大版本线）
+             source.lock.json 固定的 FFmpeg 7.1.1 同一大版本线）
     SHA256:  5559c3a40827c273d9eb1a783b67d43aaa364bc1e907d558fab6cd7dd24f2d63
              （核对自该 Release 附带的 checksums.sha256）
     可用环境变量 FFMPEG_WIN_URL / FFMPEG_WIN_SHA256 覆盖。

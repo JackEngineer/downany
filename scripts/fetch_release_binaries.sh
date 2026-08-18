@@ -2,7 +2,7 @@
 # 拉取发布用 yt-dlp + ffmpeg 到 desktop/resources/bin
 #
 # TARGET_OS 控制目标平台，默认通过 `uname -s` 自动探测：
-#   - darwin（默认）：沿用现有 macOS 静态二进制流程
+#   - darwin（默认）：从锁定源码构建 macOS arm64 静态 FFmpeg
 #       yt-dlp_macos + scripts/install_ffmpeg.sh → 写入 ${DEST}/yt-dlp、${DEST}/ffmpeg
 #   - windows（或 uname 输出 MINGW*/MSYS*/CYGWIN*/Windows_NT 时自动判定）：
 #       下载官方 yt-dlp.exe + BtbN FFmpeg-Builds 静态 win64 zip（仅抽取 ffmpeg.exe）
@@ -125,7 +125,7 @@ case "${TARGET_OS}" in
   darwin)
     fetch_yt_dlp_darwin
     echo "==> 安装 ffmpeg (macOS)"
-    FFMPEG_SHA256="${FFMPEG_SHA256:-}" "${ROOT}/scripts/install_ffmpeg.sh" "${DEST}"
+    "${ROOT}/scripts/install_ffmpeg.sh" "${DEST}"
     ;;
   windows)
     fetch_yt_dlp_windows

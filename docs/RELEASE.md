@@ -14,6 +14,11 @@
 
 产物：`desktop/release/Downany-<version>-mac.dmg`（已在 `.gitignore`，勿提交）。
 
+macOS 发布用 FFmpeg 不再下载 Intel-only 的预编译包。`scripts/install_ffmpeg.sh` 会读取
+[`packaging/ffmpeg-macos/source.lock.json`](../packaging/ffmpeg-macos/source.lock.json)，在 Apple
+Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的静态 FFmpeg；构建完成
+后还会检查架构、动态依赖和 MP3 编解码 smoke。
+
 ### 用户首次打开（Gatekeeper）
 
 未签名安装包会被 macOS 拦截。任选其一：
@@ -55,27 +60,27 @@
 
 ### GitHub Releases 发布步骤
 
-#### Windows 候选版
+#### 正式版 v0.2.0
 
-macOS 尚未完成同版本验收时，Windows 可先发布为 GitHub **Prerelease**，不替换现有稳定版，也不触发正式版更新提示。候选版至少包含 Windows NSIS 安装包和同次构建的 Chrome 扩展 ZIP；标题与说明必须明确 macOS 安装包尚未包含。macOS 验收通过后，再用不带预发布后缀的版本标签同时发布 DMG、NSIS 和扩展 ZIP。
+正式版必须由带 `v0.2.0` tag 的 CI 构建生成 macOS arm64 与 Windows x64 原生资源、Sidecar 和安装包；不能用 `ALLOW_CLOUD_ONLY_PACKAGE=1` 的本地开发包替代正式安装包。最终 GitHub Release 必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
 
-1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.0`；Windows 候选标签为 `v0.2.0-rc.1`）。
+1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.0`，tag 为 `v0.2.0`）。
 2. 推送含发布说明的提交到 `main`。  
 3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
    ```bash
    mkdir -p desktop/release
-   (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-0.8.1.zip . \
+   (cd browser-extension && zip -r ../desktop/release/Downany-chrome-extension-0.8.2.zip . \
      -x '*.test.js' -x '.*' -x '__MACOSX*' -x '*.DS_Store')
    ```
 4. 创建 Release（**DMG + NSIS + 扩展 zip** 同挂一个 tag）：
    ```bash
    gh auth login   # 若尚未登录
-   gh release create v0.1.0 \
-     desktop/release/Downany-0.1.0-mac.dmg \
-     desktop/release/Downany-0.1.0-win-x64.exe \
-     desktop/release/Downany-chrome-extension-0.8.1.zip \
-     --title "Downany 0.1.0" \
-     --notes-file docs/RELEASE-NOTES-0.1.0.md
+   gh release create v0.2.0 \
+     desktop/release/Downany-0.2.0-mac.dmg \
+     desktop/release/Downany-0.2.0-win-x64.exe \
+     desktop/release/Downany-chrome-extension-0.8.2.zip \
+     --title "Downany 0.2.0" \
+     --notes-file docs/RELEASE-NOTES-0.2.0.md
    ```
    macOS 与 Windows 安装包可在各自平台构建后一并上传；勿只发 DMG 或只发 NSIS。
 5. 在另一台未装开发环境的机器上验证：
