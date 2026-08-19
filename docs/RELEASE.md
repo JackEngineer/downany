@@ -60,9 +60,9 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 
 ### GitHub Releases 发布步骤
 
-#### 正式版 v0.2.0
+#### v0.2.0 云端模式发行版（当前通道）
 
-正式版必须由带 `v0.2.0` tag 的 CI 构建生成 macOS arm64 与 Windows x64 原生资源、Sidecar 和安装包；不能用 `ALLOW_CLOUD_ONLY_PACKAGE=1` 的本地开发包替代正式安装包。最终 GitHub Release 必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
+当前没有 Telegram 应用凭据时，`v0.2.0` 仍可发布云端模式安装包。带 `v0.2.0` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、FFmpeg 和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
 
 1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.0`，tag 为 `v0.2.0`）。
 2. 推送含发布说明的提交到 `main`。  
@@ -86,6 +86,12 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 5. 在另一台未装开发环境的机器上验证：
    - **macOS**：右键打开 DMG → Sidecar 握手 → 扩展桥 `http://127.0.0.1:17888/health` → 入队一条公开链接
    - **Windows**：SmartScreen「仍要运行」→ 安装 → 同上 health / 入队冒烟
+
+如果将来取得 Telegram 应用凭据，可在 GitHub Actions 手动运行 `CI`，将 `package_mode` 设为 `native`，再对生成的原生资源和安装包做单独验收；这不是当前云端模式发行版的前置条件。
+
+#### 原生 Telegram 模式
+
+原生模式需要配置 `DOWNANY_TELEGRAM_API_ID` 和 `DOWNANY_TELEGRAM_API_HASH` 两个 Actions Secrets。它只用于构建 Local Bot API 的应用凭据，不是用户在应用内填写的 Bot Token。没有这两个值时，不应伪造 `app-credentials.json` 或宣称支持本地 2 GB 上传。
 
 ### Chrome 扩展安装（未上架商店）
 

@@ -18,9 +18,9 @@ Telegram 的绑定、聊天发现、队列和发送逻辑运行在 Electron + Si
 
 发送层已经支持官方 Local Bot API 的回环端点：本地模式使用 `file:` URI，不把大文件读入 Electron；Supervisor 会固定 `127.0.0.1`、独立工作目录和重启状态。上游版本、vcpkg 基线和应用凭据生成器已锁定在 `packaging/telegram-bot-api` 与 `scripts/generate_telegram_build_credentials.mjs`。
 
-Windows 已完成真实桌面端、Chrome 扩展和 Telegram 云端发送验收；云端 Bot API 对超过单文件限制的视频会切成保持原始画面比例、可以独立播放的分段。Windows 包内的 Local Bot API/ProcessHost 原生资源也已完成构建与进程冒烟，但没有构建凭据时仍按云端模式运行，不能宣称支持单文件 2 GB。macOS 的同版本原生资源和安装验收仍待后续完成。
+Windows 已完成真实桌面端、Chrome 扩展和 Telegram 云端发送验收；云端 Bot API 对超过单文件限制的视频会切成保持原始画面比例、可以独立播放的分段。没有 Local Bot API/ProcessHost 原生资源时，桌面端会安全地使用云端模式，不能宣称支持单文件 2 GB。macOS 的原生资源仍需在具备对应构建凭据后单独验收。
 
-正式安装包默认先构建并校验原生资源：Windows `scripts/build_windows_nsis.ps1` 和 macOS `scripts/build_macos_dmg.sh` 默认执行对应 Bot API/ProcessHost 构建，再校验两个二进制的 manifest 平台、大小与 SHA256，以及 app-credentials schema。已有完整资源时可设置 `BUILD_TELEGRAM_NATIVE=0` 跳过重复构建；只有明确设置 `ALLOW_CLOUD_ONLY_PACKAGE=1` 才允许生成仅云端模式的开发包，该变量不属于发布验收路径。
+安装包分为两种模式：云端模式不携带 Local Bot API/ProcessHost，使用 `ALLOW_CLOUD_ONLY_PACKAGE=1` 构建并运行包内 Sidecar/Electron 冒烟；原生模式额外构建并校验 Bot API、ProcessHost、manifest 和 `app-credentials.json`。云端模式可以作为没有 Telegram 应用凭据时的公开发行包，但不包含本地 Bot API 的单文件 2 GB 能力。
 
 原生 Bot API 的固定构建入口已经加入：Apple Silicon 使用 `scripts/build_telegram_bot_api_macos.sh`，Windows x64 使用 `scripts/build_telegram_bot_api_windows.ps1`。两个脚本都只接受 `packaging/telegram-bot-api/source.lock.json` 中的源码与依赖版本，缺少 CMake/编译器或 SHA 校验失败会立即退出，不会留下伪成功资源。ProcessHost 仍需在同一平台构建并通过真实父进程退出验收后，才能把本地模式放进正式安装包。
 
@@ -37,7 +37,7 @@ Windows 已完成真实桌面端、Chrome 扩展和 Telegram 云端发送验收�
 
 这两个值是 Telegram Local Bot API 的应用凭据，不是 Bot Token；workflow 只把它们用于生成安装包内的 `app-credentials.json`，不会把用户 Bot Token 写进仓库或构建日志。Bot Token 仍由用户首次绑定时输入，并保存到本机系统加密存储。
 
-如果没有配置这两个 Secret，原生构建可以单独运行，但正式安装包步骤会失败并停止，不会退化成“看起来成功”的云端包。构建产物和原生资源会作为 workflow artifact 保存，待真实 Bot 绑定与双平台安装验收后再发布。
+如果没有配置这两个 Secret，不能构建原生模式；`v0.2.0` tag 的 CI 会明确构建云端模式包，不伪造原生资源，也不会把云端包标成支持本地 2 GB。用户仍只需要在应用内输入自己的 Bot Token，Bot Token 不进入构建流程。
 
 Electron 侧的 `processHostAdapter.ts` 已按同一 fd3 handshake 接入 Supervisor：原生资源齐全时会由受控宿主启动 Local Bot API、使用 `file:` URI 发送大文件，并在退出/重启时按持久 owner 快照收敛；资源不完整时不会偷偷启动未受控的本地进程。
 

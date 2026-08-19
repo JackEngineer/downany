@@ -6,6 +6,15 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      package_mode:
+        description: "安装包模式：云端模式不需要 Telegram 应用凭据；原生模式需要仓库 Secrets"
+        required: true
+        default: cloud-only
+        type: choice
+        options:
+          - cloud-only
+          - native
 
 jobs:
   python-tests:
@@ -75,8 +84,9 @@ jobs:
           node sniff-core.test.js
 
   # Native resources are expensive and require platform-specific toolchains.
-  # Run them on an explicit dispatch or a release tag so every release can
-  # prove the real Bot API/ProcessHost binaries before packaging.
+  # A release tag always produces a usable cloud-only package; native mode is
+  # opt-in on workflow_dispatch because it requires Telegram application
+  # credentials that are not needed by the cloud Bot API path.
   native-resources:
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     strategy:
@@ -98,7 +108,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Require Telegram application credentials (Windows)
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         env:
           DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
@@ -108,7 +118,7 @@ jobs:
             throw "DOWNANY_TELEGRAM_API_ID and DOWNANY_TELEGRAM_API_HASH GitHub Secrets are required for a formal package"
           }
       - name: Require Telegram application credentials (macOS)
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         env:
           DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
@@ -117,35 +127,35 @@ jobs:
           test -n "$DOWNANY_TELEGRAM_API_ID"
           test -n "$DOWNANY_TELEGRAM_API_HASH"
       - name: Install macOS build tools
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         run: brew install cmake gperf
       - name: Build Telegram Bot API (Windows)
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_telegram_bot_api_windows.ps1 -WorkspaceRoot $env:GITHUB_WORKSPACE
       - name: Build Telegram Bot API (macOS)
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         run: ./scripts/build_telegram_bot_api_macos.sh
       - name: Build ProcessHost (Windows)
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_process_host_windows.ps1
       - name: Build ProcessHost (macOS)
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         run: ./scripts/build_process_host_macos.sh
       - name: Smoke-test ProcessHost (Windows)
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         run: node scripts/test_process_host_windows.mjs --executable "$env:GITHUB_WORKSPACE\desktop\resources\process-host\DownanyProcessHost.exe"
       - name: Smoke-test ProcessHost (macOS)
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         run: python3 scripts/test_process_host.py --platform darwin --executable "$GITHUB_WORKSPACE/desktop/resources/process-host/DownanyProcessHost"
       - name: Generate local Bot API credentials (Windows)
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         env:
           DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
@@ -154,7 +164,7 @@ jobs:
           node scripts/generate_telegram_build_credentials.mjs
           --output="$env:GITHUB_WORKSPACE\desktop\resources\telegram-bot-api\app-credentials.json"
       - name: Generate local Bot API credentials (macOS)
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         env:
           DOWNANY_TELEGRAM_API_ID: ${{ secrets.DOWNANY_TELEGRAM_API_ID }}
@@ -163,7 +173,7 @@ jobs:
           node scripts/generate_telegram_build_credentials.mjs
           --output="$GITHUB_WORKSPACE/desktop/resources/telegram-bot-api/app-credentials.json"
       - name: Build verified Windows installer
-        if: matrix.target == 'win32-x64'
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
         env:
           BUILD_TELEGRAM_NATIVE: "0"
@@ -171,12 +181,30 @@ jobs:
           FETCH_BINS: "1"
           BUILD_SIDECAR: "1"
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_windows_nsis.ps1
+      - name: Build cloud-only Windows installer
+        if: matrix.target == 'win32-x64' && (github.event_name != 'workflow_dispatch' || inputs.package_mode == 'cloud-only')
+        shell: pwsh
+        env:
+          BUILD_TELEGRAM_NATIVE: "0"
+          ALLOW_CLOUD_ONLY_PACKAGE: "1"
+          FETCH_BINS: "1"
+          BUILD_SIDECAR: "1"
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_windows_nsis.ps1
       - name: Build verified macOS disk image
-        if: matrix.target == 'darwin-arm64'
+        if: matrix.target == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: bash
         env:
           BUILD_TELEGRAM_NATIVE: "0"
           ALLOW_CLOUD_ONLY_PACKAGE: "0"
+          FETCH_BINS: "1"
+          BUILD_SIDECAR: "1"
+        run: ./scripts/build_macos_dmg.sh
+      - name: Build cloud-only macOS disk image
+        if: matrix.target == 'darwin-arm64' && (github.event_name != 'workflow_dispatch' || inputs.package_mode == 'cloud-only')
+        shell: bash
+        env:
+          BUILD_TELEGRAM_NATIVE: "0"
+          ALLOW_CLOUD_ONLY_PACKAGE: "1"
           FETCH_BINS: "1"
           BUILD_SIDECAR: "1"
         run: ./scripts/build_macos_dmg.sh
@@ -215,6 +243,7 @@ jobs:
           node scripts/test_packaged_electron.mjs --executable="$electron"
       - name: Upload native resources
         uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         with:
           name: downany-native-${{ matrix.target }}
           if-no-files-found: error

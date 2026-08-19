@@ -1,6 +1,8 @@
 # Downany · 百纳 0.2.0
 
-这是面向 macOS Apple Silicon 与 Windows x64 的正式版本。安装包未签名，首次启动可能看到系统安全提示。
+这是面向 macOS Apple Silicon 与 Windows x64 的云端模式发行版本。安装包未签名，首次启动可能看到系统安全提示。
+
+本版不携带 Telegram Local Bot API 和 ProcessHost 原生资源；Telegram 使用官方云端 Bot API。下载、Sidecar、扩展入队和普通 Telegram 自动发送流程可用，但不包含本地 Bot API 的单文件 2 GB 上传能力。
 
 ## 下载
 
@@ -21,7 +23,7 @@
 ## 已知限制
 
 - 安装包未签名：macOS 需右键打开或在「隐私与安全性」中允许；Windows SmartScreen 需选择「更多信息 → 仍要运行」
-- Telegram 本地 Bot API 模式需要有效的 Telegram API ID 与 API hash；未配置时可使用云端 Bot API
+- Telegram 本地 Bot API 模式暂未随本版分发；云端 Bot API 对单文件大小有限制，较大的视频会按可播放片段发送
 - YouTube 等站点可能需要有效的浏览器 Cookie
 - 应用内更新当前仍是检查 GitHub Release 后前往下载，自动替换需后续签名与 electron-updater
 
