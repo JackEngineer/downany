@@ -21,10 +21,10 @@
 #   - FFMPEG_WIN_URL / FFMPEG_WIN_SHA256
 #       固定源（BtbN/FFmpeg-Builds 静态构建，win64-gpl，选用已归档的日期化 tag 而非
 #       浮动的 `latest`，以保证长期可复现）：
-#         Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-03-14-02
-#         资产:    ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-7.1.zip（ffmpeg 7.1.5，与
+#         Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-16-13-00
+#         资产:    ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip（ffmpeg 7.1.5，与
 #                  macOS 端 install_ffmpeg.sh 默认的 7.1.1 同一大版本线）
-#         SHA256:  5559c3a40827c273d9eb1a783b67d43aaa364bc1e907d558fab6cd7dd24f2d63
+#         SHA256:  907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860
 #                  （核对自该 Release 附带的 checksums.sha256）
 #       zip 内层结构为 <asset-basename>/bin/ffmpeg.exe（含 ffprobe.exe 等），本脚本
 #       只从中抽取 ffmpeg.exe 落盘，保持产物精简。
@@ -91,8 +91,8 @@ fetch_yt_dlp_windows() {
 }
 
 fetch_ffmpeg_windows() {
-  local url="${FFMPEG_WIN_URL:-https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-03-14-02/ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-7.1.zip}"
-  local sha="${FFMPEG_WIN_SHA256:-}"
+  local url="${FFMPEG_WIN_URL:-https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-16-13-00/ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip}"
+  local sha="${FFMPEG_WIN_SHA256:-907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860}"
   echo "==> 下载 ffmpeg (Windows, BtbN static win64-gpl)"
   echo "    ${url}"
   local tmp_zip="${DEST}/ffmpeg-win.zip"
