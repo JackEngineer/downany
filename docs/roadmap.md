@@ -13,7 +13,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 - **协议**：Sidecar JSON Lines，24 个 request method + 11 个 event
 - **入队入口**：手动粘贴、拖放 URL、剪贴板监控、Chrome 扩展（HTTP 桥 127.0.0.1:17888）、`downany://`、`.webloc`
 - **桌面集成**：原生菜单、通知（含失败重试 action）、Dock 角标与进度、可选菜单栏 Tray、窗口几何持久化、浅深主题
-- **平台**：显式识别 YouTube / Bilibili / 抖音 / TikTok / Twitter / Instagram / Pornhub，其余交由 yt-dlp（1752 个 extractor）
+- **平台**：显式识别 YouTube / Bilibili / 抖音 / TikTok / Twitter / Instagram 等常见平台，其余交由 yt-dlp（1752 个 extractor）
 - **维护**：yt-dlp 应用内更新、旧 Trae 数据迁移
 
 骨架已经完整。以下路线图只聚焦"骨架之外"的差距。
@@ -110,7 +110,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 | 4.3 | `downany://` 参数化：quality / audio / folder / subs |
 | 4.4 | 监听文件夹、`.txt` 批量导入、队列导出 |
 | 4.5 | i18n（zh-CN + en 起步）——文案当前全硬编码，越晚拆越贵 |
-| 4.6 | 应用内"支持站点"页：把 `docs/yt-dlp-extractors.md` 的 1752 个 extractor 做成可搜索页 |
+| 4.6 | 应用内"支持站点"页：把 `docs/yt-dlp-extractors.md` 的公开提取器清单做成可搜索页 |
 | 4.7 | Safari 扩展（Xcode Web Extension wrapper）|
 
 ### M5 — 可持续（若商业化）
@@ -138,7 +138,7 @@ Electron 主线（`desktop/` + `src/sidecar/` + `src/core/`）已具备的能力
 - **一叶子任务一分支一 PR**，命名 `feat/m{N}-{slug}` / `chore/{slug}` / `fix/{slug}`（例：`feat/m1-sniff-core`）。
 - 并行任务用 `.worktrees/<branch>/` 隔离，合入后删除分支与 worktree。
 - 第一批建议：`chore/ci-and-freeze-legacy`（M0.1+M0.2）→ `feat/m0-diagnostics`；可并行 `feat/m2-embed-metadata` 与 `feat/m1-sniff-core`。
-- 开工前清理/归档旧分支（如 `feature/pornhub-search-support`、`feature/search-preview`）。
+- 开工前清理/归档旧分支（如 `feature/legacy-search-support`、`feature/search-preview`）。
 
 详细约定见执行计划中的「分支与工作区管理」一节。
 

@@ -1,11 +1,10 @@
-# yt-dlp 支持的提取器完整列表
+# yt-dlp 提取器清单（公开版）
 
 - yt-dlp 版本：`2026.07.04`
-- 提取器数量：`1752`
-- 说明：有提取器 ≠ 一定能下（会员/DRM/地区/登录/接口变更都可能导致失败）。
-- 生成命令：`yt-dlp --list-extractors`
+- 说明：本清单仅列出公开展示的提取器；有提取器 ≠ 一定能下（会员/DRM/地区/登录/接口变更都可能导致失败）。
+- 原始来源：`yt-dlp --list-extractors`
 
-## 全部提取器（按字母序）
+## 提取器（按字母序）
 
 - 10play
 - 10play:season
@@ -21,7 +20,6 @@
 - 24tv.ua
 - 3qsdn
 - 3sat
-- 4tube
 - 56.com
 - 7plus
 - 9c9media
@@ -59,7 +57,6 @@
 - Allocine
 - Allstar
 - AllstarProfile
-- AlphaPorno
 - altcensored
 - altcensored:channel
 - Alura
@@ -138,7 +135,6 @@
 - BBVTVRecordings
 - BeaconTv
 - Beatport
-- Beeg
 - BehindKink (CURRENTLY BROKEN)
 - BerufeTV
 - Bet
@@ -187,7 +183,6 @@
 - blogger.com
 - Bloomberg
 - Bluesky
-- BongaCams
 - Boosty
 - BostonGlobe
 - Box
@@ -216,11 +211,8 @@
 - BuzzFeed
 - BYUtv (CURRENTLY BROKEN)
 - Caltrans
-- CAM4
 - CamFMEpisode
 - CamFMShow
-- CamModels
-- Camsoda
 - CamtasiaEmbed
 - Canal1
 - CanalAlpha
@@ -250,7 +242,6 @@
 - CeskaTelevize
 - CGTN
 - CharlieRose
-- Chaturbate
 - Chilloutzone
 - chzzk:live
 - chzzk:video
@@ -356,7 +347,6 @@
 - Dropout
 - DropoutSeason
 - DrTalks
-- DrTuber
 - drtv
 - drtv:live
 - drtv:season
@@ -383,13 +373,11 @@
 - ElPais
 - ElTreceTV
 - Embedly
-- EMPFlix
 - Epicon
 - EpiconSeries
 - EpidemicSound
 - eplus
 - Epoch
-- Eporner
 - Erocast
 - EroProfile
 - EroProfile:album
@@ -528,7 +516,6 @@
 - hbo
 - HearThisAt
 - Heise
-- HellPorno
 - hetklokhuis
 - hgtv.com:show
 - HGTVDe
@@ -706,7 +693,6 @@
 - Loco
 - loom
 - loom:folder (CURRENTLY BROKEN)
-- LoveHomePorn
 - LRTRadio
 - LRTStream
 - LRTVOD
@@ -724,7 +710,6 @@
 - mangomolo:live
 - mangomolo:video
 - MangoTV
-- ManyVids
 - MaoriTV
 - Markiza (CURRENTLY BROKEN)
 - MarkizaPage (CURRENTLY BROKEN)
@@ -797,7 +782,6 @@
 - Monstercat
 - monstersiren
 - Motorsport (CURRENTLY BROKEN)
-- MovieFap
 - moviepilot
 - MovingImage
 - MSN
@@ -945,8 +929,6 @@
 - NRLTV (CURRENTLY BROKEN)
 - nts.live
 - ntv.ru
-- NubilesPorn
-- Nuvid
 - NYTimes
 - NYTimesArticle
 - NYTimesCookingGuide
@@ -1056,19 +1038,6 @@
 - polskieradio:podcast:list
 - Popcorntimes
 - PopcornTV
-- Pornbox
-- PornerBros
-- PornFlip
-- PornHub
-- PornHubPagedVideoList
-- PornHubPlaylist
-- PornHubUser
-- PornHubUserVideosUpload
-- Pornotube
-- PornoVoisines (CURRENTLY BROKEN)
-- PornoXO (CURRENTLY BROKEN)
-- PornTop
-- PornTube
 - Pr0gramm
 - PrankCast
 - PrankCastPost
@@ -1142,10 +1111,6 @@
 - RedBullTV
 - RedBullTVRrnContent
 - Reddit
-- RedGifs
-- RedGifsSearch
-- RedGifsUser
-- RedTube
 - RENTV (CURRENTLY BROKEN)
 - RENTVArticle (CURRENTLY BROKEN)
 - Restudy (CURRENTLY BROKEN)
@@ -1245,7 +1210,6 @@
 - senate.gov
 - senate.gov:isvp
 - Servus
-- Sexu (CURRENTLY BROKEN)
 - SeznamZpravy
 - SeznamZpravyArticle
 - Shahid
@@ -1309,8 +1273,6 @@
 - southparkstudios.nu
 - SovietsCloset
 - SovietsClosetPlaylist
-- SpankBang
-- SpankBangPlaylist
 - Spiegel
 - Sport5
 - SportBox (CURRENTLY BROKEN)
@@ -1336,13 +1298,11 @@
 - Streamable
 - StreamCZ
 - StreetVoice
-- Stripchat
 - stv:player
 - stvr
 - Subsplash
 - subsplash:playlist
 - Substack
-- SunPorno
 - sverigesradio:episode
 - sverigesradio:publication
 - svt:page
@@ -1425,8 +1385,6 @@
 - tiktok:user
 - TLC
 - TMZ
-- TNAFlix
-- TNAFlixNetworkEmbed
 - toggle
 - toggo
 - tokfm:audition
@@ -1443,7 +1401,6 @@
 - TruNews
 - Truth
 - ttinglive
-- Tube8 (CURRENTLY BROKEN)
 - TubeTuGraz
 - TubeTuGrazSeries
 - tubitv
@@ -1508,7 +1465,6 @@
 - twitter:card
 - twitter:shortener
 - twitter:spaces
-- Txxx
 - udemy
 - udemy:course
 - UDNEmbed
@@ -1670,18 +1626,11 @@
 - wykop:post
 - wykop:post:comment
 - XboxClips
-- XHamster
-- XHamsterEmbed
-- XHamsterUser
 - XiaoHongShu
 - ximalaya
 - ximalaya:album
 - Xinpianchang
 - XMinus (CURRENTLY BROKEN)
-- XNXX
-- XVideos
-- xvideos:quickies
-- XXXYMovies
 - yahoo
 - yahoo:japannews
 - yahoo:search
@@ -1698,19 +1647,11 @@
 - YappyProfile
 - yfanefa
 - YleAreena
-- YouJizz
 - youku
 - youku:show
 - YouNowChannel
 - YouNowLive
 - YouNowMoment
-- YouPorn
-- YouPornCategory
-- YouPornChannel
-- YouPornCollection
-- YouPornStar
-- YouPornTag
-- YouPornVideos
 - youtube
 - youtube:clip
 - youtube:consent
@@ -1742,7 +1683,6 @@
 - zdf
 - zdf:channel
 - ZeeNews (CURRENTLY BROKEN)
-- ZenPorn
 - ZetlandDKArticle
 - Zhihu
 - zingmp3

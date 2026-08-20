@@ -3,7 +3,7 @@ from src.core.download_task import Platform
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 
 
-def test_pornhub_cn_and_cdn():
+def test_known_page_and_cdn_hosts():
     assert (
         PlatformDetector.detect("https://cn.pornhub.com/view_video.php?viewkey=abc")
         == Platform.PORNHUB

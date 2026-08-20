@@ -99,7 +99,7 @@ def test_bilibili_search_resolves_entries_to_preserve_metadata(monkeypatch):
     assert videos[0].uploader == "测试作者"
 
 
-def test_pornhub_search_is_not_supported():
+def test_non_searchable_platform_is_not_supported():
     assert SearchEngine.supports(Platform.PORNHUB) is False
 
 

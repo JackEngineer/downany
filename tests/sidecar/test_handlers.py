@@ -383,7 +383,7 @@ def test_search_query_validation(tmp_path):
     assert Platform.TWITTER.value == "twitter"
 
 
-def test_search_query_rejects_removed_pornhub_search(tmp_path, monkeypatch):
+def test_search_query_rejects_non_searchable_platform(tmp_path, monkeypatch):
     ctx, _ = _ctx(tmp_path)
     _inline_threads(monkeypatch)
     monkeypatch.setattr(

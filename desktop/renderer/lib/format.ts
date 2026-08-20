@@ -64,7 +64,7 @@ export function platformLabel(platform: string | undefined | null): string {
     case "instagram":
       return "Instagram";
     case "pornhub":
-      return "Pornhub";
+      return "视频平台";
     case "xiaohongshu":
       return "小红书";
     case "unknown":

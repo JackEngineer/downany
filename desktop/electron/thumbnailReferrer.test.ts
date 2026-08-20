@@ -20,7 +20,7 @@ describe("thumbnailReferrer", () => {
     ).toBe(false);
   });
 
-  it("injects Pornhub Referer for phncdn", () => {
+  it("injects the required CDN Referer for phncdn", () => {
     const out = patchThumbnailRequestHeaders(
       "https://pix-cdn77.phncdn.com/c.jpg",
       { "User-Agent": "test", referer: "http://localhost:5173/" },

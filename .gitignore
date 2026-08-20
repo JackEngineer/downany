@@ -16,6 +16,9 @@ __pycache__/
 .claude/
 .trae/
 .superpowers/
+.npm-cache-windows-m0/
+.playwright-mcp/
+output/
 bin/
 *.app
 .idea/

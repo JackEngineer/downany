@@ -1,8 +1,7 @@
 /**
- * Pornhub CDN（*.phncdn.com）封面图要求 Referer 来自 pornhub.com，
- * 否则返回 403。Electron 页面源是 localhost/file，默认 Referer 无效；
- * 且 UI 对 B 站封面使用 no-referrer，会一并去掉 Referer。
- * 在 webRequest 里对 phncdn 强制注入 Referer。
+ * 部分视频 CDN 要求 Referer 来自来源站点，否则返回 403。Electron 页面源是
+ * localhost/file，默认 Referer 无效；且 UI 对 B 站封面使用 no-referrer，
+ * 会一并去掉 Referer，因此在 webRequest 里为对应 CDN 注入 Referer。
  * 小红书封面 CDN（*.xhscdn.com）同理需要 xiaohongshu.com Referer。
  */
 

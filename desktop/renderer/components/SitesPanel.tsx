@@ -8,7 +8,6 @@ const SUPPORTED_SITES = [
   { name: "Twitter / X", url: "https://x.com" },
   { name: "Instagram", url: "https://www.instagram.com" },
   { name: "小红书", url: "https://www.xiaohongshu.com" },
-  { name: "Pornhub", url: "https://www.pornhub.com" },
 ] as const;
 
 export function SitesPanel() {

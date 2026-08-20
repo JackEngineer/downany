@@ -1293,7 +1293,7 @@ interface SearchPopoverProps {
 }
 ```
 
-Implement the controlled popover with the existing two modes and three platforms:
+Implement the controlled popover with the existing two modes and two platforms:
 
 ```tsx
 const SEARCH_MODES: Array<{ key: SearchMode; labelKey: string }> = [
@@ -1304,7 +1304,6 @@ const SEARCH_MODES: Array<{ key: SearchMode; labelKey: string }> = [
 const SEARCH_PLATFORMS = [
   { key: "youtube", label: "YouTube" },
   { key: "bilibili", label: "Bilibili" },
-  { key: "pornhub", label: "Pornhub" },
 ] as const;
 
 export function SearchPopover(props: SearchPopoverProps) {
