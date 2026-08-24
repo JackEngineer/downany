@@ -37,3 +37,13 @@ def test_protocol_cleanup_only_deletes_registration_owned_by_install() -> None:
     assert script.index("${If} $0 == $1") < script.index(guarded_delete)
     assert "!insertmacro deleteDownanyProtocolIfOwned SHELL_CONTEXT" in script
     assert "!insertmacro deleteDownanyProtocolIfOwned HKCU" in script
+
+
+def test_custom_uninstall_removes_the_empty_install_directory() -> None:
+    script = NSIS_INCLUDE.read_text(encoding="utf-8")
+
+    custom_uninstall = script.index("!macro customUnInstall")
+    leave_install_dir = script.index('SetOutPath "$TEMP"')
+    remove_install_dir = script.index('RMDir "$INSTDIR"')
+
+    assert custom_uninstall < leave_install_dir < remove_install_dir

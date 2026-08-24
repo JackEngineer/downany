@@ -9,4 +9,6 @@
 !macro customUnInstall
   !insertmacro deleteDownanyProtocolIfOwned SHELL_CONTEXT
   !insertmacro deleteDownanyProtocolIfOwned HKCU
+  SetOutPath "$TEMP"
+  RMDir "$INSTDIR"
 !macroend
