@@ -73,5 +73,6 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
   shortcutName: Downany
   uninstallDisplayName: Downany · 百纳
