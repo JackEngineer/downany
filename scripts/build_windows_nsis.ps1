@@ -43,6 +43,7 @@ function Fail {
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 Write-Host "==> 仓库根: $Root"
+. (Join-Path $Root "scripts\windows_release_helpers.ps1")
 
 $FetchBins = if ($env:FETCH_BINS) { $env:FETCH_BINS } else { "1" }
 $BuildSidecar = if ($env:BUILD_SIDECAR) { $env:BUILD_SIDECAR } else { "1" }
@@ -223,7 +224,14 @@ if ($LASTEXITCODE -ne 0) { Fail -Step "npm run build" -ExitCode $LASTEXITCODE }
 $ReleaseDir = Join-Path $Desktop "release"
 if (Test-Path -LiteralPath $ReleaseDir) { Remove-Item -Recurse -Force $ReleaseDir }
 
-npm.cmd run dist:win
+$ElectronBuildArgs = try {
+    Get-DownanyElectronBuildArguments -DesktopPath $Desktop
+}
+catch {
+    Fail -Step "Electron runtime" -Detail $_.Exception.Message
+}
+Write-Host "==> Electron runtime: node_modules\electron\dist"
+npm.cmd @ElectronBuildArgs
 if ($LASTEXITCODE -ne 0) { Fail -Step "npm run dist:win" -ExitCode $LASTEXITCODE }
 
 Write-Host "==> 产物目录: $ReleaseDir"

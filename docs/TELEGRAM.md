@@ -37,7 +37,7 @@ Windows 已完成真实桌面端、Chrome 扩展和 Telegram 云端发送验收�
 
 这两个值是 Telegram Local Bot API 的应用凭据，不是 Bot Token；workflow 只把它们用于生成安装包内的 `app-credentials.json`，不会把用户 Bot Token 写进仓库或构建日志。Bot Token 仍由用户首次绑定时输入，并保存到本机系统加密存储。
 
-如果没有配置这两个 Secret，不能构建原生模式；`v0.2.0` tag 的 CI 会明确构建云端模式包，不伪造原生资源，也不会把云端包标成支持本地 2 GB。用户仍只需要在应用内输入自己的 Bot Token，Bot Token 不进入构建流程。
+如果没有配置这两个 Secret，不能构建原生模式；正式版本 tag 的 CI 会明确构建云端模式包，不伪造原生资源，也不会把云端包标成支持本地 2 GB。用户仍只需要在应用内输入自己的 Bot Token，Bot Token 不进入构建流程。
 
 Electron 侧的 `processHostAdapter.ts` 已按同一 fd3 handshake 接入 Supervisor：原生资源齐全时会由受控宿主启动 Local Bot API、使用 `file:` URI 发送大文件，并在退出/重启时按持久 owner 快照收敛；资源不完整时不会偷偷启动未受控的本地进程。
 

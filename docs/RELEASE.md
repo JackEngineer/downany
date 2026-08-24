@@ -60,11 +60,11 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 
 ### GitHub Releases 发布步骤
 
-#### v0.2.0 云端模式发行版（当前通道）
+#### v0.2.1 云端模式发行版（当前通道）
 
-当前没有 Telegram 应用凭据时，`v0.2.0` 仍可发布云端模式安装包。带 `v0.2.0` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、FFmpeg 和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
+当前没有 Telegram 应用凭据时，`v0.2.1` 仍可发布云端模式安装包。带 `v0.2.1` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、FFmpeg 和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
 
-1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.0`，tag 为 `v0.2.0`）。
+1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.1`，tag 为 `v0.2.1`）。
 2. 推送含发布说明的提交到 `main`。  
 3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
    ```bash
@@ -75,12 +75,12 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 4. 创建 Release（**DMG + NSIS + 扩展 zip** 同挂一个 tag）：
    ```bash
    gh auth login   # 若尚未登录
-   gh release create v0.2.0 \
-     desktop/release/Downany-0.2.0-mac.dmg \
-     desktop/release/Downany-0.2.0-win-x64.exe \
+   gh release create v0.2.1 \
+     desktop/release/Downany-0.2.1-mac.dmg \
+     desktop/release/Downany-0.2.1-win-x64.exe \
      desktop/release/Downany-chrome-extension-0.8.2.zip \
-     --title "Downany 0.2.0" \
-     --notes-file docs/RELEASE-NOTES-0.2.0.md
+     --title "Downany 0.2.1" \
+     --notes-file docs/RELEASE-NOTES-0.2.1.md
    ```
    macOS 与 Windows 安装包可在各自平台构建后一并上传；勿只发 DMG 或只发 NSIS。
 5. 在另一台未装开发环境的机器上验证：
