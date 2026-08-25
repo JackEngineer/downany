@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+
+import { assertDiagnosticZipMembers } from "./package_smoke_helpers.mjs";
 
 const args = new Map(
   process.argv.slice(2).map((value) => {
@@ -13,6 +16,7 @@ const dataDir = args.get("--data-dir");
 if (!executable || !path.isAbsolute(executable) || !dataDir || !path.isAbsolute(dataDir)) {
   throw new Error("usage: node test_packaged_sidecar.mjs --executable=<absolute> --data-dir=<absolute>");
 }
+fs.mkdirSync(dataDir, { recursive: true });
 
 const child = spawn(executable, [], {
   cwd: path.dirname(executable),
@@ -88,13 +92,43 @@ try {
   if (telegramConfig.payload?.nextUpdateOffset !== expectedOffset) {
     throw new Error(`telegram.configure lost the exact update offset: ${JSON.stringify(telegramConfig.payload)}`);
   }
+  send({
+    protocolVersion: 1,
+    type: "request",
+    id: "packaged-sidecar-export-diagnostics",
+    method: "app.exportDiagnostics",
+    payload: {},
+    timestamp: new Date().toISOString(),
+  });
+  const diagnostics = await waitFor(
+    (message) => message.type === "response" && message.correlationId === "packaged-sidecar-export-diagnostics",
+    30_000,
+  );
+  if (diagnostics.error) {
+    throw new Error(`app.exportDiagnostics returned an error: ${JSON.stringify(diagnostics.error)}`);
+  }
+  const diagnosticsPath = diagnostics.payload?.path;
+  if (diagnostics.payload?.ok !== true || typeof diagnosticsPath !== "string" || !path.isAbsolute(diagnosticsPath)) {
+    throw new Error(`app.exportDiagnostics returned an invalid payload: ${JSON.stringify(diagnostics.payload)}`);
+  }
+  const diagnosticsRoot = fs.realpathSync(path.join(dataDir, "diagnostics"));
+  const archivePath = fs.realpathSync(diagnosticsPath);
+  const relativeArchive = path.relative(diagnosticsRoot, archivePath);
+  if (!relativeArchive || relativeArchive.startsWith("..") || path.isAbsolute(relativeArchive)) {
+    throw new Error(`diagnostic ZIP escaped the data directory: ${archivePath}`);
+  }
+  const archiveStat = fs.statSync(archivePath);
+  if (!archiveStat.isFile() || archiveStat.size <= 0) {
+    throw new Error(`diagnostic ZIP is not a non-empty regular file: ${archivePath}`);
+  }
+  assertDiagnosticZipMembers(fs.readFileSync(archivePath));
   send({ protocolVersion: 1, type: "request", id: "packaged-sidecar-shutdown", method: "app.shutdown", payload: {}, timestamp: new Date().toISOString() });
   await waitFor((message) => message.type === "response" && message.correlationId === "packaged-sidecar-shutdown", 10_000);
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Sidecar did not exit after shutdown; stderr=${errors}`)), 10_000);
     child.once("exit", (code) => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`Sidecar exited with ${code}; stderr=${errors}`)); });
   });
-  console.log("Packaged Sidecar protocol smoke passed");
+  console.log("Packaged Sidecar protocol and diagnostics smoke passed");
 } catch (error) {
   child.kill();
   throw error;

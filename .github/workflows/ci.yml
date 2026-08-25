@@ -69,6 +69,8 @@ jobs:
       - name: Unit tests (Unix)
         if: matrix.os != 'windows-latest'
         run: npm test
+      - name: Package smoke helper tests
+        run: node --test ../scripts/package_smoke_helpers.test.mjs
 
   browser-extension:
     runs-on: macos-latest
