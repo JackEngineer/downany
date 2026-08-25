@@ -24,8 +24,8 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -45,8 +45,8 @@ jobs:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -73,8 +73,8 @@ jobs:
   browser-extension:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
       - name: Extension tests
@@ -100,11 +100,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Require Telegram application credentials (Windows)
@@ -242,7 +242,7 @@ jobs:
           test -n "$electron"
           node scripts/test_packaged_electron.mjs --executable="$electron"
       - name: Upload native resources
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         with:
           name: downany-native-${{ matrix.target }}
@@ -251,7 +251,7 @@ jobs:
             desktop/resources/telegram-bot-api/**
             desktop/resources/process-host/**
       - name: Upload verified installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: downany-installer-${{ matrix.target }}
           if-no-files-found: error
