@@ -525,8 +525,8 @@ export function SettingsApp() {
       if (result.path) {
         void window.api.showItemInFolder(result.path);
       }
-    } catch (err) {
-      pushToast({ kind: "error", title: `导出失败：${String(err)}` });
+    } catch {
+      pushToast({ kind: "error", title: "诊断包导出失败，请稍后重试。" });
     } finally {
       setDiagBusy(false);
     }
@@ -689,7 +689,7 @@ export function SettingsApp() {
           <section className="settings-section">
             <h2>诊断</h2>
             <p className="muted">
-              导出日志、yt-dlp / ffmpeg 版本与失败任务摘要，便于排查下载问题。
+              诊断包只包含应用版本、系统环境、错误类型和日志数量；不会包含下载链接、内容标题、日志正文或账号信息。
             </p>
             {diagPath && <p className="muted small">{diagPath}</p>}
             <div className="settings-control">

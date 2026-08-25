@@ -222,7 +222,11 @@ def _export_diagnostics(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[st
     try:
         return export_diagnostics(ctx.paths, ctx.manager)
     except Exception as exc:
-        raise HandlerError(ErrorCode.INTERNAL, f"导出诊断包失败: {exc}") from exc
+        raise HandlerError(
+            ErrorCode.INTERNAL,
+            "无法导出诊断包，请稍后重试。",
+            retryable=True,
+        ) from exc
 
 
 def _settings_get(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

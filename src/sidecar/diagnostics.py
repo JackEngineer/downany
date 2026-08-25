@@ -3,20 +3,41 @@ from __future__ import annotations
 
 import json
 import platform
-import shutil
+import re
 import subprocess
 import sys
 import tempfile
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.core.download_task import TaskStatus
+from src.core.download_task import Platform, TaskStatus
+from src.core.error_codes import ALL_ERROR_CODES, UNKNOWN
 from src.sidecar.bin_paths import resolve_ffmpeg_path
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import APP_NAME, APP_VERSION
 from src.sidecar.ytdlp_updater import resolve_ytdlp_executable
+
+
+_LOG_LEVEL_RE = re.compile(r"\s-\s(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s-\s")
+_VERSION_TOKEN_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
+_FFMPEG_VERSION_RE = re.compile(r"^ffmpeg version\s+([^\s]+)", re.IGNORECASE)
+_PLATFORM_VALUES = frozenset(item.value for item in Platform)
+_PRIVACY_SUMMARY: Dict[str, Any] = {
+    "schema_version": 1,
+    "raw_content_included": False,
+    "included": ["应用与运行环境版本", "失败类型统计", "日志级别统计"],
+    "excluded": [
+        "下载链接",
+        "内容标题",
+        "错误正文",
+        "日志正文",
+        "Cookie 与 Token",
+        "本机路径",
+    ],
+}
 
 
 def _run_version(cmd: List[str]) -> str:
@@ -30,68 +51,109 @@ def _run_version(cmd: List[str]) -> str:
         )
         out = (proc.stdout or proc.stderr or "").strip()
         return out.splitlines()[0] if out else f"(exit {proc.returncode})"
-    except Exception as exc:  # noqa: BLE001 — diagnostics must not raise
-        return f"error: {exc}"
+    except Exception:  # noqa: BLE001 — diagnostics must not raise
+        return "unavailable"
+
+
+def _safe_version_token(value: str) -> str:
+    token = str(value or "").strip()
+    return token if _VERSION_TOKEN_RE.fullmatch(token) else "unavailable"
+
+
+def _safe_ffmpeg_version(value: str) -> str:
+    match = _FFMPEG_VERSION_RE.match(str(value or "").strip())
+    return _safe_version_token(match.group(1)) if match else "unavailable"
 
 
 def collect_environment(paths: AppPaths) -> Dict[str, Any]:
     ytdlp = resolve_ytdlp_executable(paths)
     ffmpeg = resolve_ffmpeg_path()
     if ytdlp:
-        ytdlp_version = _run_version([ytdlp, "--version"])
+        ytdlp_source = "bundled"
+        ytdlp_version = _safe_version_token(_run_version([ytdlp, "--version"]))
     else:
-        ytdlp_version = _run_version([sys.executable, "-m", "yt_dlp", "--version"])
+        ytdlp_source = "python_module"
+        ytdlp_version = _safe_version_token(
+            _run_version([sys.executable, "-m", "yt_dlp", "--version"])
+        )
     return {
         "app": APP_NAME,
         "app_version": APP_VERSION,
-        "python": sys.version,
+        "python": platform.python_version(),
         "platform": platform.platform(),
         "machine": platform.machine(),
-        "ytdlp_executable": ytdlp or f"{sys.executable} -m yt_dlp",
+        "ytdlp_source": ytdlp_source,
         "ytdlp_version": ytdlp_version,
-        "ffmpeg_path": str(ffmpeg) if ffmpeg else "",
-        "ffmpeg_version": _run_version([str(ffmpeg), "-version"]) if ffmpeg else "missing",
+        "ffmpeg_available": ffmpeg is not None,
+        "ffmpeg_version": (
+            _safe_ffmpeg_version(_run_version([str(ffmpeg), "-version"]))
+            if ffmpeg
+            else "missing"
+        ),
         "collected_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-def _copy_recent_logs(log_dir: Path, dest: Path, *, max_files: int = 5) -> List[str]:
-    dest.mkdir(parents=True, exist_ok=True)
+def _recent_log_files(log_dir: Path, *, max_files: int) -> List[Path]:
     if not log_dir.is_dir():
         return []
-    files = sorted(
-        [p for p in log_dir.iterdir() if p.is_file()],
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )[:max_files]
-    names: List[str] = []
-    for src in files:
-        target = dest / src.name
+    candidates: List[tuple[float, Path]] = []
+    try:
+        entries = list(log_dir.iterdir())
+    except OSError:
+        return []
+    for path in entries:
         try:
-            shutil.copy2(src, target)
-            names.append(src.name)
+            if path.is_symlink() or not path.is_file():
+                continue
+            candidates.append((path.stat().st_mtime, path))
         except OSError:
             continue
-    return names
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [path for _, path in candidates[:max_files]]
 
 
-def _failed_task_summaries(manager: Any) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _summarize_recent_logs(log_dir: Path, *, max_files: int = 5) -> Dict[str, Any]:
+    files = _recent_log_files(log_dir, max_files=max_files)
+    levels: Counter[str] = Counter()
+    files_read = 0
+    line_count = 0
+    for path in files:
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    line_count += 1
+                    match = _LOG_LEVEL_RE.search(line)
+                    levels[match.group(1).lower() if match else "other"] += 1
+            files_read += 1
+        except OSError:
+            continue
+    return {
+        "files_seen": len(files),
+        "files_read": files_read,
+        "lines": line_count,
+        "levels": dict(sorted(levels.items())),
+    }
+
+
+def _failed_task_summary(manager: Any) -> Dict[str, Any]:
+    by_error_code: Counter[str] = Counter()
+    by_platform: Counter[str] = Counter()
     for task in manager.get_all_tasks().values():
         if task.status != TaskStatus.FAILED:
             continue
-        rows.append(
-            {
-                "id": task.id,
-                "url": task.video_info.url,
-                "title": task.video_info.title,
-                "platform": task.video_info.platform.value,
-                "error_message": task.error_message,
-                "error_code": getattr(task, "error_code", "") or "",
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-            }
-        )
-    return rows
+        raw_error_code = str(getattr(task, "error_code", "") or "").strip()
+        error_code = raw_error_code if raw_error_code in ALL_ERROR_CODES else UNKNOWN
+        platform_value = getattr(getattr(task, "video_info", None), "platform", None)
+        raw_platform = str(getattr(platform_value, "value", "") or "").strip()
+        platform_name = raw_platform if raw_platform in _PLATFORM_VALUES else Platform.UNKNOWN.value
+        by_error_code[error_code] += 1
+        by_platform[platform_name] += 1
+    return {
+        "total": sum(by_error_code.values()),
+        "by_error_code": dict(sorted(by_error_code.items())),
+        "by_platform": dict(sorted(by_platform.items())),
+    }
 
 
 def export_diagnostics(
@@ -108,7 +170,8 @@ def export_diagnostics(
     zip_path = out_root / f"diagnostics-{stamp}.zip"
 
     env = collect_environment(paths)
-    failed = _failed_task_summaries(manager)
+    failed = _failed_task_summary(manager)
+    log_summary = _summarize_recent_logs(paths.log_dir)
 
     with tempfile.TemporaryDirectory(prefix="downany-diag-") as tmp:
         tmp_path = Path(tmp)
@@ -120,7 +183,16 @@ def export_diagnostics(
             json.dumps(failed, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        log_names = _copy_recent_logs(paths.log_dir, tmp_path / "logs")
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        (logs_dir / "summary.json").write_text(
+            json.dumps(log_summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (tmp_path / "privacy.json").write_text(
+            json.dumps(_PRIVACY_SUMMARY, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for path in tmp_path.rglob("*"):
                 if path.is_file():
@@ -129,7 +201,8 @@ def export_diagnostics(
     return {
         "ok": True,
         "path": str(zip_path),
-        "log_files": log_names,
-        "failed_task_count": len(failed),
+        "log_files": [],
+        "log_summary": log_summary,
+        "failed_task_count": failed["total"],
         "environment": env,
     }

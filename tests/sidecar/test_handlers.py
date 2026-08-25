@@ -258,6 +258,29 @@ def test_run_migration_via_handler(tmp_path):
     assert again["status"] == "skipped"
 
 
+def test_export_diagnostics_failure_does_not_expose_internal_exception(
+    tmp_path,
+    monkeypatch,
+):
+    import src.sidecar.handlers as handlers
+
+    sentinel = r"PRIVATE_RESPONSE_BODY C:\Users\private-user\diagnostics.zip"
+
+    def fail_export(_paths, _manager):
+        raise OSError(sentinel)
+
+    monkeypatch.setattr(handlers, "export_diagnostics", fail_export)
+    ctx, _ = _ctx(tmp_path)
+
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(ctx, Method.APP_EXPORT_DIAGNOSTICS.value, {})
+
+    assert exc_info.value.code is ErrorCode.INTERNAL
+    assert exc_info.value.message == "无法导出诊断包，请稍后重试。"
+    assert exc_info.value.retryable is True
+    assert sentinel not in str(exc_info.value.to_dict())
+
+
 def test_check_ytdlp_handler(tmp_path, monkeypatch):
     ctx, _ = _ctx(tmp_path)
 
