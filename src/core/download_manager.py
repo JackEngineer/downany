@@ -66,6 +66,8 @@ _PLACEHOLDER_TITLES = {"正在获取信息...", "未命名视频", ""}
 _OUTPUT_PATH_MESSAGE = "下载位置或文件名不可用"
 _MEDIA_TOOLS_MESSAGE = "媒体工具不完整，请重新安装"
 _OUTPUT_VERIFICATION_MESSAGE = "成品无法验证，请导出诊断后重试"
+_SCRIPT_INCOMPLETE_NOTE = "视频已下载，后处理脚本未完成"
+_SCRIPT_FAILURE_REASON = "后处理脚本未完成，请确认后再发送"
 
 _MEDIA_URL_RE = re.compile(
     r"\.(m3u8|mpd|mp4|webm|mkv|mov|m4v|mp3|m4a|aac|flac|ogg|wav)(?:[?#]|$)",
@@ -182,6 +184,14 @@ def _completion_note(plan: OutputPlan, facts: SourceFacts) -> str:
             else "未找到可用字幕"
         )
     return "；".join(note for note in notes if note)
+
+
+def _join_completion_notes(*notes: str) -> str:
+    return "；".join(
+        str(note or "").strip()
+        for note in notes
+        if str(note or "").strip()
+    )
 
 
 def _safe_contract_error(exc: BaseException) -> tuple[str, str]:
@@ -870,6 +880,8 @@ class DownloadManager:
                 playlist_folder=plan.playlist_folder,
                 result=result,
             )
+            script_mode = task.options.postprocessing == "script"
+            base_completion_note = _completion_note(plan, result.source_facts)
             try:
                 try:
                     final_root = Path(task.options.output_path).expanduser().resolve(
@@ -905,15 +917,16 @@ class DownloadManager:
                         fallback_info=getattr(downloader, "last_info", None),
                     )
                     task.file_path = str(committed.main_file)
-                    task.status = TaskStatus.COMPLETED
                     task.progress = 100.0
-                    task.completed_at = datetime.now()
                     task.error_message = ""
                     task.error_code = ""
-                    task.completion_note = _completion_note(
-                        plan,
-                        result.source_facts,
-                    )
+                    if script_mode:
+                        task.completed_at = None
+                        task.completion_note = ""
+                    else:
+                        task.status = TaskStatus.COMPLETED
+                        task.completed_at = datetime.now()
+                        task.completion_note = base_completion_note
                     history_persisted = self._save_to_history(task)
             except Exception:
                 rollback_committed_output(committed)
@@ -921,7 +934,7 @@ class DownloadManager:
 
             queue_persisted = self._persist(task)
 
-            if task.options.postprocessing == "script" and task.file_path:
+            if script_mode:
                 owner_id = f"postprocess:{task.id}"
                 if self.output_ready_sink is not None:
                     try:
@@ -939,6 +952,49 @@ class DownloadManager:
                     except Exception as exc:
                         logger.warning("无法登记后处理租约 %s: %s", task.id, exc)
                 postprocess_ok = self._run_postprocess_script(task)
+                try:
+                    verify_media(final_main, toolchain.ffprobe, expectation)
+                    _verify_external_subtitles(committed.subtitle_files, final_root)
+                    with self._lock:
+                        if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                            raise DownloadCancelled(
+                                "任务已取消"
+                                if task.status == TaskStatus.CANCELLED
+                                else "任务已暂停"
+                            )
+                        task.status = TaskStatus.COMPLETED
+                        task.completed_at = datetime.now()
+                        task.completion_note = (
+                            base_completion_note
+                            if postprocess_ok
+                            else _join_completion_notes(
+                                base_completion_note,
+                                _SCRIPT_INCOMPLETE_NOTE,
+                            )
+                        )
+                        history_persisted = self._save_to_history(task)
+                except Exception as exc:
+                    if self.output_ready_sink is not None:
+                        try:
+                            self.output_ready_sink.mark_processing_failed(
+                                task,
+                                owner_id,
+                                _OUTPUT_VERIFICATION_MESSAGE,
+                            )
+                        except Exception as sink_exc:
+                            logger.warning(
+                                "无法记录后处理成品失败 %s: %s",
+                                task.id,
+                                sink_exc,
+                            )
+                    rollback_committed_output(committed)
+                    if isinstance(exc, (DownloadCancelled, OutputVerificationFailed)):
+                        raise
+                    raise OutputVerificationFailed(
+                        _OUTPUT_VERIFICATION_MESSAGE
+                    ) from exc
+
+                queue_persisted = self._persist(task)
                 if postprocess_ok and self.output_ready_sink is not None:
                     try:
                         self.output_ready_sink.mark_ready(
@@ -953,14 +1009,10 @@ class DownloadManager:
                         self.output_ready_sink.mark_processing_failed(
                             task,
                             owner_id,
-                            "Post-process script failed; confirm before retrying delivery.",
+                            _SCRIPT_FAILURE_REASON,
                         )
                     except Exception as exc:
-                        logger.warning(
-                            "无法记录后处理失败的 Telegram 发送记录 %s: %s",
-                            task.id,
-                            exc,
-                        )
+                        logger.warning("无法记录后处理失败 %s: %s", task.id, exc)
             elif self.output_ready_sink is not None and task.file_path:
                 try:
                     self.output_ready_sink.mark_ready(

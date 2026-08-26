@@ -4,7 +4,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -41,7 +41,9 @@ class _History:
 
     def add_download_record(self, record, **_kwargs) -> None:
         self.records.append(record)
-        if record.status == TaskStatus.COMPLETED.value:
+        if record.status == TaskStatus.DOWNLOADING.value and record.file_path:
+            self.calls.append("history:processing")
+        elif record.status == TaskStatus.COMPLETED.value:
             self.calls.append("history:completed")
 
 
@@ -52,7 +54,9 @@ class _Queue:
 
     def upsert_task(self, task: DownloadTask) -> None:
         self.snapshots.append((task.status, task.file_path, task.completion_note))
-        if task.status is TaskStatus.COMPLETED:
+        if task.status is TaskStatus.DOWNLOADING and task.file_path:
+            self.calls.append("queue:processing")
+        elif task.status is TaskStatus.COMPLETED:
             self.calls.append("queue:completed")
 
     def update_progress(self, *_args) -> None:
@@ -68,6 +72,20 @@ class _ReadySink:
         self.calls.append("telegram:ready")
         if self.fail:
             raise RuntimeError("downstream unavailable")
+        return None
+
+    def mark_processing(self, task, owner_id, lease_expires_at) -> None:
+        self.calls.append("telegram:processing")
+        self.processing_snapshot = (
+            task.status,
+            task.file_path,
+            owner_id,
+            lease_expires_at,
+        )
+
+    def mark_processing_failed(self, task, owner_id, error_message):
+        self.calls.append("telegram:processing_failed")
+        self.processing_failure = (task.status, owner_id, error_message)
         return None
 
 
@@ -94,6 +112,7 @@ class _Pipeline:
         source_facts: SourceFacts | None = None,
         plan: OutputPlan | None = None,
         sink_failure: bool = False,
+        script: bool = False,
     ) -> None:
         self.calls: list[str] = []
         self.temp_root = tmp_path / "staging"
@@ -110,6 +129,9 @@ class _Pipeline:
             video_info=VideoInfo(url="https://example.com/watch?v=secret", title="视频"),
             options=DownloadOptions(output_path=str(self.download_root), embed_metadata=False),
         )
+        if script:
+            self.task.options.postprocessing = "script"
+            self.task.options.postprocess_script = "process-output {file}"
         self.plan = plan or OutputPlan(
             media_kind=MediaKind.VIDEO,
             allowed_containers=frozenset({"mp4", "mkv"}),
@@ -162,6 +184,7 @@ class _Pipeline:
         )
         self.manager.tasks[self.task.id] = self.task
         self.events: list[tuple[str, dict]] = []
+        self.script_commands: list[str] = []
 
         def record_event(event: str, payload: dict) -> None:
             self.events.append((event, payload))
@@ -177,6 +200,7 @@ class _Pipeline:
         missing_toolchain: bool = False,
         verifier_failure_at: str = "",
         commit_error: Exception | None = None,
+        script_returncode: int = 0,
     ) -> None:
         verify_count = 0
 
@@ -193,7 +217,10 @@ class _Pipeline:
         def verify(path: Path, *_args, **_kwargs):
             nonlocal verify_count
             verify_count += 1
-            phase = "staging" if verify_count == 1 else "final"
+            phase = {1: "staging", 2: "final", 3: "script"}.get(
+                verify_count,
+                f"extra-{verify_count}",
+            )
             self.calls.append(f"verify:{phase}")
             if verifier_failure_at == phase:
                 raise OutputVerificationFailed(
@@ -209,6 +236,14 @@ class _Pipeline:
 
         def rollback(_committed: CommittedOutput) -> None:
             self.calls.append("rollback")
+
+        def run_script(command, **_kwargs):
+            self.calls.append("script")
+            self.script_commands.append(command)
+            return SimpleNamespace(
+                returncode=script_returncode,
+                stderr="script failed" if script_returncode else "",
+            )
 
         with ExitStack() as stack:
             stack.enter_context(
@@ -235,6 +270,12 @@ class _Pipeline:
             )
             stack.enter_context(
                 patch.object(manager_module.VideoInfoExtractor, "extract", return_value=None)
+            )
+            stack.enter_context(
+                patch.object(manager_module, "ensure_local_thumbnail", return_value=None)
+            )
+            stack.enter_context(
+                patch.object(manager_module.subprocess, "run", side_effect=run_script)
             )
             self.manager._download_task(self.task)
 
@@ -270,6 +311,8 @@ def test_completed_is_persisted_only_after_final_verification(tmp_path):
     ]
     assert pipeline.task.file_path == str(pipeline.committed.main_file)
     assert pipeline.task.status is TaskStatus.COMPLETED
+    assert pipeline.calls.count("telegram:ready") == 1
+    assert pipeline.calls.count("event:task_completed") == 1
 
 
 @pytest.mark.parametrize(
@@ -415,6 +458,76 @@ def test_downstream_ready_failure_does_not_invalidate_verified_local_output(tmp_
     assert len(_completed_rows(pipeline)) == 1
     assert len(_completed_snapshots(pipeline)) == 1
     assert pipeline.calls[-2:] == ["telegram:ready", "event:task_completed"]
+
+
+def test_script_success_is_reverified_before_one_completion_handoff(tmp_path):
+    pipeline = _Pipeline(tmp_path, script=True)
+
+    pipeline.run()
+
+    assert pipeline.calls == [
+        "compile",
+        "toolchain",
+        "download",
+        "verify:staging",
+        "commit",
+        "verify:final",
+        "history:processing",
+        "queue:processing",
+        "telegram:processing",
+        "script",
+        "verify:script",
+        "history:completed",
+        "queue:completed",
+        "telegram:ready",
+        "event:task_completed",
+    ]
+    assert pipeline.ready.processing_snapshot[0] is TaskStatus.DOWNLOADING
+    assert pipeline.ready.processing_snapshot[1] == str(pipeline.final_main)
+    assert pipeline.ready.processing_snapshot[2] == f"postprocess:{pipeline.task.id}"
+    assert pipeline.script_commands == [
+        manager_module.format_postprocess_command(
+            "process-output {file}",
+            str(pipeline.final_main),
+        )
+    ]
+    assert pipeline.task.status is TaskStatus.COMPLETED
+    assert pipeline.task.completion_note == ""
+    assert pipeline.calls.count("telegram:ready") == 1
+    assert pipeline.calls.count("event:task_completed") == 1
+
+
+def test_script_failure_keeps_valid_download_without_automatic_handoff(tmp_path):
+    pipeline = _Pipeline(tmp_path, script=True)
+
+    pipeline.run(script_returncode=7)
+
+    assert pipeline.task.status is TaskStatus.COMPLETED
+    assert pipeline.task.completion_note == "视频已下载，后处理脚本未完成"
+    assert "verify:script" in pipeline.calls
+    assert pipeline.calls.count("telegram:processing_failed") == 1
+    assert pipeline.ready.processing_failure[2] == "后处理脚本未完成，请确认后再发送"
+    assert "telegram:ready" not in pipeline.calls
+    assert pipeline.calls.count("event:task_completed") == 1
+    assert len(_completed_rows(pipeline)) == 1
+    assert len(_completed_snapshots(pipeline)) == 1
+
+
+def test_script_invalid_output_fails_without_completed_state_or_handoff(tmp_path):
+    pipeline = _Pipeline(tmp_path, script=True)
+
+    pipeline.run(verifier_failure_at="script")
+
+    assert pipeline.task.status is TaskStatus.FAILED
+    assert pipeline.task.error_code == OUTPUT_VERIFICATION_FAILED
+    assert pipeline.task.error_message == "成品无法验证，请导出诊断后重试"
+    assert pipeline.calls.count("telegram:processing_failed") == 1
+    assert pipeline.ready.processing_failure[2] == "成品无法验证，请导出诊断后重试"
+    assert "telegram:ready" not in pipeline.calls
+    assert "event:task_completed" not in pipeline.calls
+    assert not _completed_rows(pipeline)
+    assert not _completed_snapshots(pipeline)
+    assert [event for event, _payload in pipeline.events].count("task_failed") == 1
 
 
 @pytest.mark.parametrize(
