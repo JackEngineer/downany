@@ -23,12 +23,15 @@ def test_history_db_roundtrip(tmp_path):
         started_at=None,
         completed_at=None,
         error_message="",
+        completion_note="视频已下载，后处理脚本未完成",
     )
     db.add_download_record(record)
     rows = db.get_all_download_records()
     assert len(rows) == 1
     assert rows[0].title == "hello"
     assert rows[0].file_path == "/tmp/a.mp4"
+    assert rows[0].completion_note == "视频已下载，后处理脚本未完成"
+    assert db.get_download_record("1").completion_note == "视频已下载，后处理脚本未完成"
     found = db.search_download_records("hello")
     assert len(found) == 1
     db.delete_download_record("1")
@@ -81,4 +84,45 @@ def test_clear_and_delete_many(tmp_path):
     assert [r.id for r in db.get_all_download_records()] == ["2"]
     db.clear_download_history()
     assert db.get_all_download_records() == []
+    HistoryDB._instance = None
+
+
+def test_completion_note_migrates_from_legacy_history_schema(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "legacy-history.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE download_history (
+                id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                duration INTEGER,
+                thumbnail_url TEXT,
+                uploader TEXT,
+                status TEXT NOT NULL,
+                file_path TEXT,
+                file_size INTEGER,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                error_message TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO download_history
+            (id, url, title, platform, status, created_at)
+            VALUES ('legacy', 'https://example.com/legacy', '旧记录', 'youtube',
+                    'completed', '2024-01-01T00:00:00')
+            """
+        )
+
+    HistoryDB._instance = None
+    db = HistoryDB(db_path=str(db_path))
+
+    assert db.get_download_record("legacy").completion_note == ""
     HistoryDB._instance = None

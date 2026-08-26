@@ -50,6 +50,7 @@ export interface TaskSnapshot {
   file_path: string;
   error_message: string;
   error_code?: string;
+  completion_note?: string;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;

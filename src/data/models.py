@@ -48,6 +48,7 @@ class DownloadRecord:
     output_recovery_safe: bool = False
     output_owner_id: Optional[str] = None
     output_lease_expires_at: Optional[str] = None
+    completion_note: str = ""
 
 
 @dataclass(frozen=True)

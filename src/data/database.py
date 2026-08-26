@@ -78,7 +78,8 @@ class HistoryDB:
                     created_at TEXT NOT NULL,
                     started_at TEXT,
                     completed_at TEXT,
-                    error_message TEXT
+                    error_message TEXT,
+                    completion_note TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
@@ -102,6 +103,7 @@ class HistoryDB:
                 "output_recovery_safe": "ALTER TABLE download_history ADD COLUMN output_recovery_safe INTEGER NOT NULL DEFAULT 0",
                 "output_owner_id": "ALTER TABLE download_history ADD COLUMN output_owner_id TEXT",
                 "output_lease_expires_at": "ALTER TABLE download_history ADD COLUMN output_lease_expires_at TEXT",
+                "completion_note": "ALTER TABLE download_history ADD COLUMN completion_note TEXT NOT NULL DEFAULT ''",
             }
             for name, sql in migrations.items():
                 if name not in columns:
@@ -130,6 +132,7 @@ class HistoryDB:
             output_recovery_safe=bool(row["output_recovery_safe"]),
             output_owner_id=row["output_owner_id"],
             output_lease_expires_at=row["output_lease_expires_at"],
+            completion_note=str(row["completion_note"] or ""),
         )
 
     def add_download_record(
@@ -172,8 +175,8 @@ class HistoryDB:
                 INSERT INTO download_history
                 (id, url, title, platform, duration, thumbnail_url, uploader,
                  status, file_path, file_size, created_at, started_at, completed_at, error_message,
-                 output_state, output_ready_at, output_recovery_safe, output_owner_id, output_lease_expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 completion_note, output_state, output_ready_at, output_recovery_safe, output_owner_id, output_lease_expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   url=excluded.url,
                   title=excluded.title,
@@ -188,6 +191,7 @@ class HistoryDB:
                   started_at=excluded.started_at,
                   completed_at=excluded.completed_at,
                   error_message=excluded.error_message,
+                  completion_note=excluded.completion_note,
                   output_state=CASE WHEN ? THEN excluded.output_state ELSE download_history.output_state END,
                   output_ready_at=CASE WHEN ? THEN NULL ELSE download_history.output_ready_at END,
                   output_recovery_safe=CASE WHEN ? THEN excluded.output_recovery_safe ELSE download_history.output_recovery_safe END,
@@ -209,6 +213,7 @@ class HistoryDB:
                     record.started_at.isoformat() if record.started_at else None,
                     record.completed_at.isoformat() if record.completed_at else None,
                     record.error_message,
+                    record.completion_note,
                     output_state,
                     record.output_ready_at,
                     output_safe,

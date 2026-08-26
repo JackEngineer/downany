@@ -17,6 +17,7 @@ export function taskFixture(
     eta: "—",
     file_path: "",
     error_message: "",
+    completion_note: "",
     created_at: "2026-08-16T10:00:00Z",
     started_at: null,
     completed_at: null,

@@ -72,6 +72,18 @@ def test_error_code_roundtrip(tmp_path):
     assert loaded.error_code == "need_login"
 
 
+def test_completion_note_roundtrip(tmp_path):
+    store = QueueStore(str(tmp_path / "q.db"))
+    task = _make_task()
+    task.completion_note = "未找到所选语言字幕"
+    store.upsert_task(task)
+
+    loaded = store.load_tasks()[0]
+
+    assert loaded.completion_note == "未找到所选语言字幕"
+    assert loaded.to_snapshot().completion_note == "未找到所选语言字幕"
+
+
 def test_postprocessing_list_deserializes_to_string_and_pipeline(tmp_path):
     store = QueueStore(str(tmp_path / "q.db"))
     task = _make_task()
@@ -199,6 +211,7 @@ def test_group_columns_migrate_from_legacy_schema(tmp_path):
     assert loaded[0].group_id == ""
     assert loaded[0].group_title == ""
     assert loaded[0].playlist_index == 0
+    assert loaded[0].completion_note == ""
 
 
 def test_load_tasks_sorted_by_queue_order(tmp_path):

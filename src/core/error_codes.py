@@ -12,6 +12,9 @@ NETWORK = "network"
 YTDLP_OUTDATED = "ytdlp_outdated"
 NEED_PO_TOKEN = "need_po_token"
 UNSUPPORTED = "unsupported"
+OUTPUT_PATH_INVALID = "output_path_invalid"
+MEDIA_TOOLS_MISSING = "media_tools_missing"
+OUTPUT_VERIFICATION_FAILED = "output_verification_failed"
 UNKNOWN = "unknown"
 
 ALL_ERROR_CODES = frozenset(
@@ -24,9 +27,30 @@ ALL_ERROR_CODES = frozenset(
         YTDLP_OUTDATED,
         NEED_PO_TOKEN,
         UNSUPPORTED,
+        OUTPUT_PATH_INVALID,
+        MEDIA_TOOLS_MISSING,
+        OUTPUT_VERIFICATION_FAILED,
         UNKNOWN,
     }
 )
+
+
+class OutputContractError(RuntimeError):
+    """带稳定产品错误码的成品合同异常。"""
+
+    error_code = UNKNOWN
+
+
+class OutputPathInvalid(OutputContractError):
+    error_code = OUTPUT_PATH_INVALID
+
+
+class MediaToolsMissing(OutputContractError):
+    error_code = MEDIA_TOOLS_MISSING
+
+
+class OutputVerificationFailed(OutputContractError):
+    error_code = OUTPUT_VERIFICATION_FAILED
 
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (NEED_PO_TOKEN, re.compile(r"po[\s_-]?token|gvs[\s_-]?po", re.I)),
@@ -58,6 +82,8 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 def classify_download_error(exc_or_message: Union[BaseException, str]) -> str:
     """把异常或错误文本映射为稳定 error_code 字符串。"""
+    if isinstance(exc_or_message, OutputContractError):
+        return exc_or_message.error_code
     if isinstance(exc_or_message, BaseException):
         text = str(exc_or_message)
         cause = exc_or_message.__cause__ or exc_or_message.__context__

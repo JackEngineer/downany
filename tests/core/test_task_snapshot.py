@@ -34,6 +34,7 @@ def test_to_snapshot_copies_fields():
     task.group_id = "g1"
     task.group_title = "合集"
     task.playlist_index = 3
+    task.completion_note = "未找到所选语言字幕"
     snap = task.to_snapshot()
     assert snap.id == task.id
     assert snap.url == "https://example.com/v"
@@ -46,6 +47,8 @@ def test_to_snapshot_copies_fields():
     assert snap.group_id == "g1"
     assert snap.group_title == "合集"
     assert snap.playlist_index == 3
+    assert snap.completion_note == "未找到所选语言字幕"
+    assert task.to_dict()["completion_note"] == "未找到所选语言字幕"
 
 
 def test_snapshot_is_immutable():

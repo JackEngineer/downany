@@ -53,6 +53,7 @@ class QueueStore:
                     downloaded_bytes INTEGER NOT NULL DEFAULT 0,
                     total_bytes INTEGER NOT NULL DEFAULT 0,
                     error_message TEXT NOT NULL DEFAULT '',
+                    completion_note TEXT NOT NULL DEFAULT '',
                     file_path TEXT NOT NULL DEFAULT '',
                     video_info_json TEXT NOT NULL,
                     options_json TEXT NOT NULL,
@@ -70,6 +71,12 @@ class QueueStore:
             try:
                 conn.execute(
                     "ALTER TABLE task_queue ADD COLUMN error_code TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+            try:
+                conn.execute(
+                    "ALTER TABLE task_queue ADD COLUMN completion_note TEXT NOT NULL DEFAULT ''"
                 )
             except sqlite3.OperationalError:
                 pass  # 列已存在
@@ -137,9 +144,9 @@ class QueueStore:
                 """
                 INSERT OR REPLACE INTO task_queue
                 (id, status, progress, downloaded_bytes, total_bytes, error_message,
-                 error_code, file_path, video_info_json, options_json, created_at, updated_at,
+                 error_code, completion_note, file_path, video_info_json, options_json, created_at, updated_at,
                  priority, queue_order, group_id, group_title, playlist_index)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task.id,
@@ -149,6 +156,7 @@ class QueueStore:
                     task.total_bytes,
                     task.error_message,
                     task.error_code,
+                    task.completion_note,
                     task.file_path,
                     json.dumps(video_info, ensure_ascii=False),
                     json.dumps(options, ensure_ascii=False),
@@ -261,6 +269,11 @@ class QueueStore:
             file_path=row["file_path"],
             error_message=row["error_message"],
             error_code=str(row["error_code"]) if "error_code" in row.keys() else "",
+            completion_note=(
+                str(row["completion_note"] or "")
+                if "completion_note" in row.keys()
+                else ""
+            ),
             priority=int(row["priority"]) if "priority" in row.keys() else 0,
             queue_order=int(row["queue_order"]) if "queue_order" in row.keys() else 0,
             group_id=str(row["group_id"]) if "group_id" in row.keys() else "",

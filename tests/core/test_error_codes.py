@@ -46,3 +46,27 @@ def test_classify_download_error(message, expected):
 def test_classify_from_exception():
     exc = RuntimeError("Sign in to continue")
     assert ec.classify_download_error(exc) == ec.NEED_LOGIN
+
+
+@pytest.mark.parametrize(
+    ("class_name", "message", "expected_code"),
+    [
+        ("OutputPathInvalid", "下载位置或文件名不可用", "output_path_invalid"),
+        ("MediaToolsMissing", "媒体工具不完整，请重新安装", "media_tools_missing"),
+        (
+            "OutputVerificationFailed",
+            "成品无法验证，请导出诊断后重试",
+            "output_verification_failed",
+        ),
+    ],
+)
+def test_output_contract_exceptions_keep_stable_codes(
+    class_name, message, expected_code
+):
+    exception_type = getattr(ec, class_name)
+    exception = exception_type(message)
+
+    assert exception.error_code == expected_code
+    assert str(exception) == message
+    assert ec.classify_download_error(exception) == expected_code
+    assert expected_code in ec.ALL_ERROR_CODES

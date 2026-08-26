@@ -99,6 +99,7 @@ class TaskSnapshot:
     group_id: str = ""
     group_title: str = ""
     playlist_index: int = 0
+    completion_note: str = ""
 
 
 @dataclass
@@ -116,6 +117,7 @@ class DownloadTask:
     file_path: str = ""  # 下载完成后的文件路径
     error_message: str = ""  # 错误信息
     error_code: str = ""  # 结构化失败码（见 error_codes）
+    completion_note: str = ""  # 已完成任务的产品化结果提示
     priority: int = 0  # 队列优先级，大的先下载
     queue_order: int = 0  # 队列顺序，小的先调度
     group_id: str = ""  # 播放列表/合集分组；空表示独立任务
@@ -145,6 +147,7 @@ class DownloadTask:
             'file_size': self.video_info.file_size,
             'error_message': self.error_message,
             'error_code': self.error_code,
+            'completion_note': self.completion_note,
             'created_at': self.created_at.isoformat(),
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
@@ -179,4 +182,5 @@ class DownloadTask:
             group_id=self.group_id,
             group_title=self.group_title,
             playlist_index=self.playlist_index,
+            completion_note=self.completion_note,
         )
