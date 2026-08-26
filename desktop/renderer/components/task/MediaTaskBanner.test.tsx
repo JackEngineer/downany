@@ -756,7 +756,7 @@ describe("MediaTaskBanner", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "导入浏览器登录状态" }),
+      screen.getByRole("button", { name: "选择登录状态" }),
     );
     expect(openSettingsMock).toHaveBeenCalledWith();
 
@@ -764,6 +764,68 @@ describe("MediaTaskBanner", () => {
     expect(openExtractWindowMock).toHaveBeenCalledWith(
       "https://example.com/video",
     );
+  });
+
+  it.each([
+    ["need_login", ["选择登录状态", "网页识别"]],
+    ["private", ["选择登录状态", "网页识别"]],
+    ["geo_blocked", ["检查网络设置"]],
+    ["network", ["检查网络设置"]],
+    ["ytdlp_outdated", ["更新下载工具"]],
+    ["need_po_token", ["网页识别"]],
+    ["unsupported", ["网页识别"]],
+    ["removed", []],
+    ["unexpected_code", ["网页识别"]],
+  ] as const)(
+    "shows only the useful recovery actions for %s",
+    (errorCode, labels) => {
+      const { container } = render(
+        <MediaTaskBanner
+          task={taskFixture({ status: "failed", error_code: errorCode })}
+        />,
+      );
+
+      const actual = Array.from(
+        container.querySelectorAll(".media-task-banner__recovery-action"),
+      ).map((element) => element.textContent?.trim() || "");
+      expect(actual).toEqual(labels);
+    },
+  );
+
+  it("never exposes the raw download error in visible text or a tooltip", () => {
+    const raw = "ERROR Cookie: secret-token C:\\Users\\private\\response.json";
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "network",
+          error_message: raw,
+        })}
+      />,
+    );
+
+    expect(container).not.toHaveTextContent(raw);
+    expect(
+      container.querySelector(".media-task-banner__detail"),
+    ).toHaveTextContent("网络连接失败，请检查网络或代理后重试");
+    expect(
+      container.querySelector(".media-task-banner__detail"),
+    ).not.toHaveAttribute("title");
+  });
+
+  it("does not show retry or recovery buttons for removed content", () => {
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({ status: "failed", error_code: "removed" })}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelectorAll(".media-task-banner__recovery-action"),
+    ).toHaveLength(0);
   });
 
   it("renames on double click and submits the exact update payload", async () => {

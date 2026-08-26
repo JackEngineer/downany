@@ -27,6 +27,38 @@ describe("task presentation", () => {
     expect(presentTask(taskFixture({ status: "mystery" })).label).toBe("状态未知");
   });
 
+  it.each([
+    ["need_login", "需要登录后才能下载，请选择浏览器登录状态后重试"],
+    ["private", "此内容为私密内容，请登录有访问权限的账号后重试"],
+    ["geo_blocked", "此内容在当前地区不可用，请检查网络设置后重试"],
+    ["network", "网络连接失败，请检查网络或代理后重试"],
+    ["ytdlp_outdated", "下载工具需要更新，更新后即可重试"],
+    ["need_po_token", "页面需要额外验证，请改用网页识别"],
+    ["unsupported", "暂不支持直接下载此页面，请改用网页识别"],
+    ["removed", "此内容已被删除或不可用"],
+    ["unexpected_code", "下载未完成，请重试或改用网页识别"],
+  ] as const)("uses a safe recovery message for %s", (errorCode, detail) => {
+    const raw = "ERROR Cookie: secret-token C:\\Users\\private\\response.json";
+    const result = presentTask(
+      taskFixture({
+        status: "failed",
+        error_code: errorCode,
+        error_message: raw,
+      }),
+    );
+
+    expect(result.detail).toBe(detail);
+    expect(result.detail).not.toContain("secret-token");
+  });
+
+  it("does not offer a blind retry for removed content", () => {
+    expect(
+      presentTask(
+        taskFixture({ status: "failed", error_code: "removed" }),
+      ),
+    ).toMatchObject({ primaryAction: null, primaryLabel: "" });
+  });
+
   it("builds completed metadata without a progress line", () => {
     const result = presentTask(
       taskFixture({

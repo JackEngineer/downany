@@ -9,7 +9,6 @@ import {
 
 import { platformLabel } from "../../lib/format";
 import type { TaskSnapshot } from "../../lib/types";
-import { useAppStore } from "../../store/appStore";
 import { Button } from "../ui/Button";
 import {
   TaskActionsMenu,
@@ -23,6 +22,10 @@ import {
   type ArtworkDimensions,
   type ArtworkTone,
 } from "./artworkPresentation";
+import {
+  failureRecoveryFor,
+  type FailureRecoveryAction,
+} from "./failureRecovery";
 import { presentTask, type TaskPrimaryAction } from "./taskPresentation";
 import { useTaskCommands, type TaskCommands } from "./useTaskCommands";
 
@@ -69,6 +72,36 @@ function runPrimaryAction(
   }
 }
 
+const RECOVERY_ACTION_VIEWS = {
+  login: { label: "选择登录状态", icon: "settings" },
+  network: { label: "检查网络设置", icon: "settings" },
+  updateTool: { label: "更新下载工具", icon: "settings" },
+  recognize: { label: "网页识别", icon: "capture" },
+} as const satisfies Record<
+  FailureRecoveryAction,
+  { label: string; icon: "settings" | "capture" }
+>;
+
+function runRecoveryAction(
+  action: FailureRecoveryAction,
+  commands: TaskCommands,
+): Promise<void> {
+  switch (action) {
+    case "login":
+    case "network":
+    case "updateTool":
+      return commands.openSettings();
+    case "recognize":
+      return commands.recognizePage();
+    default: {
+      const exhaustive: never = action;
+      return Promise.reject(
+        new Error(`Unhandled recovery action: ${exhaustive}`),
+      );
+    }
+  }
+}
+
 function FailureRecoveryActions({
   task,
   commands,
@@ -76,95 +109,30 @@ function FailureRecoveryActions({
   task: TaskSnapshot;
   commands: TaskCommands;
 }) {
-  const pushToast = useAppStore((state) => state.pushToast);
-
   if (presentTask(task).status !== "failed") return null;
-
-  if (task.error_code === "need_login") {
-    return (
-      <>
-        <Button
-          className="media-task-banner__recovery-action"
-          size="small"
-          variant="ghost"
-          leadingIcon="settings"
-          aria-label="导入浏览器登录状态"
-          title="导入浏览器登录状态"
-          onClick={() => void commands.openSettings()}
-        >
-          <span className="media-task-banner__recovery-label">
-            导入浏览器登录状态
-          </span>
-        </Button>
-        <Button
-          className="media-task-banner__recovery-action"
-          size="small"
-          variant="ghost"
-          leadingIcon="capture"
-          aria-label="网页识别"
-          title="网页识别"
-          onClick={() => void commands.recognizePage()}
-        >
-          <span className="media-task-banner__recovery-label">
-            网页识别
-          </span>
-        </Button>
-      </>
-    );
-  }
+  const view = failureRecoveryFor(task.error_code);
 
   return (
     <>
-      {task.error_code === "geo_blocked" ? (
-        <Button
-          className="media-task-banner__recovery-action"
-          size="small"
-          variant="ghost"
-          leadingIcon="settings"
-          aria-label="检查代理"
-          title="检查代理"
-          onClick={() => {
-            pushToast({
-              kind: "info",
-              title: "地区受限",
-              detail: "请在设置中启用代理并填写代理地址后重试。",
-            });
-            void commands.openSettings();
-          }}
-        >
-          <span className="media-task-banner__recovery-label">
-            检查代理
-          </span>
-        </Button>
-      ) : null}
-      {task.error_code === "ytdlp_outdated" ? (
-        <Button
-          className="media-task-banner__recovery-action"
-          size="small"
-          variant="ghost"
-          leadingIcon="settings"
-          aria-label="打开设置"
-          title="打开设置"
-          onClick={() => void commands.openSettings()}
-        >
-          <span className="media-task-banner__recovery-label">
-            打开设置
-          </span>
-        </Button>
-      ) : null}
-      <Button
-        className="media-task-banner__recovery-action"
-        size="small"
-        variant="ghost"
-        leadingIcon="capture"
-        aria-label="网页识别"
-        title="网页识别"
-        onClick={() => void commands.recognizePage()}
-      >
-        <span className="media-task-banner__recovery-label">
-          网页识别
-        </span>
-      </Button>
+      {view.actions.map((action) => {
+        const presentation = RECOVERY_ACTION_VIEWS[action];
+        return (
+          <Button
+            key={action}
+            className="media-task-banner__recovery-action"
+            size="small"
+            variant="ghost"
+            leadingIcon={presentation.icon}
+            aria-label={presentation.label}
+            title={presentation.label}
+            onClick={() => void runRecoveryAction(action, commands)}
+          >
+            <span className="media-task-banner__recovery-label">
+              {presentation.label}
+            </span>
+          </Button>
+        );
+      })}
     </>
   );
 }
@@ -414,10 +382,7 @@ export function MediaTaskBanner({
           ))}
         </div>
         {view.detail ? (
-          <div
-            className="media-task-banner__detail"
-            title={task.error_message || undefined}
-          >
+          <div className="media-task-banner__detail">
             {view.detail}
           </div>
         ) : null}

@@ -1,10 +1,10 @@
 import {
   formatBytes,
-  friendlyErrorMessage,
   platformLabel,
   statusLabel,
 } from "../../lib/format";
 import type { TaskSnapshot } from "../../lib/types";
+import { failureRecoveryFor } from "./failureRecovery";
 
 export type TaskVisualState =
   | "pending"
@@ -84,6 +84,8 @@ export function presentTask(
 ): TaskPresentation {
   const status = toTaskVisualState(task.status);
   const stateView = STATE_VIEW[status];
+  const failure =
+    status === "failed" ? failureRecoveryFor(task.error_code) : null;
   const bytes = formatBytes(task.total_bytes || task.downloaded_bytes);
   const meta = [platformLabel(task.platform)];
   if (task.quality && task.quality !== "best") meta.push(task.quality);
@@ -102,7 +104,7 @@ export function presentTask(
     .join(" · ");
   const detail =
     status === "failed"
-      ? friendlyErrorMessage(task.error_message)
+      ? failure?.detail || ""
       : status === "downloading" || status === "paused"
         ? transferDetail
         : "";
@@ -110,6 +112,7 @@ export function presentTask(
     ? Math.min(100, Math.max(0, Number(task.progress)))
     : 0;
   const canOpen = status !== "completed" || Boolean(task.file_path);
+  const allowPrimary = canOpen && (failure?.retryable ?? true);
 
   return {
     status,
@@ -117,8 +120,8 @@ export function presentTask(
     tone: stateView.tone,
     meta,
     detail,
-    primaryAction: canOpen ? stateView.primaryAction : null,
-    primaryLabel: canOpen ? stateView.primaryLabel : "",
+    primaryAction: allowPrimary ? stateView.primaryAction : null,
+    primaryLabel: allowPrimary ? stateView.primaryLabel : "",
     showProgress: status === "downloading" || status === "paused",
     progress,
   };
