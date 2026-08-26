@@ -5,6 +5,7 @@ import hashlib
 
 import pytest
 import yt_dlp
+from yt_dlp.postprocessor.ffmpeg import resolve_mapping
 
 from src.core.download_task import DownloadOptions, DownloadTask, Platform, VideoInfo
 from src.core.output_contract import (
@@ -121,6 +122,15 @@ def test_media_kind_containers_and_required_tools_follow_requested_output():
         plan.requires_ffmpeg and plan.requires_ffprobe
         for plan in (default_video, mp4, mp3)
     )
+
+
+def test_default_video_plan_stream_copies_single_file_webm_into_mkv():
+    plan = compile_output_plan(make_task())
+    remuxer = dict(plan.postprocessors[0])
+
+    assert remuxer["key"] == "FFmpegVideoRemuxer"
+    assert resolve_mapping("webm", str(remuxer["preferedformat"])) == ("mkv", None)
+    assert "FFmpegVideoConvertor" not in postprocessor_keys(plan)
 
 
 def test_subtitle_languages_are_normalized_and_blank_omits_selector():
