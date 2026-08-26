@@ -858,6 +858,47 @@ def test_failure_sets_structured_error_code(manager):
     assert task.error_code == ec.NEED_LOGIN
 
 
+@pytest.mark.parametrize(
+    "latest_proxy,latest_browser",
+    [
+        ("http://127.0.0.1:9000", "chrome"),
+        (None, ""),
+    ],
+)
+def test_retry_refreshes_current_recovery_settings(latest_proxy, latest_browser):
+    config = MagicMock()
+    config.build_download_options.return_value = DownloadOptions(
+        output_path="/ignored",
+        quality="best",
+        proxy=latest_proxy,
+        cookies_from_browser=latest_browser,
+    )
+    retry_manager = DownloadManager(config=config, db=MagicMock())
+    task = DownloadTask(
+        video_info=VideoInfo(url="https://example.com/login-required", title="login"),
+        options=DownloadOptions(
+            output_path="/chosen",
+            quality="720p",
+            proxy="http://127.0.0.1:8000",
+            cookies_from_browser="firefox",
+            cookiefile="/chosen/cookies.txt",
+        ),
+        status=TaskStatus.FAILED,
+        error_message="Sign in to continue",
+        error_code=ec.NEED_LOGIN,
+    )
+    retry_manager.tasks[task.id] = task
+
+    retry_manager.retry_task(task.id)
+
+    assert task.status == TaskStatus.PENDING
+    assert task.options.proxy == latest_proxy
+    assert task.options.cookies_from_browser == latest_browser
+    assert task.options.cookiefile == "/chosen/cookies.txt"
+    assert task.options.output_path == "/chosen"
+    assert task.options.quality == "720p"
+
+
 def test_embed_metadata_and_m2_opts_passed_to_ytdlp(manager):
     task = _make_task()
     task.options.embed_metadata = True

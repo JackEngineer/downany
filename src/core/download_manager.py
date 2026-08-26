@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 
 from src.core.download_task import (
+    DownloadOptions,
     DownloadTask,
     Platform,
     TaskSnapshot,
@@ -204,6 +205,25 @@ class DownloadManager:
         task.options.proxy = proxy
         logger.info("任务已自动配置系统代理")
 
+    def _refresh_retry_recovery_options(self, task: DownloadTask) -> None:
+        """重试时采用当前登录状态与代理，同时保留任务自身的下载选项。"""
+        builder = getattr(self.config, "build_download_options", None)
+        if not callable(builder):
+            self._refresh_task_proxy(task)
+            return
+        try:
+            current = builder(output_path=task.options.output_path)
+        except Exception as exc:
+            logger.warning("读取当前恢复设置失败: %s", exc)
+            self._refresh_task_proxy(task)
+            return
+        if not isinstance(current, DownloadOptions):
+            self._refresh_task_proxy(task)
+            return
+        task.options.proxy = current.proxy
+        task.options.cookies_from_browser = current.cookies_from_browser
+        logger.info("重试任务已刷新登录状态与代理设置")
+
     def _normalize_task_url(self, task: DownloadTask) -> None:
         normalized = normalize_download_url(task.video_info.url)
         if normalized == task.video_info.url:
@@ -357,7 +377,7 @@ class DownloadManager:
                 return
             if task_id in self.active_tasks:
                 return
-            self._refresh_task_proxy(task)
+            self._refresh_retry_recovery_options(task)
             self._normalize_task_url(task)
             task.status = TaskStatus.PENDING
             task.error_message = ""
