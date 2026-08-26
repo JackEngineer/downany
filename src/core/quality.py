@@ -3,6 +3,10 @@ import re
 from typing import Optional
 
 VALID_QUALITIES = frozenset({"best", "1080p", "720p", "480p", "360p"})
+DEFAULT_VIDEO_FORMAT_SELECTOR = (
+    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+    "bestvideo+bestaudio/best[ext=mp4]/best"
+)
 
 
 def parse_quality_height(quality: str) -> Optional[int]:
@@ -32,12 +36,19 @@ def normalize_quality(quality: Optional[str]) -> str:
     return "best"
 
 
-def build_format_selector(quality: str, format_id: Optional[str] = None) -> Optional[str]:
-    """根据质量或 format_id 生成 yt-dlp format 表达式；None 表示用默认。"""
+def build_format_selector(quality: str, format_id: Optional[str] = None) -> str:
+    """生成 MP4 优先且每条回退都遵守画质上限的格式表达式。"""
     if format_id:
         return format_id
     normalized = normalize_quality(quality)
     height = parse_quality_height(normalized)
     if height is None:
-        return None
-    return f"bestvideo[height<={height}]+bestaudio/best"
+        return DEFAULT_VIDEO_FORMAT_SELECTOR
+    return "/".join(
+        [
+            f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]",
+            f"bestvideo[height<={height}]+bestaudio",
+            f"best[height<={height}][ext=mp4]",
+            f"best[height<={height}]",
+        ]
+    )
