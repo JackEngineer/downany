@@ -221,6 +221,29 @@ def test_download_accepts_only_postprocessed_info_filepath_and_fixed_options(tmp
     assert instance.prepare_filename_calls == 0
 
 
+def test_download_accepts_real_ytdlp_single_postprocessed_download_record(tmp_path):
+    staging = tmp_path / "task-1"
+    final = staging / "media.mp3"
+    final.parent.mkdir()
+    final.write_bytes(b"verified later")
+    info = {
+        "id": "abc",
+        "extractor": "youtube",
+        "title": "A title",
+        "ext": "mp4",
+        "requested_downloads": [{"filepath": str(final), "ext": "mp3"}],
+    }
+
+    result, _, _ = _download(
+        tmp_path,
+        FakeYDLFactory(info),
+        plan=_video_plan(postprocessing="mp3"),
+    )
+
+    assert result.main_file == final.resolve()
+    assert result.rendered_leaf == "A title [youtube-abc].mp3"
+
+
 def test_path_toolchain_does_not_set_ffmpeg_location(tmp_path):
     staging = tmp_path / "task-1"
     final = staging / "media.mp4"

@@ -159,6 +159,37 @@ def _strict_main_file(raw_path: object, staging: Path) -> Path:
     return path
 
 
+def _postprocessed_info(info: dict[str, Any]) -> dict[str, Any]:
+    """Normalize yt-dlp's one-item postprocessed result without trusting fragments."""
+    raw_path = info.get("filepath")
+    if isinstance(raw_path, (str, os.PathLike)) and str(raw_path).strip():
+        return info
+
+    requested = info.get("requested_downloads")
+    if not isinstance(requested, (list, tuple)) or len(requested) != 1:
+        raise _output_failure("yt-dlp 未返回唯一的后处理下载记录")
+    record = requested[0]
+    if not isinstance(record, Mapping):
+        raise _output_failure("yt-dlp 后处理下载记录无效")
+    raw_path = record.get("filepath")
+    if not isinstance(raw_path, (str, os.PathLike)) or not str(raw_path).strip():
+        raise _output_failure("yt-dlp 后处理下载记录缺少 filepath")
+    try:
+        leaf = Path(raw_path).name
+        parsed_leaf = Path(leaf)
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        raise _output_failure(f"yt-dlp 后处理路径无法解析: {exc}") from exc
+    if parsed_leaf.stem != "media" or not parsed_leaf.suffix:
+        raise _output_failure("yt-dlp 后处理路径不是最终暂存成品")
+
+    normalized = dict(info)
+    normalized["filepath"] = raw_path
+    record_ext = str(record.get("ext") or "").strip()
+    if record_ext:
+        normalized["ext"] = record_ext
+    return normalized
+
+
 def _subtitle_candidate(raw_path: object, staging: Path) -> Optional[Path]:
     if not isinstance(raw_path, (str, os.PathLike)) or not str(raw_path).strip():
         return None
@@ -403,6 +434,7 @@ class Downloader:
     ) -> DownloadResult:
         if not isinstance(info, dict):
             raise _output_failure("yt-dlp 未返回单条媒体信息")
+        info = _postprocessed_info(info)
         self.last_ydl_info = info
         main_file = _strict_main_file(info.get("filepath"), staging)
         rendered_leaf = str(
