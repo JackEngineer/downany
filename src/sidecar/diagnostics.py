@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from src.core.download_task import Platform, TaskStatus
 from src.core.error_codes import ALL_ERROR_CODES, UNKNOWN
-from src.sidecar.bin_paths import resolve_ffmpeg_path
+from src.sidecar.bin_paths import resolve_ffmpeg_path, resolve_ffprobe_path
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import APP_NAME, APP_VERSION
 from src.sidecar.ytdlp_updater import resolve_ytdlp_executable
@@ -24,6 +24,7 @@ from src.sidecar.ytdlp_updater import resolve_ytdlp_executable
 _LOG_LEVEL_RE = re.compile(r"\s-\s(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s-\s")
 _VERSION_TOKEN_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 _FFMPEG_VERSION_RE = re.compile(r"^ffmpeg version\s+([^\s]+)", re.IGNORECASE)
+_FFPROBE_VERSION_RE = re.compile(r"^ffprobe version\s+([^\s]+)", re.IGNORECASE)
 _PLATFORM_VALUES = frozenset(item.value for item in Platform)
 _PRIVACY_SUMMARY: Dict[str, Any] = {
     "schema_version": 1,
@@ -65,9 +66,15 @@ def _safe_ffmpeg_version(value: str) -> str:
     return _safe_version_token(match.group(1)) if match else "unavailable"
 
 
+def _safe_ffprobe_version(value: str) -> str:
+    match = _FFPROBE_VERSION_RE.match(str(value or "").strip())
+    return _safe_version_token(match.group(1)) if match else "unavailable"
+
+
 def collect_environment(paths: AppPaths) -> Dict[str, Any]:
     ytdlp = resolve_ytdlp_executable(paths)
     ffmpeg = resolve_ffmpeg_path()
+    ffprobe = resolve_ffprobe_path()
     if ytdlp:
         ytdlp_source = "bundled"
         ytdlp_version = _safe_version_token(_run_version([ytdlp, "--version"]))
@@ -88,6 +95,12 @@ def collect_environment(paths: AppPaths) -> Dict[str, Any]:
         "ffmpeg_version": (
             _safe_ffmpeg_version(_run_version([str(ffmpeg), "-version"]))
             if ffmpeg
+            else "missing"
+        ),
+        "ffprobe_available": ffprobe is not None,
+        "ffprobe_version": (
+            _safe_ffprobe_version(_run_version([str(ffprobe), "-version"]))
+            if ffprobe
             else "missing"
         ),
         "collected_at": datetime.now(timezone.utc).isoformat(),

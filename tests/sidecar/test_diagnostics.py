@@ -25,14 +25,18 @@ def test_collect_environment_reports_capabilities_without_local_paths(
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
     ytdlp_path = r"C:\Users\private-user\Downany\yt-dlp.exe"
     ffmpeg_path = Path("/Users/private-user/Downany/ffmpeg")
+    ffprobe_path = Path("/Users/private-user/Downany/ffprobe")
     calls: list[list[str]] = []
 
     monkeypatch.setattr(diagnostics, "resolve_ytdlp_executable", lambda _paths: ytdlp_path)
     monkeypatch.setattr(diagnostics, "resolve_ffmpeg_path", lambda: ffmpeg_path)
+    monkeypatch.setattr(diagnostics, "resolve_ffprobe_path", lambda: ffprobe_path)
 
     def fake_version(command: list[str]) -> str:
         calls.append(command)
         if command[-1] == "-version":
+            if "ffprobe" in command[0]:
+                return "ffprobe version 7.1.2 Copyright (c) FFmpeg developers"
             return "ffmpeg version 7.1 Copyright (c) FFmpeg developers"
         return "2026.07.04"
 
@@ -44,11 +48,24 @@ def test_collect_environment_reports_capabilities_without_local_paths(
     assert result["ytdlp_version"] == "2026.07.04"
     assert result["ffmpeg_available"] is True
     assert result["ffmpeg_version"] == "7.1"
-    assert calls == [[ytdlp_path, "--version"], [str(ffmpeg_path), "-version"]]
+    assert result["ffprobe_available"] is True
+    assert result["ffprobe_version"] == "7.1.2"
+    assert calls == [
+        [ytdlp_path, "--version"],
+        [str(ffmpeg_path), "-version"],
+        [str(ffprobe_path), "-version"],
+    ]
     serialized = json.dumps(result, ensure_ascii=False)
     assert ytdlp_path not in serialized
     assert str(ffmpeg_path) not in serialized
+    assert str(ffprobe_path) not in serialized
     assert not any(key.endswith("_path") or key.endswith("_executable") for key in result)
+
+    exported = export_diagnostics(paths, _manager_with(), output_dir=tmp_path / "out")
+    with zipfile.ZipFile(exported["path"]) as archive:
+        environment_text = archive.read("environment.json").decode("utf-8")
+    assert str(ffmpeg_path) not in environment_text
+    assert str(ffprobe_path) not in environment_text
 
 
 def test_collect_environment_rejects_unstructured_version_output(
@@ -68,12 +85,18 @@ def test_collect_environment_rejects_unstructured_version_output(
         "resolve_ffmpeg_path",
         lambda: Path(r"C:\trusted-package\ffmpeg.exe"),
     )
+    monkeypatch.setattr(
+        diagnostics,
+        "resolve_ffprobe_path",
+        lambda: Path(r"C:\trusted-package\ffprobe.exe"),
+    )
     monkeypatch.setattr(diagnostics, "_run_version", lambda _command: sentinel)
 
     result = diagnostics.collect_environment(paths)
 
     assert result["ytdlp_version"] == "unavailable"
     assert result["ffmpeg_version"] == "unavailable"
+    assert result["ffprobe_version"] == "unavailable"
     assert sentinel not in json.dumps(result, ensure_ascii=False)
 
 
