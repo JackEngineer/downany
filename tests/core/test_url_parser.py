@@ -369,12 +369,21 @@ def test_enrich_bilibili_skips_non_empty_titles(monkeypatch):
     assert entries[1]["title"] == "补全"
 
 
-def test_looks_like_playlist_url():
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://www.youtube.com/playlist?list=PL123", True),
+        ("https://www.youtube.com/watch?v=abc&list=PL123", True),
+        ("https://www.youtube.com/watch?v=abc", False),
+        ("https://www.bilibili.com/video/BV1abc", True),
+        ("https://www.bilibili.com/video/BV1abc?p=2", True),
+        ("https://www.bilibili.com/bangumi/play/ep123", True),
+        ("https://example.com/playlist/weekly", True),
+        ("https://example.com/collection/weekly", True),
+        ("https://cdn.example.com/media/video.mp4", False),
+    ],
+)
+def test_looks_like_playlist_url(url, expected):
     from src.core.url_parser import looks_like_playlist_url
 
-    assert looks_like_playlist_url(
-        "https://www.youtube.com/playlist?list=PLvAJTuxHphYqM-4WPDlnQduRE_Be3ZElw"
-    )
-    assert looks_like_playlist_url("https://www.youtube.com/watch?v=abc&list=PLxxx")
-    assert not looks_like_playlist_url("https://www.youtube.com/watch?v=abc")
-    assert not looks_like_playlist_url("https://youtu.be/abc")
+    assert looks_like_playlist_url(url) is expected

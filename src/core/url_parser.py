@@ -130,13 +130,15 @@ def looks_like_playlist_url(url: str) -> bool:
         return True
     if "/lists/" in lower or "/collection/" in lower or "/series/" in lower:
         return True
-    # B 站多 P / 合集常见形态
+    # B 站裸 /video/ 也可能包含多个 P，只有 allow_playlist 元数据解析能可靠区分。
     if "bilibili.com" in lower and (
-        "/video/" in lower or "season" in lower or "episode" in lower or "favlist" in lower
+        "/video/" in lower
+        or "/bangumi/play/" in lower
+        or "season" in lower
+        or "episode" in lower
+        or "favlist" in lower
     ):
-        # /video/BV... 也可能是单 P；?p= 或合集类 path 更靠谱。单 BV 留给 yt-dlp entries 判断。
-        if "p=" in lower or "season" in lower or "favlist" in lower or "/lists/" in lower:
-            return True
+        return True
     return False
 
 

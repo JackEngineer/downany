@@ -162,6 +162,127 @@ def test_create_tasks_auto_expands_playlist_url(tmp_path, monkeypatch):
     assert untitled["title"] == "a2"
 
 
+def test_create_tasks_parses_bare_bilibili_candidate_once_and_keeps_single_ungrouped(
+    tmp_path,
+    monkeypatch,
+):
+    from src.core.url_parser import ParseResult
+    import src.sidecar.handlers as handlers
+
+    parent_url = "https://www.bilibili.com/video/BV1abc"
+    calls = []
+
+    class FakeSession:
+        def __init__(self, url, proxy=None, timeout=30.0, *, allow_playlist=False):
+            calls.append((url, allow_playlist))
+            self.url = url
+
+        def run(self):
+            return ParseResult(
+                info=VideoInfo(
+                    url=self.url,
+                    title="单集视频",
+                    platform=Platform.BILIBILI,
+                ),
+                entries=[
+                    {
+                        "id": "BV1abc",
+                        "title": "单集视频",
+                        "url": parent_url,
+                        "index": "1",
+                    }
+                ],
+                playlist={"id": "BV1abc", "title": "单集视频", "count": 1},
+            )
+
+    monkeypatch.setattr(handlers, "ParseSession", FakeSession)
+    ctx, _ = _ctx(tmp_path)
+
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": [parent_url]},
+    )
+
+    assert calls == [(parent_url, True)]
+    assert len(result["taskIds"]) == 1
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task is not None
+    assert task.video_info.url == parent_url
+    assert task.group_id == ""
+    assert task.group_title == ""
+    assert task.playlist_index == 0
+
+
+def test_create_tasks_expands_bare_bilibili_candidate_once_with_original_page_context(
+    tmp_path,
+    monkeypatch,
+):
+    from src.core.url_parser import ParseResult
+    import src.sidecar.handlers as handlers
+
+    parent_url = "https://www.bilibili.com/video/BV1abc"
+    calls = []
+    page_urls = []
+
+    class FakeSession:
+        def __init__(self, url, proxy=None, timeout=30.0, *, allow_playlist=False):
+            calls.append((url, allow_playlist))
+            self.url = url
+
+        def run(self):
+            return ParseResult(
+                info=VideoInfo(
+                    url=self.url,
+                    title="三集合集",
+                    platform=Platform.BILIBILI,
+                ),
+                entries=[
+                    {
+                        "id": f"BV1abc-{index}",
+                        "title": f"第 {index} 集",
+                        "url": f"{parent_url}?p={index}",
+                        "index": str(index),
+                    }
+                    for index in (1, 2, 3)
+                ],
+                playlist={"id": "BV1abc", "title": "三集合集", "count": 3},
+            )
+
+    def detect_with_context(url, *, referer=None, page_url=None, title=None):
+        page_urls.append(page_url)
+        return Platform.BILIBILI
+
+    monkeypatch.setattr(handlers, "ParseSession", FakeSession)
+    monkeypatch.setattr(
+        handlers.PlatformDetector,
+        "detect_with_context",
+        staticmethod(detect_with_context),
+    )
+    ctx, _ = _ctx(tmp_path)
+
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": [parent_url]},
+    )
+
+    assert calls == [(parent_url, True)]
+    assert len(result["taskIds"]) == 3
+    tasks = [ctx.manager.get_task(task_id) for task_id in result["taskIds"]]
+    assert all(task is not None for task in tasks)
+    assert {task.group_id for task in tasks} == {tasks[0].group_id}
+    assert tasks[0].group_id
+    assert {task.group_title for task in tasks} == {"三集合集"}
+    assert [task.playlist_index for task in tasks] == [1, 2, 3]
+    assert [task.video_info.url for task in tasks] == [
+        f"{parent_url}?p=1",
+        f"{parent_url}?p=2",
+        f"{parent_url}?p=3",
+    ]
+    assert page_urls == [parent_url, parent_url, parent_url]
+
+
 def test_create_tasks_skips_expand_when_client_already_grouped(tmp_path, monkeypatch):
     import src.sidecar.handlers as handlers
 
@@ -191,6 +312,50 @@ def test_create_tasks_skips_expand_when_client_already_grouped(tmp_path, monkeyp
     task = ctx.manager.get_task(result["taskIds"][0])
     assert task.group_id == "g-keep"
     assert task.video_info.url == playlist
+
+
+@pytest.mark.parametrize(
+    ("group_id", "playlist_index"),
+    [("g-client", 0), ("", 2)],
+)
+def test_create_tasks_never_reparses_client_expanded_bilibili_items(
+    tmp_path,
+    monkeypatch,
+    group_id,
+    playlist_index,
+):
+    import src.sidecar.handlers as handlers
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("client-expanded items must not be parsed again")
+
+    monkeypatch.setattr(handlers, "ParseSession", boom)
+    child_url = "https://www.bilibili.com/video/BV1abc?p=2"
+    ctx, _ = _ctx(tmp_path)
+
+    result = dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {
+            "urls": [child_url],
+            "items": [
+                {
+                    "url": child_url,
+                    "title": "第二集",
+                    "group_id": group_id,
+                    "group_title": "客户端合集",
+                    "playlist_index": playlist_index,
+                }
+            ],
+        },
+    )
+
+    assert len(result["taskIds"]) == 1
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task is not None
+    assert task.video_info.url == child_url
+    assert task.group_id == group_id
+    assert task.playlist_index == playlist_index
 
 
 def test_create_tasks_normalizes_douyin_modal_id(tmp_path):

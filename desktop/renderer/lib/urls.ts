@@ -29,8 +29,15 @@ export function looksLikePlaylistUrl(url: string): boolean {
     }
     const host = u.hostname.toLowerCase();
     if (host.includes("bilibili.com")) {
-      if (u.searchParams.has("p")) return true;
-      if (path.includes("season") || path.includes("favlist") || path.includes("/lists/")) {
+      if (path.includes("/video/") || path.includes("/bangumi/play/")) {
+        return true;
+      }
+      if (
+        path.includes("season") ||
+        path.includes("episode") ||
+        path.includes("favlist") ||
+        path.includes("/lists/")
+      ) {
         return true;
       }
     }

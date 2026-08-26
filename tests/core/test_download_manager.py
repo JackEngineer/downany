@@ -1053,3 +1053,113 @@ def test_remove_group_force_and_optional_files(tmp_path):
     assert removed == [t3.id]
     assert not file_a.exists()
     assert file_b.is_file()
+
+
+def test_restore_same_database_preserves_outputs_and_group_delete_scope(tmp_path):
+    database_path = tmp_path / "queue.db"
+    download_root = tmp_path / "downloads"
+    group_dir = download_root / "合集"
+    group_dir.mkdir(parents=True)
+    grouped_file = group_dir / "002 - 第二集.mp4"
+    grouped_file.write_bytes(b"grouped-output")
+    ordinary_file = download_root / "普通视频.mp4"
+    ordinary_file.write_bytes(b"ordinary-output")
+    unrelated_file = group_dir / "手动保存的说明.txt"
+    unrelated_file.write_bytes(b"keep-me")
+
+    downloading = _make_task(
+        url="https://example.com/playlist/1",
+        title="第一集",
+    )
+    downloading.status = TaskStatus.DOWNLOADING
+    downloading.group_id = "group-one"
+    downloading.group_title = "合集"
+    downloading.playlist_index = 1
+    downloading.completion_note = "字幕已保存为独立文件"
+
+    grouped_completed = _make_task(
+        url="https://example.com/playlist/2",
+        title="第二集",
+    )
+    grouped_completed.status = TaskStatus.COMPLETED
+    grouped_completed.progress = 100
+    grouped_completed.group_id = "group-one"
+    grouped_completed.group_title = "合集"
+    grouped_completed.playlist_index = 2
+    grouped_completed.file_path = str(grouped_file)
+
+    ordinary_completed = _make_task(
+        url="https://example.com/ordinary",
+        title="普通视频",
+    )
+    ordinary_completed.status = TaskStatus.COMPLETED
+    ordinary_completed.progress = 100
+    ordinary_completed.file_path = str(ordinary_file)
+
+    store = QueueStore(str(database_path))
+    for task in (downloading, grouped_completed, ordinary_completed):
+        store.upsert_task(task)
+
+    def snapshot(path):
+        stat = path.stat()
+        return (
+            path.name,
+            path.parent,
+            stat.st_size,
+            stat.st_mtime_ns,
+            path.read_bytes(),
+        )
+
+    before = {
+        path: snapshot(path)
+        for path in (grouped_file, ordinary_file, unrelated_file)
+    }
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+
+    first = DownloadManager(
+        config=config,
+        db=MagicMock(),
+        queue_store=QueueStore(str(database_path)),
+    )
+    first.restore_tasks()
+    first_restored = first.get_all_tasks()
+    assert first_restored[downloading.id].status == TaskStatus.PAUSED
+    assert first_restored[grouped_completed.id].status == TaskStatus.COMPLETED
+
+    second = DownloadManager(
+        config=config,
+        db=MagicMock(),
+        queue_store=QueueStore(str(database_path)),
+    )
+    second.restore_tasks()
+    restored = second.get_all_tasks()
+
+    assert restored[downloading.id].status == TaskStatus.PAUSED
+    assert restored[downloading.id].group_id == "group-one"
+    assert restored[downloading.id].group_title == "合集"
+    assert restored[downloading.id].playlist_index == 1
+    assert restored[downloading.id].completion_note == "字幕已保存为独立文件"
+    assert restored[grouped_completed.id].status == TaskStatus.COMPLETED
+    assert restored[grouped_completed.id].group_id == "group-one"
+    assert restored[grouped_completed.id].group_title == "合集"
+    assert restored[grouped_completed.id].playlist_index == 2
+    assert restored[grouped_completed.id].file_path == str(grouped_file)
+    assert restored[ordinary_completed.id].status == TaskStatus.COMPLETED
+    assert restored[ordinary_completed.id].group_id == ""
+    assert restored[ordinary_completed.id].file_path == str(ordinary_file)
+    assert {
+        path: snapshot(path)
+        for path in (grouped_file, ordinary_file, unrelated_file)
+    } == before
+
+    removed = second.remove_group("group-one", delete_files=True)
+
+    assert set(removed) == {downloading.id, grouped_completed.id}
+    assert not grouped_file.exists()
+    assert ordinary_file.is_file()
+    assert unrelated_file.is_file()
+    assert snapshot(ordinary_file) == before[ordinary_file]
+    assert snapshot(unrelated_file) == before[unrelated_file]
+    remaining = QueueStore(str(database_path)).load_tasks()
+    assert [task.id for task in remaining] == [ordinary_completed.id]

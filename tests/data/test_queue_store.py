@@ -158,6 +158,66 @@ def test_group_fields_roundtrip(tmp_path):
     assert loaded.playlist_index == 12
 
 
+def test_same_database_reload_preserves_grouped_output_fields(tmp_path):
+    db_path = tmp_path / "queue.db"
+    output_root = tmp_path / "downloads"
+    output_root.mkdir()
+    grouped_file = output_root / "合集" / "002 - 第二集.mp4"
+    grouped_file.parent.mkdir()
+    grouped_file.write_bytes(b"grouped-output")
+    ordinary_file = output_root / "普通视频.mp4"
+    ordinary_file.write_bytes(b"ordinary-output")
+
+    downloading = _make_task(TaskStatus.DOWNLOADING)
+    downloading.video_info.url = "https://example.com/playlist/1"
+    downloading.group_id = "group-one"
+    downloading.group_title = "合集"
+    downloading.playlist_index = 1
+    downloading.completion_note = "字幕已保存为独立文件"
+
+    grouped_completed = _make_task(TaskStatus.COMPLETED)
+    grouped_completed.video_info.url = "https://example.com/playlist/2"
+    grouped_completed.group_id = "group-one"
+    grouped_completed.group_title = "合集"
+    grouped_completed.playlist_index = 2
+    grouped_completed.file_path = str(grouped_file)
+
+    ordinary_completed = _make_task(TaskStatus.COMPLETED)
+    ordinary_completed.video_info.url = "https://example.com/ordinary"
+    ordinary_completed.file_path = str(ordinary_file)
+
+    store = QueueStore(str(db_path))
+    for task in (downloading, grouped_completed, ordinary_completed):
+        store.upsert_task(task)
+
+    expected = {
+        task.id: (
+            task.status,
+            task.group_id,
+            task.group_title,
+            task.playlist_index,
+            task.file_path,
+            task.completion_note,
+        )
+        for task in (downloading, grouped_completed, ordinary_completed)
+    }
+
+    for _ in range(2):
+        reopened = QueueStore(str(db_path))
+        loaded = {task.id: task for task in reopened.load_tasks()}
+        assert {
+            task_id: (
+                task.status,
+                task.group_id,
+                task.group_title,
+                task.playlist_index,
+                task.file_path,
+                task.completion_note,
+            )
+            for task_id, task in loaded.items()
+        } == expected
+
+
 def test_group_columns_migrate_from_legacy_schema(tmp_path):
     import sqlite3
 

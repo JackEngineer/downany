@@ -20,23 +20,17 @@ describe("extractUrls", () => {
 });
 
 describe("looksLikePlaylistUrl", () => {
-  it("detects youtube playlist urls", () => {
-    expect(
-      looksLikePlaylistUrl(
-        "https://www.youtube.com/playlist?list=PLvAJTuxHphYqM-4WPDlnQduRE_Be3ZElw",
-      ),
-    ).toBe(true);
-    expect(
-      looksLikePlaylistUrl(
-        "https://www.youtube.com/watch?v=abc&list=PLxxxx",
-      ),
-    ).toBe(true);
-  });
-
-  it("ignores plain single video urls", () => {
-    expect(looksLikePlaylistUrl("https://www.youtube.com/watch?v=abc")).toBe(
-      false,
-    );
-    expect(looksLikePlaylistUrl("https://youtu.be/abc")).toBe(false);
+  it.each([
+    ["https://www.youtube.com/playlist?list=PL123", true],
+    ["https://www.youtube.com/watch?v=abc&list=PL123", true],
+    ["https://www.youtube.com/watch?v=abc", false],
+    ["https://www.bilibili.com/video/BV1abc", true],
+    ["https://www.bilibili.com/video/BV1abc?p=2", true],
+    ["https://www.bilibili.com/bangumi/play/ep123", true],
+    ["https://example.com/playlist/weekly", true],
+    ["https://example.com/collection/weekly", true],
+    ["https://cdn.example.com/media/video.mp4", false],
+  ] as const)("classifies %s as %s", (url, expected) => {
+    expect(looksLikePlaylistUrl(url)).toBe(expected);
   });
 });
