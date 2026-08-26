@@ -6,11 +6,15 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from src.core.download_task import (
@@ -21,30 +25,47 @@ from src.core.download_task import (
     TaskStatus,
     VideoInfo,
 )
-from src.core.error_codes import classify_download_error
+from src.core.error_codes import (
+    MediaToolsMissing,
+    OutputPathInvalid,
+    OutputVerificationFailed,
+    classify_download_error,
+)
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
-from src.core.ytdlp_cookies import apply_cookie_sources
-from src.core.downloader import DownloadCancelled, DownloadError, Downloader
+from src.core.downloader import (
+    DownloadCancelled,
+    Downloader,
+    SourceFacts,
+)
 from src.core.events import EventEmitter
-from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.interfaces import DownloadConfig, HistoryWriter, OutputReadySink
 from src.core.local_thumbnail import ensure_local_thumbnail
+from src.core.media_verifier import VerificationExpectation, verify_media
+from src.core.output_commit import (
+    commit_output_bundle,
+    rollback_committed_output,
+)
+from src.core.output_contract import MediaKind, OutputPlan, SubtitleMode, compile_output_plan
 from src.core.platform_detector import (
     PlatformDetector,
     normalize_thumbnail_url,
     pick_thumbnail_from_ydl_info,
 )
-from src.core.quality import build_format_selector
 from src.core.title_utils import is_weak_title, pick_title_from_ydl_info
 from src.core.url_normalizer import normalize_download_url
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.models import DownloadRecord
 from src.data.queue_store import QueueStore
+from src.sidecar.bin_paths import resolve_media_toolchain
 from src.utils.logger import setup_logger
 
 logger = setup_logger("DownloadManager")
 
 _PLACEHOLDER_TITLES = {"正在获取信息...", "未命名视频", ""}
+
+_OUTPUT_PATH_MESSAGE = "下载位置或文件名不可用"
+_MEDIA_TOOLS_MESSAGE = "媒体工具不完整，请重新安装"
+_OUTPUT_VERIFICATION_MESSAGE = "成品无法验证，请导出诊断后重试"
 
 _MEDIA_URL_RE = re.compile(
     r"\.(m3u8|mpd|mp4|webm|mkv|mov|m4v|mp3|m4a|aac|flac|ogg|wav)(?:[?#]|$)",
@@ -92,6 +113,87 @@ def format_postprocess_command(script: str, file_path: str) -> str:
     return f"{script} {quoted}"
 
 
+def _postprocessor_keys(plan: OutputPlan) -> frozenset[str]:
+    return frozenset(
+        str(item.get("key") or "").strip()
+        for item in plan.postprocessors
+        if isinstance(item, Mapping)
+    )
+
+
+def _verification_expectation(
+    plan: OutputPlan,
+    facts: SourceFacts,
+) -> VerificationExpectation:
+    """Build only the checks requested by the plan and supported by the source."""
+    keys = _postprocessor_keys(plan)
+    metadata_requested = "FFmpegMetadata" in keys
+    embedded_subtitles = (
+        plan.media_kind is MediaKind.VIDEO
+        and plan.subtitle_mode in {SubtitleMode.EMBEDDED, SubtitleMode.BOTH}
+    )
+    return VerificationExpectation(
+        media_kind=plan.media_kind,
+        allowed_containers=plan.allowed_containers,
+        require_title=metadata_requested and facts.title_available,
+        require_cover="EmbedThumbnail" in keys and facts.thumbnail_available,
+        require_chapters=metadata_requested and facts.chapters_available,
+        embedded_subtitle_languages=(
+            facts.selected_subtitle_languages if embedded_subtitles else ()
+        ),
+    )
+
+
+def _is_inside(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _verify_external_subtitles(paths: tuple[Path, ...], root: Path) -> None:
+    """Require every retained subtitle to be contained, regular, and non-empty."""
+    try:
+        resolved_root = Path(root).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE) from exc
+    for raw_path in paths:
+        try:
+            path = Path(raw_path).expanduser().resolve(strict=True)
+            if (
+                not _is_inside(resolved_root, path)
+                or not path.is_file()
+                or path.stat().st_size <= 0
+            ):
+                raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE)
+        except OutputVerificationFailed:
+            raise
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE) from exc
+
+
+def _completion_note(plan: OutputPlan, facts: SourceFacts) -> str:
+    notes = [str(plan.completion_note or "").strip()]
+    if facts.missing_requested_subtitles:
+        notes.append(
+            "未找到所选语言字幕"
+            if plan.requested_subtitle_languages
+            else "未找到可用字幕"
+        )
+    return "；".join(note for note in notes if note)
+
+
+def _safe_contract_error(exc: BaseException) -> tuple[str, str]:
+    if isinstance(exc, OutputPathInvalid):
+        return exc.error_code, _OUTPUT_PATH_MESSAGE
+    if isinstance(exc, MediaToolsMissing):
+        return exc.error_code, _MEDIA_TOOLS_MESSAGE
+    if isinstance(exc, OutputVerificationFailed):
+        return exc.error_code, _OUTPUT_VERIFICATION_MESSAGE
+    return classify_download_error(exc), str(exc)
+
+
 class DownloadManager:
     """下载管理器（Qt 无关）。事件通过 self.events 分发。"""
 
@@ -106,7 +208,10 @@ class DownloadManager:
         self.config = config
         self.db = db
         self.queue_store = queue_store
-        self.temp_dir = (temp_dir or "").strip()
+        configured_temp = (temp_dir or "").strip()
+        self.temp_dir = configured_temp or str(
+            Path(tempfile.gettempdir()) / "Downany" / "staging"
+        )
         self.output_ready_sink = output_ready_sink
         self.events = EventEmitter()
         self._last_progress_persist: Dict[str, float] = {}
@@ -172,18 +277,20 @@ class DownloadManager:
 
         logger.info("调度器已停止")
 
-    def _persist(self, task: DownloadTask) -> None:
+    def _persist(self, task: DownloadTask) -> bool:
         """把任务当前状态写入队列存储；失败只记日志，不影响下载。"""
         if self.queue_store is None:
-            return
+            return True
         # 已被 force 移除的任务：下载线程收尾时可能仍会调用 _persist，勿写回库
         with self._lock:
             if task.id not in self.tasks:
-                return
+                return False
         try:
             self.queue_store.upsert_task(task)
+            return True
         except Exception as exc:
             logger.error(f"持久化任务失败 {task.id}: {exc}")
+            return False
 
     def _refresh_task_proxy(self, task: DownloadTask) -> None:
         """任务真正执行前补齐当前配置中的系统代理。"""
@@ -382,6 +489,7 @@ class DownloadManager:
             task.status = TaskStatus.PENDING
             task.error_message = ""
             task.error_code = ""
+            task.completion_note = ""
             task.progress = 0.0
             task.downloaded_bytes = 0
             task.total_bytes = 0
@@ -520,6 +628,22 @@ class DownloadManager:
             logger.error(f"后处理脚本执行失败: {exc}")
             return False
 
+    def _cleanup_staging_dir(self, staging_dir: Path, temp_root: Path) -> None:
+        """Delete only the verified direct child owned by this task."""
+        try:
+            root = Path(temp_root).expanduser().resolve(strict=True)
+            raw_staging = Path(staging_dir).expanduser()
+            if raw_staging.is_symlink():
+                raise OSError("staging directory is a symbolic link")
+            staging = raw_staging.resolve(strict=True)
+            if staging.parent != root or not staging.is_dir():
+                raise OSError("staging directory is outside the task temp root")
+            shutil.rmtree(staging)
+        except FileNotFoundError:
+            return
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.warning("任务暂存目录清理失败 %s: %s", staging_dir.name, exc)
+
     def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
         """锁内调用：queue_order 升序，再 priority 降序，再创建时间早优先。"""
         candidates = [
@@ -572,6 +696,15 @@ class DownloadManager:
                     with self._lock:
                         task.video_info.url = normalized
                     self._persist(task)
+
+            # Compile every output decision before optional metadata/network work.
+            plan = compile_output_plan(task)
+            project_root = Path(__file__).resolve().parents[2]
+            toolchain = resolve_media_toolchain(project_root=project_root)
+            if toolchain is None:
+                raise MediaToolsMissing(_MEDIA_TOOLS_MESSAGE)
+            temp_root = Path(self.temp_dir).expanduser()
+            staging_dir = temp_root / task.id
 
             # 补齐元数据（失败不阻断下载；X 失败时 VideoInfoExtractor 内会走 FxTwitter）
             # 扩展常带真实标题但无封面：页面链接仍需预拉 thumbnail；
@@ -636,7 +769,7 @@ class DownloadManager:
                         "任务已取消" if task.status == TaskStatus.CANCELLED else "任务已暂停"
                     )
 
-            downloader = Downloader(task.options.output_path)
+            downloader = Downloader()
             metadata_backfilled_from_progress = False
 
             def progress_callback(d):
@@ -711,144 +844,82 @@ class DownloadManager:
 
             downloader.set_callbacks(progress=progress_callback)
 
-            opts: Dict = {}
-            options = task.options
-            extract_audio = options.audio_only or options.postprocessing == "mp3"
-            postprocessors: List[Dict] = []
-
-            if extract_audio:
-                opts["format"] = "bestaudio/best"
-                postprocessors.append(
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": "192",
-                    }
-                )
-            else:
-                format_selector = build_format_selector(
-                    options.quality, options.format_id
-                )
-                if format_selector:
-                    opts["format"] = format_selector
-
-                # 直链媒体：generic extractor 的 format 元数据不可靠
-                # （X 的 HLS 清单报 "Requested format is not available"），
-                # 改用宽松选择器；master 清单取最高码率，DASH 分离流合并
-                if _MEDIA_URL_RE.search(task.video_info.url) and not options.format_id:
-                    opts["format"] = "bestvideo+bestaudio/best"
-
-                if options.postprocessing == "mp4":
-                    postprocessors.append(
-                        {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}
-                    )
-
-            if options.embed_metadata:
-                opts["writethumbnail"] = True
-                opts["embedthumbnail"] = True
-                opts["embedmetadata"] = True
-                opts["embedchapters"] = True
-
-            subtitle_langs = [
-                lang.strip()
-                for lang in (options.subtitle_langs or "").split(",")
-                if lang.strip()
-            ]
-            if subtitle_langs:
-                opts["writesubtitles"] = True
-                opts["writeautomaticsub"] = True
-                opts["subtitleslangs"] = subtitle_langs
-            elif options.download_subtitles:
-                opts["writesubtitles"] = True
-                opts["writeautomaticsub"] = True
-
-            if options.embed_subs:
-                opts["embedsubtitles"] = subtitle_langs if subtitle_langs else True
-
-            if options.concurrent_fragments and options.concurrent_fragments > 0:
-                opts["concurrent_fragment_downloads"] = options.concurrent_fragments
-
-            sections = (options.download_sections or "").strip()
-            if sections:
-                opts["download_sections"] = sections
-
-            sponsor_parts = [
-                part.strip()
-                for part in (options.sponsorblock_remove or "").split(",")
-                if part.strip()
-            ]
-            if sponsor_parts:
-                opts["sponsorblock_remove"] = sponsor_parts
-
-            apply_cookie_sources(
-                opts,
-                options.cookies_from_browser,
-                options.cookiefile,
+            result = downloader.download(
+                task.video_info.url,
+                plan,
+                toolchain=toolchain,
+                staging_dir=staging_dir,
             )
 
-            if postprocessors:
-                opts["postprocessors"] = postprocessors
-
-            if options.speed_limit and options.speed_limit > 0:
-                opts["ratelimit"] = options.speed_limit
-
-            proxy = (options.proxy or "").strip()
-            if proxy:
-                opts["proxy"] = proxy
-
-            if options.http_headers:
-                opts["http_headers"] = {
-                    **DEFAULT_HTTP_HEADERS,
-                    **options.http_headers,
-                }
-
-            # 直链任务：yt-dlp generic extractor 的 title 是 URL 文件名（hash/
-            # manifest/index），输出文件无法分辨；用任务标题固定输出文件名。
-            # 页面链接任务不设，让 yt-dlp 用其解析到的真实标题。
-            # 播放列表分组：落到「列表名/序号 - 标题」子文件夹。
-            if task.group_title:
-                folder = sanitize_filename(task.group_title, fallback="playlist")
-                index = max(int(task.playlist_index or 0), 0)
-                prefix = f"{index:03d} - " if index > 0 else ""
-                opts["outtmpl"] = os.path.join(
-                    options.output_path,
-                    folder,
-                    f"{prefix}%(title)s.%(ext)s",
-                )
-            elif (
-                task.video_info.title not in _PLACEHOLDER_TITLES
-                and _MEDIA_URL_RE.search(task.video_info.url)
-            ):
-                opts["outtmpl"] = os.path.join(
-                    options.output_path,
-                    f"{sanitize_filename(task.video_info.title)}.%(ext)s",
-                )
-            elif options.filename_template:
-                opts["outtmpl"] = os.path.join(
-                    options.output_path, options.filename_template
-                )
-
-            if self.temp_dir:
-                os.makedirs(self.temp_dir, exist_ok=True)
-                opts["paths"] = {"temp": self.temp_dir}
-
-            file_path = downloader.download(task.video_info.url, opts)
-
             with self._lock:
-                if task.status == TaskStatus.CANCELLED:
-                    self._save_to_history(task)
-                    return
-                if task.status == TaskStatus.PAUSED:
-                    return
-                self._backfill_metadata_after_download(task, downloader, file_path)
-                task.status = TaskStatus.COMPLETED
-                task.progress = 100.0
-                task.completed_at = datetime.now()
-                task.file_path = file_path or task.file_path
-                self._save_to_history(task)
+                if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                    raise DownloadCancelled(
+                        "任务已取消"
+                        if task.status == TaskStatus.CANCELLED
+                        else "任务已暂停"
+                    )
 
-            self._persist(task)
-            self.events.emit("task_completed", {"task_id": task.id})
+            expectation = _verification_expectation(plan, result.source_facts)
+            verify_media(result.main_file, toolchain.ffprobe, expectation)
+            _verify_external_subtitles(
+                tuple(artifact.path for artifact in result.subtitles),
+                staging_dir,
+            )
+            committed = commit_output_bundle(
+                download_root=Path(task.options.output_path),
+                playlist_folder=plan.playlist_folder,
+                result=result,
+            )
+            try:
+                try:
+                    final_root = Path(task.options.output_path).expanduser().resolve(
+                        strict=True
+                    )
+                    final_main = committed.main_file.expanduser().resolve(strict=True)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise OutputVerificationFailed(
+                        _OUTPUT_VERIFICATION_MESSAGE
+                    ) from exc
+                if not _is_inside(final_root, final_main):
+                    raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE)
+                with self._lock:
+                    if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                        raise DownloadCancelled(
+                            "任务已取消"
+                            if task.status == TaskStatus.CANCELLED
+                            else "任务已暂停"
+                        )
+                verify_media(final_main, toolchain.ffprobe, expectation)
+                _verify_external_subtitles(committed.subtitle_files, final_root)
+                with self._lock:
+                    if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
+                        raise DownloadCancelled(
+                            "任务已取消"
+                            if task.status == TaskStatus.CANCELLED
+                            else "任务已暂停"
+                        )
+                    self._backfill_metadata_after_download(
+                        task,
+                        result.info,
+                        str(committed.main_file),
+                        fallback_info=getattr(downloader, "last_info", None),
+                    )
+                    task.file_path = str(committed.main_file)
+                    task.status = TaskStatus.COMPLETED
+                    task.progress = 100.0
+                    task.completed_at = datetime.now()
+                    task.error_message = ""
+                    task.error_code = ""
+                    task.completion_note = _completion_note(
+                        plan,
+                        result.source_facts,
+                    )
+                    history_persisted = self._save_to_history(task)
+            except Exception:
+                rollback_committed_output(committed)
+                raise
+
+            queue_persisted = self._persist(task)
 
             if task.options.postprocessing == "script" and task.file_path:
                 owner_id = f"postprocess:{task.id}"
@@ -869,7 +940,14 @@ class DownloadManager:
                         logger.warning("无法登记后处理租约 %s: %s", task.id, exc)
                 postprocess_ok = self._run_postprocess_script(task)
                 if postprocess_ok and self.output_ready_sink is not None:
-                    self.output_ready_sink.mark_ready(task, owner_id=owner_id, refresh_config=True)
+                    try:
+                        self.output_ready_sink.mark_ready(
+                            task,
+                            owner_id=owner_id,
+                            refresh_config=True,
+                        )
+                    except Exception as exc:
+                        logger.warning("无法登记可发送成品 %s: %s", task.id, exc)
                 elif not postprocess_ok and self.output_ready_sink is not None:
                     try:
                         self.output_ready_sink.mark_processing_failed(
@@ -878,9 +956,26 @@ class DownloadManager:
                             "Post-process script failed; confirm before retrying delivery.",
                         )
                     except Exception as exc:
-                        logger.warning("无法记录后处理失败的 Telegram 发送记录 %s: %s", task.id, exc)
+                        logger.warning(
+                            "无法记录后处理失败的 Telegram 发送记录 %s: %s",
+                            task.id,
+                            exc,
+                        )
             elif self.output_ready_sink is not None and task.file_path:
-                self.output_ready_sink.mark_ready(task, owner_id=None, refresh_config=True)
+                try:
+                    self.output_ready_sink.mark_ready(
+                        task,
+                        owner_id=None,
+                        refresh_config=True,
+                    )
+                except Exception as exc:
+                    logger.warning("无法登记可发送成品 %s: %s", task.id, exc)
+
+            self.events.emit("task_completed", {"task_id": task.id})
+            if history_persisted and queue_persisted:
+                self._cleanup_staging_dir(staging_dir, temp_root)
+            else:
+                logger.warning("完成状态未全部持久化，保留任务暂存目录: %s", task.id)
 
         except DownloadCancelled as e:
             cancelled = False
@@ -896,18 +991,23 @@ class DownloadManager:
             if cancelled:
                 self.events.emit("task_cancelled", {"task_id": task.id})
                 logger.info(f"任务已取消: {task.video_info.title}")
-        except (DownloadError, Exception) as e:
+        except Exception as e:
+            error_code, error_message = _safe_contract_error(e)
             with self._lock:
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                     return
                 task.status = TaskStatus.FAILED
-                task.error_message = str(e)
-                task.error_code = classify_download_error(e)
+                task.error_message = error_message
+                task.error_code = error_code
+                task.completion_note = ""
                 self._save_to_history(task)
             self._persist(task)
-            self.events.emit("task_failed", {"task_id": task.id, "error": str(e)})
+            self.events.emit(
+                "task_failed",
+                {"task_id": task.id, "error": error_message},
+            )
             self._maybe_report_failure(task)
-            logger.error(f"任务失败: {task.video_info.title} - {str(e)}")
+            logger.error("任务失败: %s - %s", task.video_info.title, e)
         finally:
             requeue = False
             with self._lock:
@@ -939,11 +1039,13 @@ class DownloadManager:
     def _backfill_metadata_after_download(
         self,
         task: DownloadTask,
-        downloader: Downloader,
+        result_info: Mapping[str, object],
         file_path: str,
+        *,
+        fallback_info: Optional[VideoInfo] = None,
     ) -> None:
         """下载完成后回填标题/平台/封面；页面任务优先用 yt-dlp 真实元数据。"""
-        ydl_info = getattr(downloader, "last_ydl_info", None)
+        ydl_info = dict(result_info)
         is_direct = bool(_MEDIA_URL_RE.search(task.video_info.url))
         if isinstance(ydl_info, dict):
             title = pick_title_from_ydl_info(
@@ -987,7 +1089,6 @@ class DownloadManager:
                 task.video_info.thumbnail_url = local_thumb
 
         if task.video_info.title in _PLACEHOLDER_TITLES:
-            fallback_info = getattr(downloader, "last_info", None)
             if (
                 isinstance(fallback_info, VideoInfo)
                 and fallback_info.title
@@ -1001,7 +1102,7 @@ class DownloadManager:
                 if stem and stem not in _PLACEHOLDER_TITLES:
                     task.video_info.title = stem
 
-    def _save_to_history(self, task: DownloadTask):
+    def _save_to_history(self, task: DownloadTask) -> bool:
         """保存任务到历史记录（调用方应持有锁或接受竞态窗口很小）。"""
         record = DownloadRecord(
             id=task.id,
@@ -1019,11 +1120,14 @@ class DownloadManager:
             completed_at=task.completed_at,
             error_message=task.error_message,
             output_recovery_safe=task.options.postprocessing != "script",
+            completion_note=task.completion_note,
         )
         try:
             self.db.add_download_record(
                 record,
                 output_recovery_safe_override=record.output_recovery_safe,
             )
+            return True
         except Exception as exc:
             logger.error(f"写入历史失败: {exc}")
+            return False

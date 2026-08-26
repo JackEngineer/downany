@@ -1,7 +1,11 @@
 """DownloadManager 状态机与并发安全测试（Qt 无关）。"""
+import shutil
 import sys
+import tempfile
 import threading
 import time
+from pathlib import Path
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,12 +19,84 @@ from src.core.download_task import (
     VideoInfo,
 )
 from src.core.downloader import DownloadCancelled, DownloadError
+from src.core.downloader import DownloadResult, SourceFacts
+from src.core.media_verifier import MediaVerification
+from src.core.output_commit import CommittedOutput
 from src.core import error_codes as ec
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
 from src.data.telegram_delivery_store import TelegramDeliveryStore
 from src.data.queue_store import QueueStore
 from src.sidecar.telegram_delivery_service import TelegramDeliveryService
+from src.sidecar.bin_paths import MediaToolchain
+
+_TEST_OUTPUT_ROOT = Path(tempfile.gettempdir()) / "DownanyTests" / "outputs"
+
+
+@pytest.fixture(autouse=True)
+def verified_output_dependencies(monkeypatch, tmp_path):
+    """Keep manager tests focused while satisfying the verified-output boundary."""
+    global _TEST_OUTPUT_ROOT
+    _TEST_OUTPUT_ROOT = tmp_path / "outputs"
+    toolchain = MediaToolchain(
+        ffmpeg=tmp_path / "ffmpeg",
+        ffprobe=tmp_path / "ffprobe",
+        ffmpeg_location=tmp_path,
+        source="test",
+    )
+    monkeypatch.setattr(
+        "src.core.download_manager.resolve_media_toolchain",
+        lambda **_kwargs: toolchain,
+    )
+    monkeypatch.setattr(
+        "src.core.download_manager.verify_media",
+        lambda *_args, **_kwargs: MediaVerification(
+            "mp4", ("video",), (), False, False, 0
+        ),
+    )
+
+    def commit(*, download_root, playlist_folder, result):
+        folder = Path(download_root)
+        if playlist_folder:
+            folder /= playlist_folder
+        folder.mkdir(parents=True, exist_ok=True)
+        suffix = result.main_file.suffix or ".mp4"
+        target = folder / f"{result.main_file.stem} [{result.source_key[:8]}]{suffix}"
+        shutil.copyfile(result.main_file, target)
+        return CommittedOutput(target, (), ())
+
+    monkeypatch.setattr("src.core.download_manager.commit_output_bundle", commit)
+
+
+def _download_result(instance, staging_dir, file_path, *, info=None):
+    staging = Path(staging_dir)
+    staging.mkdir(parents=True, exist_ok=True)
+    source = Path(file_path)
+    staged = staging / source.name
+    try:
+        original = source.read_bytes()
+    except OSError:
+        original = b"test-media"
+    staged.write_bytes(original or b"test-media")
+    payload = dict(info or getattr(instance, "last_ydl_info", None) or {})
+    payload.setdefault("title", source.stem)
+    payload["filepath"] = str(staged)
+    return DownloadResult(
+        main_file=staged,
+        subtitles=(),
+        info=MappingProxyType(payload),
+        rendered_leaf=source.name,
+        source_key=staging.name,
+        downloaded_this_run=True,
+        source_facts=SourceFacts((), False, False, False, True),
+    )
+
+
+def _result_side_effect(instance, file_path, *, info=None):
+    def download(_url, _plan, *, toolchain, staging_dir):
+        return _download_result(instance, staging_dir, file_path, info=info)
+
+    return download
 
 
 @pytest.fixture
@@ -37,7 +113,7 @@ def manager():
 def _make_task(url="https://example.com/a", title="t"):
     return DownloadTask(
         video_info=VideoInfo(url=url, title=title),
-        options=DownloadOptions(output_path="/tmp"),
+        options=DownloadOptions(output_path=str(_TEST_OUTPUT_ROOT)),
     )
 
 
@@ -50,20 +126,16 @@ def _wait_until(predicate, timeout=3.0):
     return predicate()
 
 
-def _completed_download(path):
-    def fake_download(_url, _opts=None):
-        return path
-
-    return fake_download
-
-
 def _run_one_task(manager, task, download_return="/tmp/out.mp4"):
-    """用假 Downloader 跑完一个任务，返回捕获的 opts。"""
+    """用假 Downloader 跑完一个任务，返回编译后的 yt-dlp 选项。"""
     captured = {}
 
-    def fake_download(url, opts=None):
-        captured["opts"] = opts or {}
-        return download_return
+    def fake_download(url, plan, *, toolchain, staging_dir):
+        captured["opts"] = plan.to_ydl_options()
+        captured["opts"]["_final_leaf_template"] = plan.final_leaf_template
+        captured["opts"]["_playlist_folder"] = plan.playlist_folder
+        captured["opts"]["_staging_dir"] = str(staging_dir)
+        return _download_result(instance, staging_dir, download_return)
 
     with patch("src.core.download_manager.Downloader") as mock_cls, patch(
         "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
@@ -141,7 +213,7 @@ def test_youtube_progress_replaces_stale_extension_title(manager):
         instance.last_info = None
         instance.last_ydl_info = None
 
-        def fake_download(_url, _opts=None):
+        def fake_download(_url, _plan, *, toolchain, staging_dir):
             progress = instance.set_callbacks.call_args.kwargs["progress"]
             progress(
                 {
@@ -156,7 +228,12 @@ def test_youtube_progress_replaces_stale_extension_title(manager):
                 }
             )
             observed["title_during_download"] = task.video_info.title
-            return "/tmp/out.mp4"
+            return _download_result(
+                instance,
+                staging_dir,
+                "/tmp/out.mp4",
+                info={"title": "当前视频真实标题", "uploader": "当前作者"},
+            )
 
         instance.download.side_effect = fake_download
         mock_cls.return_value = instance
@@ -174,9 +251,9 @@ def test_download_repairs_duplicate_youtube_url_before_starting(manager):
     task = _make_task(url=malformed, title="youtube-task")
     captured = {}
 
-    def fake_download(url, opts=None):
+    def fake_download(url, _plan, *, toolchain, staging_dir):
         captured["url"] = url
-        return "/tmp/out.mp4"
+        return _download_result(instance, staging_dir, "/tmp/out.mp4")
 
     with patch("src.core.download_manager.Downloader") as mock_cls, patch(
         "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
@@ -206,7 +283,11 @@ def test_youtube_task_skips_optional_metadata_prefetch(manager):
         instance = MagicMock()
         instance.last_info = None
         instance.last_ydl_info = None
-        instance.download.return_value = "/tmp/out.mp4"
+        instance.download.side_effect = (
+            lambda _url, _plan, *, toolchain, staging_dir: _download_result(
+                instance, staging_dir, "/tmp/out.mp4"
+            )
+        )
         mock_cls.return_value = instance
 
         manager.add_task(task)
@@ -246,7 +327,7 @@ def test_cancel_does_not_complete(manager):
     started = threading.Event()
     proceed = threading.Event()
 
-    def fake_download(url, opts=None):
+    def fake_download(url, _plan, *, toolchain, staging_dir):
         started.set()
         proceed.wait(timeout=2)
         raise DownloadCancelled("任务已取消")
@@ -271,13 +352,13 @@ def test_pause_then_resume_after_thread_exits(manager):
     call_count = {"n": 0}
     gate = threading.Event()
 
-    def fake_download(url, opts=None):
+    def fake_download(url, _plan, *, toolchain, staging_dir):
         call_count["n"] += 1
         if call_count["n"] == 1:
             gate.set()
             time.sleep(0.15)
             raise DownloadCancelled("任务已暂停")
-        return "/tmp/done.mp4"
+        return _download_result(instance, staging_dir, "/tmp/done.mp4")
 
     with patch("src.core.download_manager.Downloader") as mock_cls, patch(
         "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
@@ -303,7 +384,7 @@ def test_resume_while_active_does_not_double_start(manager):
     release = threading.Event()
     starts = []
 
-    def fake_download(url, opts=None):
+    def fake_download(url, _plan, *, toolchain, staging_dir):
         starts.append(1)
         started.set()
         release.wait(timeout=2)
@@ -340,74 +421,39 @@ def test_http_headers_merged_into_ydl_opts(manager):
         "Referer": "https://example.com/watch",
         "Cookie": "sid=1",
     }
-    captured = {}
+    opts = _run_one_task(manager, task, "/tmp/done.mp4")
 
-    def fake_download(url, opts=None):
-        captured["opts"] = opts
-        return "/tmp/done.mp4"
-
-    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
-        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
-    ):
-        instance = MagicMock()
-        instance.download.side_effect = fake_download
-        mock_cls.return_value = instance
-        manager.add_task(task)
-        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
-
-    headers = captured["opts"]["http_headers"]
+    headers = opts["http_headers"]
     assert headers["Referer"] == "https://example.com/watch"
     assert headers["Cookie"] == "sid=1"
     assert headers["User-Agent"] == DEFAULT_HTTP_HEADERS["User-Agent"]
 
 
-def test_direct_media_url_uses_task_title_in_outtmpl(manager):
+def test_direct_media_url_uses_stable_source_key_in_final_template(manager):
     task = _make_task(url="https://cdn.example/4d0c6728-abcd.m3u8", title="我的视频")
     task.options.http_headers = {"Referer": "https://example.com/"}
-    captured = {}
+    opts = _run_one_task(manager, task, "/tmp/done.mp4")
 
-    def fake_download(url, opts=None):
-        captured["opts"] = opts
-        return "/tmp/done.mp4"
-
-    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
-        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
-    ):
-        instance = MagicMock()
-        instance.download.side_effect = fake_download
-        mock_cls.return_value = instance
-        manager.add_task(task)
-        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
-
-    outtmpl = captured["opts"]["outtmpl"]
-    assert "我的视频.%(ext)s" in outtmpl
-    assert "4d0c6728" not in outtmpl
+    template = opts["_final_leaf_template"]
+    assert "%(title)s" in template
+    assert "%(ext)s" in template
+    assert "[" in template
 
 
-def test_page_url_task_keeps_ytdlp_title(manager):
-    """页面链接任务不固定 outtmpl，交给 yt-dlp 用解析到的真实标题。"""
+def test_page_url_task_uses_ytdlp_title_and_page_identity_template(manager):
+    """页面链接使用 yt-dlp 标题，并加入来源身份避免同名覆盖。"""
     task = _make_task(url="https://x.com/user/status/123", title="页面标题")
-    captured = {}
+    opts = _run_one_task(manager, task, "/tmp/done.mp4")
 
-    def fake_download(url, opts=None):
-        captured["opts"] = opts
-        return "/tmp/done.mp4"
-
-    with patch("src.core.download_manager.Downloader") as mock_cls, patch(
-        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
-    ):
-        instance = MagicMock()
-        instance.download.side_effect = fake_download
-        mock_cls.return_value = instance
-        manager.add_task(task)
-        assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
-
-    assert "outtmpl" not in captured["opts"]
+    assert opts["_final_leaf_template"] == (
+        "%(title)s [%(extractor)s-%(id)s].%(ext)s"
+    )
 
 
 def test_audio_only_forces_bestaudio_and_mp3_extract(manager):
     task = _make_task()
     task.options.audio_only = True
+    task.options.embed_metadata = False
     opts = _run_one_task(manager, task, "/tmp/out.mp3")
     assert opts["format"] == "bestaudio/best"
     assert opts["postprocessors"] == [
@@ -418,6 +464,7 @@ def test_audio_only_forces_bestaudio_and_mp3_extract(manager):
 def test_postprocessing_mp3_same_as_audio_only(manager):
     task = _make_task()
     task.options.postprocessing = "mp3"
+    task.options.embed_metadata = False
     opts = _run_one_task(manager, task, "/tmp/out.mp3")
     assert opts["format"] == "bestaudio/best"
     assert opts["postprocessors"][0]["key"] == "FFmpegExtractAudio"
@@ -426,6 +473,7 @@ def test_postprocessing_mp3_same_as_audio_only(manager):
 def test_postprocessing_mp4_adds_video_convertor(manager):
     task = _make_task()
     task.options.postprocessing = "mp4"
+    task.options.embed_metadata = False
     opts = _run_one_task(manager, task)
     assert opts["postprocessors"] == [
         {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}
@@ -437,7 +485,9 @@ def test_filename_template_used_as_outtmpl(manager):
     task = _make_task(url="https://x.com/user/status/123")
     task.options.filename_template = "%(uploader)s-%(title)s.%(ext)s"
     opts = _run_one_task(manager, task)
-    assert opts["outtmpl"].endswith("%(uploader)s-%(title)s.%(ext)s")
+    assert opts["_final_leaf_template"] == (
+        "%(uploader)s-%(title)s [%(extractor)s-%(id)s].%(ext)s"
+    )
 
 
 def test_playlist_group_uses_subfolder_outtmpl(manager):
@@ -446,12 +496,11 @@ def test_playlist_group_uses_subfolder_outtmpl(manager):
     task.group_title = "我的播放列表"
     task.playlist_index = 5
     opts = _run_one_task(manager, task)
-    outtmpl = opts["outtmpl"]
-    assert outtmpl.endswith("005 - %(title)s.%(ext)s")
-    assert "我的播放列表" in outtmpl
+    assert opts["_final_leaf_template"].startswith("005 - %(title)s")
+    assert "我的播放列表" in opts["_playlist_folder"]
 
 
-def test_temp_dir_sets_paths_temp(tmp_path):
+def test_temp_dir_sets_task_owned_staging_directory(tmp_path):
     config = MagicMock()
     config.get_concurrent_downloads.return_value = 1
     mgr = DownloadManager(
@@ -463,7 +512,7 @@ def test_temp_dir_sets_paths_temp(tmp_path):
     try:
         task = _make_task(url="https://www.youtube.com/watch?v=abc")
         opts = _run_one_task(mgr, task)
-        assert opts["paths"]["temp"] == str(tmp_path / "tmpdir")
+        assert opts["_staging_dir"] == str(tmp_path / "tmpdir" / task.id)
         assert (tmp_path / "tmpdir").is_dir()
     finally:
         mgr.stop(join_timeout=2)
@@ -492,7 +541,7 @@ def test_script_postprocess_runs_after_completion(manager, monkeypatch):
         _run_one_task(manager, task, "/tmp/my file.mp4")
         assert _wait_until(lambda: mock_run.called)
     command = mock_run.call_args[0][0]
-    expected = format_postprocess_command("process-video {file}", "/tmp/my file.mp4")
+    expected = format_postprocess_command("process-video {file}", task.file_path)
     assert command == expected
 
 
@@ -554,8 +603,8 @@ def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path):
         options=DownloadOptions(output_path=str(root / "downloads")),
     )
 
-    def fake_download(_url, _opts=None):
-        return str(output)
+    def fake_download(_url, _plan, *, toolchain, staging_dir):
+        return _download_result(downloader, staging_dir, str(output))
 
     try:
         manager.start()
@@ -680,7 +729,9 @@ def test_placeholder_title_backfilled_from_filename_on_complete(manager):
     ):
         instance = MagicMock()
         instance.last_info = None
-        instance.download.return_value = "/tmp/真正的标题.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance, "/tmp/真正的标题.mp4"
+        )
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
@@ -702,7 +753,15 @@ def test_placeholder_title_backfilled_from_twitter_last_info(manager):
         instance = MagicMock()
         instance.last_info = info
         instance.last_ydl_info = None
-        instance.download.return_value = "/tmp/hash.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance,
+            "/tmp/hash.mp4",
+            info={
+                "title": info.title,
+                "uploader": info.uploader,
+                "duration": info.duration,
+            },
+        )
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
@@ -729,8 +788,10 @@ def test_page_download_backfills_title_and_platform_from_ydl_info(manager):
             "uploader": "Rick Astley",
             "duration": 213,
         }
-        instance.download.return_value = (
-            "/tmp/Rick Astley - Never Gonna Give You Up.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance,
+            "/tmp/Rick Astley - Never Gonna Give You Up.mp4",
+            info=instance.last_ydl_info,
         )
         mock_cls.return_value = instance
         manager.add_task(task)
@@ -767,7 +828,11 @@ def test_page_task_with_title_still_prefills_missing_thumbnail(manager):
         instance = MagicMock()
         instance.last_info = None
         instance.last_ydl_info = None
-        instance.download.return_value = "/tmp/out.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance,
+            "/tmp/out.mp4",
+            info={"title": task.video_info.title},
+        )
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
@@ -802,7 +867,11 @@ def test_xiaohongshu_cdn_uses_referer_page_for_thumbnail(manager):
         instance = MagicMock()
         instance.last_info = None
         instance.last_ydl_info = None
-        instance.download.return_value = "/tmp/xhs.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance,
+            "/tmp/xhs.mp4",
+            info={"title": task.video_info.title},
+        )
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
@@ -837,7 +906,11 @@ def test_instagram_weak_title_backfilled_from_description(manager):
             "uploader": "goutouluoli_",
             "thumbnail": "https://example.com/t.jpg",
         }
-        instance.download.return_value = "/tmp/ig.mp4"
+        instance.download.side_effect = _result_side_effect(
+            instance,
+            "/tmp/ig.mp4",
+            info=instance.last_ydl_info,
+        )
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
@@ -910,13 +983,17 @@ def test_embed_metadata_and_m2_opts_passed_to_ytdlp(manager):
     task.options.cookies_from_browser = "chrome"
     opts = _run_one_task(manager, task)
     assert opts["writethumbnail"] is True
-    assert opts["embedmetadata"] is True
-    assert opts["subtitleslangs"] == ["en", "zh-Hans"]
-    assert opts["embedsubtitles"] == ["en", "zh-Hans"]
+    assert opts["subtitleslangs"] == ("en", "zh-Hans")
     assert opts["concurrent_fragment_downloads"] == 8
-    assert opts["download_sections"] == "*10:00-12:00"
-    assert opts["sponsorblock_remove"] == ["sponsor", "intro"]
+    assert "download_sections" not in opts
+    assert "sponsorblock_remove" not in opts
     assert opts["cookiesfrombrowser"] == ("chrome",)
+    assert [item["key"] for item in opts["postprocessors"]] == [
+        "FFmpegVideoRemuxer",
+        "FFmpegEmbedSubtitle",
+        "FFmpegMetadata",
+        "EmbedThumbnail",
+    ]
 
 
 def test_download_subtitles_without_langs_keeps_legacy_behavior(manager):

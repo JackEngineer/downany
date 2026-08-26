@@ -18,11 +18,16 @@ class DownloadConfig(Protocol):
 class HistoryWriter(Protocol):
     """下载核心需要的历史写入能力。"""
 
-    def add_download_record(self, record: DownloadRecord) -> None: ...
+    def add_download_record(
+        self,
+        record: DownloadRecord,
+        *,
+        output_recovery_safe_override: Optional[bool] = None,
+    ) -> None: ...
 
 
 class OutputReadySink(Protocol):
-    """Receives the final file after download/post-processing completes."""
+    """接收已验证、已持久化的最终成品。"""
 
     def mark_processing(self, task: DownloadTask, owner_id: str, lease_expires_at: str) -> None: ...
 
