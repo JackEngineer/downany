@@ -38,13 +38,14 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     )),
     (GEO_BLOCKED, re.compile(r"not available in your country|unavailable in your country|geo.?restrict|region.?block|country.?block", re.I)),
     (PRIVATE, re.compile(r"\bprivate video\b|video is private", re.I)),
-    # generic 抽取器失败 = 站点/链接不受支持，须早于 404→removed
-    (UNSUPPORTED, re.compile(
-        r"unsupported url|no suitable extractor|unsupported site|unable to extract|\[generic\]",
-        re.I,
-    )),
     (NETWORK, re.compile(
         r"timeout|timed out|connection|network|errno|http error 403|http error 429|http error 5|forbidden|ssl:|certificate",
+        re.I,
+    )),
+    # generic 抽取器失败 = 站点/链接不受支持，须早于 404→removed；
+    # 但明确的网络错误必须先由 NETWORK 接住。
+    (UNSUPPORTED, re.compile(
+        r"unsupported url|no suitable extractor|unsupported site|unable to extract|\[generic\]",
         re.I,
     )),
     (REMOVED, re.compile(

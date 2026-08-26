@@ -17,6 +17,16 @@ from src.core import error_codes as ec
         ("HTTP Error 503: Service Unavailable", ec.NETWORK),
         ("HTTP Error 403: Forbidden", ec.NETWORK),
         ("Connection timed out", ec.NETWORK),
+        (
+            "ERROR: [generic] https://cdn.example/video.m3u8: "
+            "Unable to download webpage: Connection timed out",
+            ec.NETWORK,
+        ),
+        (
+            "ERROR: [generic] https://cdn.example/video.m3u8: "
+            "Unable to download webpage: HTTP Error 503: Service Unavailable",
+            ec.NETWORK,
+        ),
         ("Please update yt-dlp", ec.YTDLP_OUTDATED),
         ("GVS PO Token required", ec.NEED_PO_TOKEN),
         ("Unsupported URL", ec.UNSUPPORTED),
