@@ -8,6 +8,11 @@ import { ToastHost } from "./components/ToastHost";
 import { request } from "./lib/api";
 import { getLocale, setLocale, t, type Locale } from "./i18n";
 import { useDocumentTheme } from "./lib/documentTheme";
+import {
+  subtitleModeFromSettings,
+  subtitleModePatch,
+  type SubtitleMode,
+} from "./lib/outputSettings";
 import type { AppSettings } from "./lib/types";
 import { useAppStore } from "./store/appStore";
 
@@ -125,7 +130,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>嵌入元数据</span>
+        <span>写入媒体信息</span>
         <input
           type="checkbox"
           checked={draft.embed_metadata !== false}
@@ -133,6 +138,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
           onChange={(e) => update({ embed_metadata: e.target.checked })}
         />
       </label>
+      <p className="muted small">来源提供时写入标题、封面和章节</p>
 
       <label className="settings-row">
         <span>HLS 分片并发</span>
@@ -207,6 +213,11 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
 }
 
 function QualityTab({ draft, disabled, update }: TabProps) {
+  const subtitleMode = subtitleModeFromSettings(draft);
+  const mp3UsesExternalSubtitles =
+    draft.postprocessing === "mp3" &&
+    (subtitleMode === "embedded" || subtitleMode === "both");
+
   return (
     <div className="settings-grid">
       <label className="settings-row">
@@ -234,13 +245,19 @@ function QualityTab({ draft, disabled, update }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>下载字幕</span>
-        <input
-          type="checkbox"
-          checked={Boolean(draft.download_subtitles)}
+        <span>字幕</span>
+        <select
+          value={subtitleMode}
           disabled={disabled}
-          onChange={(e) => update({ download_subtitles: e.target.checked })}
-        />
+          onChange={(e) =>
+            update(subtitleModePatch(e.target.value as SubtitleMode))
+          }
+        >
+          <option value="none">不下载字幕</option>
+          <option value="external">保存独立字幕</option>
+          <option value="embedded">写入视频</option>
+          <option value="both">写入视频并保留独立字幕</option>
+        </select>
       </label>
 
       <label className="settings-row">
@@ -248,40 +265,16 @@ function QualityTab({ draft, disabled, update }: TabProps) {
         <input
           value={draft.subtitle_langs || ""}
           disabled={disabled}
-          placeholder="如 zh-Hans,en（空=跟随站点默认）"
+          placeholder="如 zh-Hans,en（留空则自动选择一个可用字幕）"
           onChange={(e) => update({ subtitle_langs: e.target.value })}
         />
       </label>
 
-      <label className="settings-row">
-        <span>内嵌字幕</span>
-        <input
-          type="checkbox"
-          checked={Boolean(draft.embed_subs)}
-          disabled={disabled}
-          onChange={(e) => update({ embed_subs: e.target.checked })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>片段裁剪</span>
-        <input
-          value={draft.download_sections || ""}
-          disabled={disabled}
-          placeholder="如 *00:10:00-00:15:00（空=完整）"
-          onChange={(e) => update({ download_sections: e.target.value })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>SponsorBlock 去除</span>
-        <input
-          value={draft.sponsorblock_remove || ""}
-          disabled={disabled}
-          placeholder="如 sponsor,intro,outro（空=不启用）"
-          onChange={(e) => update({ sponsorblock_remove: e.target.value })}
-        />
-      </label>
+      {mp3UsesExternalSubtitles ? (
+        <p className="muted small">
+          MP3 不支持写入字幕，将保存为独立字幕文件
+        </p>
+      ) : null}
     </div>
   );
 }

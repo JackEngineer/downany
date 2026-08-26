@@ -14,6 +14,7 @@ import type { ContextMenuTemplateItem } from "../../../electron/preload";
 import type { TaskSnapshot } from "../../lib/types";
 import { IconButton } from "../ui/Button";
 import { Icon } from "../ui/Icon";
+import { failureRecoveryFor } from "./failureRecovery";
 import { toTaskVisualState } from "./taskPresentation";
 import type { TaskCommands } from "./useTaskCommands";
 
@@ -28,6 +29,7 @@ interface TaskActionsMenuProps {
   task: TaskSnapshot;
   commands: TaskCommands;
   onRename: () => void;
+  onRetryRequested: () => Promise<void>;
 }
 
 interface VisibleMenuItem {
@@ -185,7 +187,10 @@ export function buildTaskContextTemplate(
   if (status === "pending" || status === "downloading" || status === "paused") {
     items.push({ id: "cancel", label: "取消下载" });
   }
-  if (status === "failed" || status === "cancelled") {
+  if (
+    status === "cancelled" ||
+    (status === "failed" && failureRecoveryFor(task.error_code).retryable)
+  ) {
     items.push({ id: "retry", label: status === "failed" ? "重试" : "重新下载" });
   }
   if (status === "completed" && task.file_path) {
@@ -205,6 +210,7 @@ export async function dispatchTaskAction(
   task: TaskSnapshot,
   commands: TaskCommands,
   startRename: () => void,
+  requestRetry: () => Promise<void>,
 ): Promise<void> {
   switch (actionId) {
     case "rename":
@@ -225,7 +231,7 @@ export async function dispatchTaskAction(
     case "cancel":
       return commands.run("download.cancel");
     case "retry":
-      return commands.run("download.retry");
+      return requestRetry();
     case "remove":
       return commands.run("download.remove");
     case "open":
@@ -255,6 +261,7 @@ export function TaskActionsMenu({
   task,
   commands,
   onRename,
+  onRetryRequested,
 }: TaskActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<TaskMenuPosition | null>(null);
@@ -485,7 +492,13 @@ export function TaskActionsMenu({
                     }}
                     onClick={() => {
                       setOpen(false);
-                      void dispatchTaskAction(item.id, task, commands, onRename);
+                      void dispatchTaskAction(
+                        item.id,
+                        task,
+                        commands,
+                        onRename,
+                        onRetryRequested,
+                      );
                     }}
                   >
                     {item.checked ? (

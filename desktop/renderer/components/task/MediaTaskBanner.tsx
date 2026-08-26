@@ -9,6 +9,7 @@ import {
 
 import { platformLabel } from "../../lib/format";
 import type { TaskSnapshot } from "../../lib/types";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { Button } from "../ui/Button";
 import {
   TaskActionsMenu,
@@ -55,6 +56,7 @@ function initialArtworkState(url: string): ArtworkState {
 function runPrimaryAction(
   action: Exclude<TaskPrimaryAction, null>,
   commands: TaskCommands,
+  requestRetry: () => Promise<void>,
 ): Promise<void> {
   switch (action) {
     case "pause":
@@ -64,7 +66,7 @@ function runPrimaryAction(
     case "open":
       return commands.open();
     case "retry":
-      return commands.run("download.retry");
+      return requestRetry();
     default: {
       const exhaustive: never = action;
       return Promise.reject(new Error(`Unhandled task action: ${exhaustive}`));
@@ -77,9 +79,12 @@ const RECOVERY_ACTION_VIEWS = {
   network: { label: "检查网络设置", icon: "settings" },
   updateTool: { label: "更新下载工具", icon: "settings" },
   recognize: { label: "网页识别", icon: "capture" },
+  downloadSettings: { label: "检查下载设置", icon: "settings" },
+  appDownload: { label: "重新安装 Downany", icon: "download" },
+  diagnostics: { label: "导出诊断", icon: "folder" },
 } as const satisfies Record<
   FailureRecoveryAction,
-  { label: string; icon: "settings" | "capture" }
+  { label: string; icon: "settings" | "capture" | "download" | "folder" }
 >;
 
 function runRecoveryAction(
@@ -93,6 +98,12 @@ function runRecoveryAction(
       return commands.openSettings();
     case "recognize":
       return commands.recognizePage();
+    case "downloadSettings":
+      return commands.openSettings();
+    case "appDownload":
+      return commands.openAppDownload();
+    case "diagnostics":
+      return commands.exportDiagnostics();
     default: {
       const exhaustive: never = action;
       return Promise.reject(
@@ -144,6 +155,7 @@ export function MediaTaskBanner({
   const commands = useTaskCommands(task);
   const view = useMemo(() => presentTask(task), [task]);
   const [editing, setEditing] = useState(false);
+  const [retryConfirmationOpen, setRetryConfirmationOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
   const [renderedArtworkUrl, setRenderedArtworkUrl] = useState(
     task.thumbnail_url,
@@ -233,6 +245,19 @@ export function MediaTaskBanner({
     setEditing(true);
   };
 
+  const requestRetry = async () => {
+    if (failureRecoveryFor(task.error_code).requiresRetryConfirmation) {
+      setRetryConfirmationOpen(true);
+      return;
+    }
+    await commands.run("download.retry");
+  };
+
+  const confirmRetry = async () => {
+    setRetryConfirmationOpen(false);
+    await commands.run("download.retry");
+  };
+
   const submitRename = async () => {
     setEditing(false);
     const title = draftTitle.trim();
@@ -293,7 +318,8 @@ export function MediaTaskBanner({
   };
 
   return (
-    <li
+    <>
+      <li
       ref={rootRef}
       id={`task-${task.id}`}
       className={`media-task-banner media-task-banner--${density} status-${view.status}`}
@@ -306,7 +332,13 @@ export function MediaTaskBanner({
           .showTaskContextMenu(buildTaskContextTemplate(task))
           .then((picked) => {
             if (picked) {
-              void dispatchTaskAction(picked, task, commands, startRename);
+              void dispatchTaskAction(
+                picked,
+                task,
+                commands,
+                startRename,
+                requestRetry,
+              );
             }
           });
       }}
@@ -392,13 +424,24 @@ export function MediaTaskBanner({
           <Button
             className="media-task-banner__primary-action"
             size="small"
-            onClick={() => void runPrimaryAction(view.primaryAction, commands)}
+            onClick={() =>
+              void runPrimaryAction(
+                view.primaryAction,
+                commands,
+                requestRetry,
+              )
+            }
           >
             {view.primaryLabel}
           </Button>
         ) : null}
         <FailureRecoveryActions task={task} commands={commands} />
-        <TaskActionsMenu task={task} commands={commands} onRename={startRename} />
+        <TaskActionsMenu
+          task={task}
+          commands={commands}
+          onRename={startRename}
+          onRetryRequested={requestRetry}
+        />
       </div>
       {view.showProgress ? (
         <div
@@ -412,6 +455,15 @@ export function MediaTaskBanner({
           <span style={progressWidth} />
         </div>
       ) : null}
-    </li>
+      </li>
+      <ConfirmDialog
+        open={retryConfirmationOpen}
+        title="重新下载这项内容？"
+        message="上次生成的文件未通过检查。重试会重新下载并保存为新文件，不会覆盖已有文件。"
+        confirmLabel="重新下载"
+        onConfirm={() => void confirmRetry()}
+        onCancel={() => setRetryConfirmationOpen(false)}
+      />
+    </>
   );
 }

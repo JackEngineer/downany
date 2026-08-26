@@ -105,9 +105,11 @@ export function presentTask(
   const detail =
     status === "failed"
       ? failure?.detail || ""
-      : status === "downloading" || status === "paused"
-        ? transferDetail
-        : "";
+      : status === "completed"
+        ? String(task.completion_note || "").trim()
+        : status === "downloading" || status === "paused"
+          ? transferDetail
+          : "";
   const progress = Number.isFinite(Number(task.progress))
     ? Math.min(100, Math.max(0, Number(task.progress)))
     : 0;

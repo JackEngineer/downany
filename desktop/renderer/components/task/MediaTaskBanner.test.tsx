@@ -17,6 +17,8 @@ const openSettingsMock = vi.fn();
 const openExtractWindowMock = vi.fn();
 const showItemInFolderMock = vi.fn();
 const showTaskContextMenuMock = vi.fn();
+const checkAppUpdateMock = vi.fn();
+const openExternalMock = vi.fn();
 const resizeDisconnectMock = vi.fn();
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const mediaBannerStyles = readFileSync(
@@ -208,12 +210,18 @@ beforeEach(() => {
   showItemInFolderMock.mockResolvedValue(undefined);
   showTaskContextMenuMock.mockReset();
   showTaskContextMenuMock.mockResolvedValue(null);
+  checkAppUpdateMock.mockReset();
+  checkAppUpdateMock.mockResolvedValue({});
+  openExternalMock.mockReset();
+  openExternalMock.mockResolvedValue(undefined);
   vi.spyOn(artworkToneSampler, "sample").mockResolvedValue("light");
   useAppStore.setState({ tasks: [], settings: null, toasts: [] });
   (window as unknown as { api: Record<string, unknown> }).api = {
     platform: "darwin",
     showItemInFolder: showItemInFolderMock,
     showTaskContextMenu: showTaskContextMenuMock,
+    checkAppUpdate: checkAppUpdateMock,
+    openExternal: openExternalMock,
   };
 });
 
@@ -775,6 +783,9 @@ describe("MediaTaskBanner", () => {
     ["need_po_token", ["网页识别"]],
     ["unsupported", ["网页识别"]],
     ["removed", []],
+    ["output_path_invalid", ["检查下载设置"]],
+    ["media_tools_missing", ["重新安装 Downany", "导出诊断"]],
+    ["output_verification_failed", ["导出诊断"]],
     ["unexpected_code", ["网页识别"]],
   ] as const)(
     "shows only the useful recovery actions for %s",
@@ -826,6 +837,254 @@ describe("MediaTaskBanner", () => {
     expect(
       container.querySelectorAll(".media-task-banner__recovery-action"),
     ).toHaveLength(0);
+  });
+
+  it("opens download settings for an invalid output path", () => {
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_path_invalid",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "检查下载设置" }));
+
+    expect(openSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the app download page for missing media tools", async () => {
+    checkAppUpdateMock.mockResolvedValueOnce({
+      downloadUrl: "https://downloads.example/downany",
+    });
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "media_tools_missing",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新安装 Downany" }));
+
+    await waitFor(() =>
+      expect(openExternalMock).toHaveBeenCalledWith(
+        "https://downloads.example/downany",
+      ),
+    );
+  });
+
+  it("exports diagnostics without exposing a caught error", async () => {
+    requestMock.mockImplementation((method: string) => {
+      if (method === "app.exportDiagnostics") {
+        return Promise.resolve({ ok: true, path: "/tmp/downany-diagnostics.zip" });
+      }
+      return Promise.resolve({ tasks: [], settings: null });
+    });
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "导出诊断" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("app.exportDiagnostics", {}),
+    );
+    expect(showItemInFolderMock).toHaveBeenCalledWith(
+      "/tmp/downany-diagnostics.zip",
+    );
+    expect(useAppStore.getState().toasts.at(-1)).toMatchObject({
+      title: "诊断包已导出",
+    });
+  });
+
+  it("uses a stable diagnostics failure message without exception details", async () => {
+    requestMock.mockRejectedValueOnce(
+      new Error("token=secret C:\\Users\\private\\diagnostics.log"),
+    );
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "导出诊断" }));
+
+    await waitFor(() =>
+      expect(useAppStore.getState().toasts.at(-1)).toMatchObject({
+        title: "诊断包导出失败，请稍后重试。",
+      }),
+    );
+    expect(JSON.stringify(useAppStore.getState().toasts)).not.toContain(
+      "secret",
+    );
+  });
+
+  it("shows a stable message when no app download page is available", async () => {
+    checkAppUpdateMock.mockResolvedValueOnce({ downloadUrl: "" });
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "media_tools_missing",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新安装 Downany" }));
+
+    await waitFor(() =>
+      expect(useAppStore.getState().toasts.at(-1)).toMatchObject({
+        title: "暂时无法打开下载页面，请稍后重试。",
+      }),
+    );
+  });
+
+  it("keeps missing-media-tools retry disabled in primary and menu actions", () => {
+    const task = taskFixture({
+      status: "failed",
+      error_code: "media_tools_missing",
+    });
+    render(<MediaTaskBanner task={task} />);
+
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "重试" })).toBeNull();
+  });
+
+  it("keeps an output-path retry as a one-click action", async () => {
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_path_invalid",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("download.retry", {
+        taskId: "task-1",
+      }),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("confirms a verification retry and sends it exactly once", async () => {
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(
+      screen.getByRole("alertdialog", { name: "重新下载这项内容？" }),
+    ).toHaveTextContent(
+      "上次生成的文件未通过检查。重试会重新下载并保存为新文件，不会覆盖已有文件。",
+    );
+    expect(requestMock).not.toHaveBeenCalledWith("download.retry", {
+      taskId: "task-1",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重新下载" }));
+
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("download.retry", {
+        taskId: "task-1",
+      }),
+    );
+    expect(
+      requestMock.mock.calls.filter(([method]) => method === "download.retry"),
+    ).toHaveLength(1);
+  });
+
+  it("cancels a verification retry without sending a request", () => {
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(requestMock).not.toHaveBeenCalledWith("download.retry", {
+      taskId: "task-1",
+    });
+  });
+
+  it("uses the same verification retry confirmation from the task menu", async () => {
+    render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "重试" }));
+
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("download.retry", {
+      taskId: "task-1",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新下载" }));
+
+    await waitFor(() =>
+      expect(
+        requestMock.mock.calls.filter(([method]) => method === "download.retry"),
+      ).toHaveLength(1),
+    );
+  });
+
+  it("uses the same verification retry confirmation from the native menu", async () => {
+    showTaskContextMenuMock.mockResolvedValueOnce("retry");
+    const { container } = render(
+      <MediaTaskBanner
+        task={taskFixture({
+          status: "failed",
+          error_code: "output_verification_failed",
+        })}
+      />,
+    );
+
+    fireEvent.contextMenu(
+      container.querySelector("#task-task-1") as HTMLElement,
+    );
+
+    await screen.findByRole("alertdialog");
+    expect(requestMock).not.toHaveBeenCalledWith("download.retry", {
+      taskId: "task-1",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新下载" }));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith("download.retry", {
+        taskId: "task-1",
+      }),
+    );
   });
 
   it("renames on double click and submits the exact update payload", async () => {

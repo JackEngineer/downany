@@ -23,6 +23,8 @@ export interface TaskCommands {
   reveal: () => Promise<void>;
   recognizePage: () => Promise<void>;
   openSettings: () => Promise<void>;
+  exportDiagnostics: () => Promise<void>;
+  openAppDownload: () => Promise<void>;
 }
 
 export function useTaskCommands(task: TaskSnapshot): TaskCommands {
@@ -57,6 +59,36 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
     [pushToast, refresh, task.id],
   );
 
+  const exportDiagnostics = useCallback(async () => {
+    try {
+      const result = await request<{ ok: boolean; path: string }>(
+        "app.exportDiagnostics",
+        {},
+      );
+      if (!result.ok || !result.path) throw new Error("diagnostics unavailable");
+      await window.api.showItemInFolder(result.path);
+      pushToast({ kind: "success", title: "诊断包已导出" });
+    } catch {
+      pushToast({
+        kind: "error",
+        title: "诊断包导出失败，请稍后重试。",
+      });
+    }
+  }, [pushToast]);
+
+  const openAppDownload = useCallback(async () => {
+    try {
+      const info = await window.api.checkAppUpdate();
+      if (!info.downloadUrl) throw new Error("download unavailable");
+      await window.api.openExternal(info.downloadUrl);
+    } catch {
+      pushToast({
+        kind: "error",
+        title: "暂时无法打开下载页面，请稍后重试。",
+      });
+    }
+  }, [pushToast]);
+
   return useMemo(
     () => ({
       run,
@@ -73,7 +105,9 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
       },
       recognizePage: () => openExtractWindow(task.url),
       openSettings: () => openSettingsWindow(),
+      exportDiagnostics,
+      openAppDownload,
     }),
-    [run, task.file_path, task.url, update],
+    [exportDiagnostics, openAppDownload, run, task.file_path, task.url, update],
   );
 }
