@@ -1,3 +1,5 @@
+import pytest
+
 import src.data.json_config as json_config
 from src.data.json_config import JsonConfig
 
@@ -87,3 +89,17 @@ def test_update_from_dict_rejects_empty_proxy_when_enabled(tmp_path):
         assert False, "expected ValueError"
     except ValueError as exc:
         assert "代理" in str(exc)
+
+
+def test_invalid_windows_filename_template_does_not_mutate_config(tmp_path):
+    path = tmp_path / "config.json"
+    cfg = JsonConfig(str(path))
+    cfg.update_from_dict({"filename_template": "%(title)s.%(ext)s"})
+    before_bytes = path.read_bytes()
+    before_data = cfg.to_dict()
+
+    with pytest.raises(ValueError):
+        cfg.update_from_dict({"filename_template": r"..\%(title)s.%(ext)s"})
+
+    assert path.read_bytes() == before_bytes
+    assert cfg.to_dict() == before_data

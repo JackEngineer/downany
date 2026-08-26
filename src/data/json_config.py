@@ -11,43 +11,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.core.download_task import DownloadOptions
+from src.core.error_codes import OutputPathInvalid
+from src.core.output_paths import validate_filename_template
 from src.core.quality import normalize_quality
 from src.core.system_proxy import detect_system_proxy
 
 VALID_POSTPROCESSING = {"none", "mp4", "mp3", "script"}
-
-# 文件名模板允许的 yt-dlp 占位符白名单
-TEMPLATE_PLACEHOLDER_RE = re.compile(r"%\((\w+)\)s")
-ALLOWED_TEMPLATE_FIELDS = {
-    "title",
-    "uploader",
-    "id",
-    "ext",
-    "upload_date",
-    "resolution",
-    "duration_string",
-    "height",
-    "width",
-    "fps",
-    "format_id",
-    "extractor",
-}
-
-
-def validate_filename_template(template: str) -> str:
-    """校验 outtmpl 模板；非法抛出 ValueError，合法原样返回。"""
-    text = str(template or "").strip()
-    if not text:
-        return ""
-    if os.path.isabs(text) or ".." in text.split(os.sep):
-        raise ValueError("文件名模板不能是绝对路径或包含 ..")
-    fields = TEMPLATE_PLACEHOLDER_RE.findall(text)
-    unknown = [f for f in fields if f not in ALLOWED_TEMPLATE_FIELDS]
-    if unknown:
-        raise ValueError(f"文件名模板包含不支持的占位符: {', '.join(unknown)}")
-    if "%(ext)s" not in text:
-        raise ValueError("文件名模板必须包含 %(ext)s 占位符")
-    return text
 
 
 class JsonConfig:
@@ -302,9 +271,12 @@ class JsonConfig:
             raise ValueError("后处理必须是 none / mp4 / mp3 / script")
         next_data["postprocessing"] = postprocessing
         next_data["postprocess_script"] = str(next_data.get("postprocess_script", "") or "")
-        next_data["filename_template"] = validate_filename_template(
-            str(next_data.get("filename_template", "") or "")
-        )
+        try:
+            next_data["filename_template"] = validate_filename_template(
+                str(next_data.get("filename_template", "") or "")
+            )
+        except OutputPathInvalid as exc:
+            raise ValueError(str(exc)) from exc
         next_data["cookies_from_browser"] = str(
             next_data.get("cookies_from_browser", "") or ""
         )
