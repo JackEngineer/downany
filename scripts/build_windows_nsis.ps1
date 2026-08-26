@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   编排步骤（与 scripts/build_macos_dmg.sh 对称）：
-  1. fetch_release_binaries.ps1 — 拉取 yt-dlp.exe + ffmpeg.exe
+  1. fetch_release_binaries.ps1 — 拉取 yt-dlp.exe + ffmpeg.exe/ffprobe.exe
   2. PyInstaller onedir Sidecar — 直接写入 desktop/resources/sidecar/DownanySidecar/
      （与 build_sidecar.sh 相同：--distpath 指向 resources/sidecar，产物为
      DownanySidecar/DownanySidecar.exe，无额外 copy 步骤）
@@ -156,9 +156,20 @@ if (-not (Test-Path -LiteralPath $SidecarBin)) {
     Fail -Step "前置检查" -Detail "缺少 Sidecar 二进制，请先构建 Sidecar 或设置 BUILD_SIDECAR=1"
 }
 
-$Ffmpeg = Join-Path $Desktop "resources\bin\ffmpeg.exe"
-if (-not (Test-Path -LiteralPath $Ffmpeg)) {
+$MediaBin = Join-Path $Desktop "resources\bin"
+$Ffmpeg = Join-Path $MediaBin "ffmpeg.exe"
+$Ffprobe = Join-Path $MediaBin "ffprobe.exe"
+if (-not (Test-Path -LiteralPath $Ffmpeg -PathType Leaf)) {
     Fail -Step "前置检查" -Detail "缺少 ffmpeg.exe，请先运行 fetch_release_binaries.ps1"
+}
+if (-not (Test-Path -LiteralPath $Ffprobe -PathType Leaf)) {
+    Fail -Step "前置检查" -Detail "缺少 ffprobe.exe，请先运行 fetch_release_binaries.ps1"
+}
+
+Write-Host "==> 媒体工具成对冒烟"
+& node (Join-Path $Root "scripts\test_packaged_media_tools.mjs") "--bin-dir=$MediaBin"
+if ($LASTEXITCODE -ne 0) {
+    Fail -Step "ffmpeg/ffprobe 媒体工具冒烟" -ExitCode $LASTEXITCODE
 }
 
 if (-not $AllowCloudOnlyPackage) {

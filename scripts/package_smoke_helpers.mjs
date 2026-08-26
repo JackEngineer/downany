@@ -1,4 +1,5 @@
 import { TextDecoder } from "node:util";
+import { inflateRawSync } from "node:zlib";
 
 export const BRIDGE_BASE = "http://127.0.0.1:17888";
 export const DIAGNOSTIC_ZIP_MEMBERS = Object.freeze([
@@ -14,6 +15,9 @@ const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_END_SIGNATURE = 0x06054b50;
 const ZIP_UTF8_FLAG = 0x0800;
 const ZIP_ENCRYPTED_FLAG = 0x0001;
+const ZIP_STORED_METHOD = 0;
+const ZIP_DEFLATE_METHOD = 8;
+const MAX_DIAGNOSTIC_MEMBER_BYTES = 1024 * 1024;
 
 function errorText(error) {
   const raw = error instanceof Error ? error.message : String(error);
@@ -293,6 +297,58 @@ export function listZipEntries(buffer) {
     throw new Error("ZIP central directory size does not match its entries");
   }
   return names;
+}
+
+export function readZipEntry(
+  buffer,
+  expectedName,
+  { maxBytes = MAX_DIAGNOSTIC_MEMBER_BYTES } = {},
+) {
+  listZipEntries(buffer);
+  const endOffset = findZipEndRecord(buffer);
+  const entryCount = buffer.readUInt16LE(endOffset + 10);
+  let cursor = buffer.readUInt32LE(endOffset + 16);
+  for (let index = 0; index < entryCount; index += 1) {
+    const flags = buffer.readUInt16LE(cursor + 8);
+    const method = buffer.readUInt16LE(cursor + 10);
+    const compressedSize = buffer.readUInt32LE(cursor + 20);
+    const uncompressedSize = buffer.readUInt32LE(cursor + 24);
+    const nameLength = buffer.readUInt16LE(cursor + 28);
+    const extraLength = buffer.readUInt16LE(cursor + 30);
+    const commentLength = buffer.readUInt16LE(cursor + 32);
+    const localOffset = buffer.readUInt32LE(cursor + 42);
+    const name = decodeZipName(
+      buffer.subarray(cursor + 46, cursor + 46 + nameLength),
+      flags,
+    );
+    if (name === expectedName) {
+      if (uncompressedSize > maxBytes || compressedSize > maxBytes) {
+        throw new Error(`ZIP member exceeds the ${maxBytes} byte limit: ${name}`);
+      }
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+      const dataEnd = dataOffset + compressedSize;
+      if (dataEnd > buffer.length || dataEnd < dataOffset) {
+        throw new Error(`ZIP member data is outside archive bounds: ${name}`);
+      }
+      const compressed = buffer.subarray(dataOffset, dataEnd);
+      let content;
+      if (method === ZIP_STORED_METHOD) {
+        content = Buffer.from(compressed);
+      } else if (method === ZIP_DEFLATE_METHOD) {
+        content = inflateRawSync(compressed, { maxOutputLength: maxBytes });
+      } else {
+        throw new Error(`ZIP member uses unsupported compression method ${method}: ${name}`);
+      }
+      if (content.length !== uncompressedSize) {
+        throw new Error(`ZIP member size does not match metadata: ${name}`);
+      }
+      return content;
+    }
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  throw new Error(`ZIP member is missing: ${expectedName}`);
 }
 
 export function assertDiagnosticZipMembers(buffer) {

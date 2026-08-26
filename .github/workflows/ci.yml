@@ -70,7 +70,10 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: npm test
       - name: Package smoke helper tests
-        run: node --test ../scripts/package_smoke_helpers.test.mjs
+        run: >-
+          node --test
+          ../scripts/package_smoke_helpers.test.mjs
+          ../scripts/test_packaged_media_tools.test.mjs
 
   browser-extension:
     runs-on: macos-latest
@@ -109,6 +112,22 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Fetch paired media tools (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/fetch_release_binaries.ps1
+      - name: Fetch paired media tools (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: ./scripts/fetch_release_binaries.sh
+      - name: Smoke-test fetched media tools (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: node scripts/test_packaged_media_tools.mjs "--bin-dir=$env:GITHUB_WORKSPACE\desktop\resources\bin"
+      - name: Smoke-test fetched media tools (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: node scripts/test_packaged_media_tools.mjs --bin-dir="$GITHUB_WORKSPACE/desktop/resources/bin"
       - name: Require Telegram application credentials (Windows)
         if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
         shell: pwsh
@@ -180,7 +199,7 @@ jobs:
         env:
           BUILD_TELEGRAM_NATIVE: "0"
           ALLOW_CLOUD_ONLY_PACKAGE: "0"
-          FETCH_BINS: "1"
+          FETCH_BINS: "0"
           BUILD_SIDECAR: "1"
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_windows_nsis.ps1
       - name: Build cloud-only Windows installer
@@ -189,7 +208,7 @@ jobs:
         env:
           BUILD_TELEGRAM_NATIVE: "0"
           ALLOW_CLOUD_ONLY_PACKAGE: "1"
-          FETCH_BINS: "1"
+          FETCH_BINS: "0"
           BUILD_SIDECAR: "1"
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_windows_nsis.ps1
       - name: Build verified macOS disk image
@@ -198,7 +217,7 @@ jobs:
         env:
           BUILD_TELEGRAM_NATIVE: "0"
           ALLOW_CLOUD_ONLY_PACKAGE: "0"
-          FETCH_BINS: "1"
+          FETCH_BINS: "0"
           BUILD_SIDECAR: "1"
         run: ./scripts/build_macos_dmg.sh
       - name: Build cloud-only macOS disk image
@@ -207,9 +226,20 @@ jobs:
         env:
           BUILD_TELEGRAM_NATIVE: "0"
           ALLOW_CLOUD_ONLY_PACKAGE: "1"
-          FETCH_BINS: "1"
+          FETCH_BINS: "0"
           BUILD_SIDECAR: "1"
         run: ./scripts/build_macos_dmg.sh
+      - name: Smoke-test packaged media tools (Windows)
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: node scripts/test_packaged_media_tools.mjs "--bin-dir=$env:GITHUB_WORKSPACE\desktop\release\win-unpacked\resources\bin"
+      - name: Smoke-test packaged media tools (macOS)
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: |
+          packaged_bin="$(find "$GITHUB_WORKSPACE/desktop/release" -type d -path '*/Downany.app/Contents/Resources/bin' -print -quit)"
+          test -n "$packaged_bin"
+          node scripts/test_packaged_media_tools.mjs --bin-dir="$packaged_bin"
       - name: Smoke-test packaged Sidecar (Windows)
         if: matrix.target == 'win32-x64'
         shell: pwsh

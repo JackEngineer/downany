@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# 拉取发布用 yt-dlp + ffmpeg 到 desktop/resources/bin
+# 拉取发布用 yt-dlp + ffmpeg/ffprobe 到 desktop/resources/bin
 #
 # TARGET_OS 控制目标平台，默认通过 `uname -s` 自动探测：
 #   - darwin（默认）：从锁定源码构建 macOS arm64 静态 FFmpeg
-#       yt-dlp_macos + scripts/install_ffmpeg.sh → 写入 ${DEST}/yt-dlp、${DEST}/ffmpeg
+#       yt-dlp_macos + scripts/install_ffmpeg.sh → 写入 ${DEST}/yt-dlp、
+#       ${DEST}/ffmpeg、${DEST}/ffprobe
 #   - windows（或 uname 输出 MINGW*/MSYS*/CYGWIN*/Windows_NT 时自动判定）：
-#       下载官方 yt-dlp.exe + BtbN FFmpeg-Builds 静态 win64 zip（仅抽取 ffmpeg.exe）
-#       → 写入 ${DEST}/yt-dlp.exe、${DEST}/ffmpeg.exe
+#       下载官方 yt-dlp.exe + BtbN FFmpeg-Builds 静态 win64 zip（成对抽取工具）
+#       → 写入 ${DEST}/yt-dlp.exe、${DEST}/ffmpeg.exe、${DEST}/ffprobe.exe
 #     可在 macOS/Linux 上交叉拉取（用于本机验证或 CI 打包前置），也可在真实 Windows
 #     的 Git Bash 下直接跑；纯 PowerShell 环境请改用同目录下的
 #     scripts/fetch_release_binaries.ps1（版本锁定与本脚本保持同步）。
@@ -26,8 +27,8 @@
 #                  macOS 端 install_ffmpeg.sh 默认的 7.1.1 同一大版本线）
 #         SHA256:  907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860
 #                  （核对自该 Release 附带的 checksums.sha256）
-#       zip 内层结构为 <asset-basename>/bin/ffmpeg.exe（含 ffprobe.exe 等），本脚本
-#       只从中抽取 ffmpeg.exe 落盘，保持产物精简。
+#       zip 内层结构为 <asset-basename>/bin/ffmpeg.exe + ffprobe.exe；本脚本要求
+#       两者恰好各一份且来自同一 bin 目录，再将这对工具一并落盘。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -93,7 +94,7 @@ fetch_yt_dlp_windows() {
 fetch_ffmpeg_windows() {
   local url="${FFMPEG_WIN_URL:-https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-16-13-00/ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip}"
   local sha="${FFMPEG_WIN_SHA256:-907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860}"
-  echo "==> 下载 ffmpeg (Windows, BtbN static win64-gpl)"
+  echo "==> 下载 ffmpeg + ffprobe (Windows, BtbN static win64-gpl)"
   echo "    ${url}"
   local tmp_zip="${DEST}/ffmpeg-win.zip"
   curl -fL --retry 3 --retry-delay 2 -o "${tmp_zip}" "${url}"
@@ -108,16 +109,40 @@ fetch_ffmpeg_windows() {
 
   local tmp_dir
   tmp_dir="$(mktemp -d)"
-  # BtbN zip 内层结构为 <asset-basename>/bin/ffmpeg.exe，逐层解出后只保留 ffmpeg.exe
-  unzip -o -q "${tmp_zip}" -d "${tmp_dir}"
-  local extracted
-  extracted="$(find "${tmp_dir}" -type f -iname 'ffmpeg.exe' | head -n 1)"
-  if [[ -z "${extracted}" ]]; then
-    echo "未在压缩包中找到 ffmpeg.exe" >&2
+  if ! (
+    set -e
+    unzip -o -q "${tmp_zip}" -d "${tmp_dir}"
+    ffmpeg_matches=()
+    ffprobe_matches=()
+    while IFS= read -r -d '' candidate; do
+      ffmpeg_matches+=("${candidate}")
+    done < <(find "${tmp_dir}" -type f -iname 'ffmpeg.exe' -print0)
+    while IFS= read -r -d '' candidate; do
+      ffprobe_matches+=("${candidate}")
+    done < <(find "${tmp_dir}" -type f -iname 'ffprobe.exe' -print0)
+    if [[ "${#ffmpeg_matches[@]}" -ne 1 ]]; then
+      echo "压缩包中的 ffmpeg.exe 数量应为 1，实际为 ${#ffmpeg_matches[@]}" >&2
+      exit 1
+    fi
+    if [[ "${#ffprobe_matches[@]}" -ne 1 ]]; then
+      echo "压缩包中的 ffprobe.exe 数量应为 1，实际为 ${#ffprobe_matches[@]}" >&2
+      exit 1
+    fi
+    ffmpeg_parent="$(cd "$(dirname "${ffmpeg_matches[0]}")" && pwd -P)"
+    ffprobe_parent="$(cd "$(dirname "${ffprobe_matches[0]}")" && pwd -P)"
+    if [[ "${ffmpeg_parent}" != "${ffprobe_parent}" ]]; then
+      echo "ffmpeg.exe 与 ffprobe.exe 不在同一归档 bin 目录" >&2
+      exit 1
+    fi
+    cp "${ffmpeg_matches[0]}" "${DEST}/ffmpeg.exe"
+    cp "${ffprobe_matches[0]}" "${DEST}/ffprobe.exe"
+    chmod +x "${DEST}/ffmpeg.exe" "${DEST}/ffprobe.exe"
+    "${DEST}/ffmpeg.exe" -version
+    "${DEST}/ffprobe.exe" -version
+  ); then
     rm -rf "${tmp_dir}" "${tmp_zip}"
-    exit 1
+    return 1
   fi
-  cp "${extracted}" "${DEST}/ffmpeg.exe"
   rm -rf "${tmp_dir}" "${tmp_zip}"
 }
 

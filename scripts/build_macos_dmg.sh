@@ -30,10 +30,16 @@ if [[ ! -x "${SIDECAR_BIN}" ]]; then
   exit 1
 fi
 
-if [[ ! -x "${DESKTOP}/resources/bin/ffmpeg" ]]; then
-  echo "缺少 ffmpeg，请先 scripts/fetch_release_binaries.sh" >&2
-  exit 1
-fi
+MEDIA_BIN="${DESKTOP}/resources/bin"
+for media_tool in ffmpeg ffprobe; do
+  if [[ ! -x "${MEDIA_BIN}/${media_tool}" ]]; then
+    echo "缺少可执行的 ${media_tool}，请先 scripts/fetch_release_binaries.sh" >&2
+    exit 1
+  fi
+done
+
+echo "==> 媒体工具成对冒烟"
+node "${ROOT}/scripts/test_packaged_media_tools.mjs" --bin-dir="${MEDIA_BIN}"
 
 if [[ "${ALLOW_CLOUD_ONLY_PACKAGE}" != "1" ]]; then
   TELEGRAM_ROOT="${DESKTOP}/resources/telegram-bot-api"

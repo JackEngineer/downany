@@ -22,7 +22,7 @@ if [ "$(uname -m)" != "arm64" ]; then
     exit 1
 fi
 
-for command_name in curl gcc git make python3 shasum xcrun lipo otool; do
+for command_name in curl gcc git make node python3 shasum xcrun lipo otool; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
         echo "缺少构建工具: ${command_name}" >&2
         exit 1
@@ -84,6 +84,7 @@ LAME_STAGE="${BUILD_ROOT}/lame-stage"
 FFMPEG_SOURCE="${BUILD_ROOT}/ffmpeg"
 FFMPEG_STAGE="${BUILD_ROOT}/ffmpeg-stage"
 FFMPEG_BIN="${FFMPEG_STAGE}/bin/ffmpeg"
+FFPROBE_BIN="${FFMPEG_STAGE}/bin/ffprobe"
 TARGET_CFLAGS="-arch ${TARGET_ARCH} -mmacosx-version-min=${DEPLOYMENT_TARGET} -isysroot ${SDK_PATH}"
 TARGET_LDFLAGS="-arch ${TARGET_ARCH} -mmacosx-version-min=${DEPLOYMENT_TARGET} -isysroot ${SDK_PATH}"
 
@@ -181,7 +182,6 @@ if ! (
         --disable-debug \
         --disable-doc \
         --disable-ffplay \
-        --disable-ffprobe \
         --disable-shared \
         --enable-static \
         --disable-gpl \
@@ -216,36 +216,49 @@ if ! (
     exit 1
 fi
 
-if [ ! -x "${FFMPEG_BIN}" ]; then
-    echo "FFmpeg 可执行文件未生成: ${FFMPEG_BIN}" >&2
-    exit 1
-fi
+validate_macos_binary() {
+    local label="$1"
+    local binary="$2"
+    if [ ! -x "${binary}" ]; then
+        echo "${label} 可执行文件未生成: ${binary}" >&2
+        exit 1
+    fi
 
+    local arches
+    arches="$(lipo -archs "${binary}")"
+    if [ "${arches}" != "${TARGET_ARCH}" ]; then
+        echo "${label} 架构校验失败: ${arches}" >&2
+        exit 1
+    fi
+
+    local min_os
+    min_os="$(otool -l "${binary}" | awk '$1 == "minos" && !found { print $2; found=1 }')"
+    if [ "${min_os}" != "${DEPLOYMENT_TARGET}" ]; then
+        echo "${label} deployment target 校验失败: ${min_os}" >&2
+        exit 1
+    fi
+
+    local unexpected_dependencies
+    unexpected_dependencies="$(
+        otool -L "${binary}" |
+            tail -n +2 |
+            awk '{ print $1 }' |
+            awk 'NF && $0 !~ /^\/System\/Library\// && $0 !~ /^\/usr\/lib\// { print }'
+    )"
+    if [ -n "${unexpected_dependencies}" ]; then
+        echo "${label} 包含非系统动态依赖：" >&2
+        echo "${unexpected_dependencies}" >&2
+        exit 1
+    fi
+}
+
+validate_macos_binary "FFmpeg" "${FFMPEG_BIN}"
+validate_macos_binary "FFprobe" "${FFPROBE_BIN}"
 ARCHES="$(lipo -archs "${FFMPEG_BIN}")"
-if [ "${ARCHES}" != "${TARGET_ARCH}" ]; then
-    echo "FFmpeg 架构校验失败: ${ARCHES}" >&2
-    exit 1
-fi
+MIN_OS="$(otool -l "${FFMPEG_BIN}" | awk '$1 == "minos" && !found { print $2; found=1 }')"
 
-MIN_OS="$(otool -l "${FFMPEG_BIN}" | awk '$1 == "minos" { print $2; exit }')"
-if [ "${MIN_OS}" != "${DEPLOYMENT_TARGET}" ]; then
-    echo "FFmpeg deployment target 校验失败: ${MIN_OS}" >&2
-    exit 1
-fi
-
-UNEXPECTED_DEPENDENCIES="$(
-    otool -L "${FFMPEG_BIN}" |
-        tail -n +2 |
-        awk '{ print $1 }' |
-        awk 'NF && $0 !~ /^\/System\/Library\// && $0 !~ /^\/usr\/lib\// { print }'
-)"
-if [ -n "${UNEXPECTED_DEPENDENCIES}" ]; then
-    echo "FFmpeg 包含非系统动态依赖：" >&2
-    echo "${UNEXPECTED_DEPENDENCIES}" >&2
-    exit 1
-fi
-
-if ! "${FFMPEG_BIN}" -hide_banner -encoders 2>/dev/null | grep -q 'libmp3lame'; then
+ENCODERS_OUTPUT="$("${FFMPEG_BIN}" -hide_banner -encoders 2>/dev/null)"
+if ! grep -q 'libmp3lame' <<< "${ENCODERS_OUTPUT}"; then
     echo "FFmpeg 未包含 libmp3lame 编码器。" >&2
     exit 1
 fi
@@ -258,15 +271,27 @@ echo -e "${YELLOW}执行 FFmpeg 音频编解码 smoke...${NC}"
     -i "${BUILD_ROOT}/probe.mp3" -f null -
 
 mkdir -p "${INSTALL_DIR}"
-INSTALL_TMP="${INSTALL_DIR}/.ffmpeg.download.$$"
-install -m 0755 "${FFMPEG_BIN}" "${INSTALL_TMP}"
-mv -f "${INSTALL_TMP}" "${INSTALL_DIR}/ffmpeg"
-rm -f "${INSTALL_DIR}/ffmpeg.zip.sha256"
-shasum -a 256 "${INSTALL_DIR}/ffmpeg" | awk '{print $1 "  ffmpeg"}' > "${INSTALL_DIR}/ffmpeg.sha256"
+INSTALL_DIR="$(cd "${INSTALL_DIR}" && pwd -P)"
+FFMPEG_INSTALL_TMP="${INSTALL_DIR}/.ffmpeg.download.$$"
+FFPROBE_INSTALL_TMP="${INSTALL_DIR}/.ffprobe.download.$$"
+install -m 0755 "${FFMPEG_BIN}" "${FFMPEG_INSTALL_TMP}"
+install -m 0755 "${FFPROBE_BIN}" "${FFPROBE_INSTALL_TMP}"
+mv -f "${FFMPEG_INSTALL_TMP}" "${INSTALL_DIR}/ffmpeg"
+mv -f "${FFPROBE_INSTALL_TMP}" "${INSTALL_DIR}/ffprobe"
+rm -f "${INSTALL_DIR}/ffmpeg.zip.sha256" "${INSTALL_DIR}/ffmpeg.sha256"
+(
+    cd "${INSTALL_DIR}"
+    shasum -a 256 ffmpeg ffprobe
+) > "${INSTALL_DIR}/media-tools.sha256"
 
-VERSION_OUTPUT="$("${INSTALL_DIR}/ffmpeg" -version | head -n 1)"
+FFMPEG_VERSION_OUTPUT="$("${INSTALL_DIR}/ffmpeg" -version)"
+FFPROBE_VERSION_OUTPUT="$("${INSTALL_DIR}/ffprobe" -version)"
+VERSION_OUTPUT="${FFMPEG_VERSION_OUTPUT%%$'\n'*}"
+PROBE_VERSION_OUTPUT="${FFPROBE_VERSION_OUTPUT%%$'\n'*}"
+node "${PROJECT_ROOT}/scripts/test_packaged_media_tools.mjs" --bin-dir="${INSTALL_DIR}"
 echo -e "${GREEN}安装成功！${NC}"
-echo -e "版本信息: ${VERSION_OUTPUT}"
+echo -e "FFmpeg 版本: ${VERSION_OUTPUT}"
+echo -e "FFprobe 版本: ${PROBE_VERSION_OUTPUT}"
 echo -e "架构: ${ARCHES}"
 echo -e "部署基线: macOS ${MIN_OS}"
-echo -e "路径: ${INSTALL_DIR}/ffmpeg"
+echo -e "路径: ${INSTALL_DIR}/ffmpeg, ${INSTALL_DIR}/ffprobe"

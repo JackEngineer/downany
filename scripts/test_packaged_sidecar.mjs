@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { assertDiagnosticZipMembers } from "./package_smoke_helpers.mjs";
+import {
+  assertDiagnosticZipMembers,
+  readZipEntry,
+} from "./package_smoke_helpers.mjs";
 
 const args = new Map(
   process.argv.slice(2).map((value) => {
@@ -67,6 +70,23 @@ function waitFor(predicate, timeoutMs) {
   });
 }
 
+function findPackagedResourcesDirectory(executablePath) {
+  let current = fs.realpathSync(path.dirname(executablePath));
+  for (;;) {
+    if (path.basename(current).toLowerCase() === "resources") return current;
+    const parent = path.dirname(current);
+    if (parent === current) {
+      throw new Error("Packaged Sidecar is not inside an Electron resources directory");
+    }
+    current = parent;
+  }
+}
+
+function isUsableVersionToken(value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  return !["missing", "unavailable"].includes(value.trim().toLowerCase());
+}
+
 try {
   await waitFor((message) => message.type === "hello", 20_000);
   send({ protocolVersion: 1, type: "hello", payload: { app: "Downany", appVersion: "smoke" }, timestamp: new Date().toISOString() });
@@ -121,7 +141,31 @@ try {
   if (!archiveStat.isFile() || archiveStat.size <= 0) {
     throw new Error(`diagnostic ZIP is not a non-empty regular file: ${archivePath}`);
   }
-  assertDiagnosticZipMembers(fs.readFileSync(archivePath));
+  const archive = fs.readFileSync(archivePath);
+  assertDiagnosticZipMembers(archive);
+  let environment;
+  try {
+    environment = JSON.parse(readZipEntry(archive, "environment.json").toString("utf8"));
+  } catch {
+    throw new Error("Packaged diagnostics environment.json is not valid JSON");
+  }
+  if (
+    environment?.ffmpeg_available !== true ||
+    environment?.ffprobe_available !== true ||
+    !isUsableVersionToken(environment?.ffmpeg_version) ||
+    !isUsableVersionToken(environment?.ffprobe_version)
+  ) {
+    throw new Error("Packaged diagnostics did not verify the ffmpeg/ffprobe pair");
+  }
+  const resourcesDirectory = findPackagedResourcesDirectory(executable);
+  const serializedEnvironment = JSON.stringify(environment).toLowerCase();
+  const resourceVariants = [
+    resourcesDirectory,
+    resourcesDirectory.replaceAll("\\", "/"),
+  ].map((value) => JSON.stringify(value).slice(1, -1).toLowerCase());
+  if (resourceVariants.some((value) => serializedEnvironment.includes(value))) {
+    throw new Error("Packaged diagnostics exposed the application resources directory");
+  }
   send({ protocolVersion: 1, type: "request", id: "packaged-sidecar-shutdown", method: "app.shutdown", payload: {}, timestamp: new Date().toISOString() });
   await waitFor((message) => message.type === "response" && message.correlationId === "packaged-sidecar-shutdown", 10_000);
   await new Promise((resolve, reject) => {

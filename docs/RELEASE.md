@@ -14,10 +14,10 @@
 
 产物：`desktop/release/Downany-<version>-mac.dmg`（已在 `.gitignore`，勿提交）。
 
-macOS 发布用 FFmpeg 不再下载 Intel-only 的预编译包。`scripts/install_ffmpeg.sh` 会读取
+macOS 发布用 FFmpeg / FFprobe 不再下载 Intel-only 的预编译包。`scripts/install_ffmpeg.sh` 会读取
 [`packaging/ffmpeg-macos/source.lock.json`](../packaging/ffmpeg-macos/source.lock.json)，在 Apple
-Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的静态 FFmpeg；构建完成
-后还会检查架构、动态依赖和 MP3 编解码 smoke。
+Silicon + Xcode Command Line Tools 环境中从同一源码锁构建 arm64、macOS 11.0 基线的静态
+FFmpeg 与 FFprobe；两者都会检查架构、部署基线和动态依赖，随后执行真实音视频生成/探测 smoke。
 
 ### 用户首次打开（Gatekeeper）
 
@@ -54,7 +54,7 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 
 ### Windows Defender 误报
 
-未签名的 Sidecar（`DownanySidecar.exe`）与捆绑的 `ffmpeg.exe` 可能被 Defender 或第三方杀软标为「未知发布者」或误报。属未签名本地/CI 构建的常见情况；若用户遇到拦截，可在 Defender 中为安装目录添加排除项，或等待正式代码签名后再分发。
+未签名的 Sidecar（`DownanySidecar.exe`）与捆绑的 `ffmpeg.exe` / `ffprobe.exe` 可能被 Defender 或第三方杀软标为「未知发布者」或误报。属未签名本地/CI 构建的常见情况；若用户遇到拦截，可在 Defender 中为安装目录添加排除项，或等待正式代码签名后再分发。
 
 ---
 
@@ -62,7 +62,7 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 
 #### v0.2.1 云端模式发行版（当前通道）
 
-当前没有 Telegram 应用凭据时，`v0.2.1` 仍可发布云端模式安装包。带 `v0.2.1` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、FFmpeg 和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
+当前没有 Telegram 应用凭据时，`v0.2.1` 仍可发布云端模式安装包。带 `v0.2.1` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、同源 FFmpeg/FFprobe 工具对和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
 
 1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.1`，tag 为 `v0.2.1`）。
 2. 推送含发布说明的提交到 `main`。  
@@ -105,12 +105,20 @@ Silicon + Xcode Command Line Tools 环境中构建 arm64、macOS 11.0 基线的�
 |----|------|
 | 启动 | 无崩溃；命令中心可连 Sidecar |
 | `GET /health` | `{"ok":true,"sidecarReady":true}` |
-| ffmpeg | `Downany.app/Contents/Resources/bin/ffmpeg` 可执行 |
+| Windows 媒体工具 | `resources/bin/ffmpeg.exe` 与 `resources/bin/ffprobe.exe` 均可执行 |
+| macOS 媒体工具 | `Downany.app/Contents/Resources/bin/ffmpeg` 与 `ffprobe` 均可执行 |
 | Sidecar | `…/Resources/sidecar/DownanySidecar/DownanySidecar` |
 | 扩展桥入队 | `POST /enqueue` 返回 `taskIds` |
 | 设置 → 检查应用更新 | 查询 GitHub Releases；有新版则「前往下载」 |
 
 回归记录见 [REGRESSION-2026-08.md](REGRESSION-2026-08.md)。
+
+### FFmpeg / FFprobe 成对发布不变量
+
+- Windows 的 `ffmpeg.exe` 与 `ffprobe.exe` 必须来自同一个已锁定、SHA-256 已验证的 BtbN 归档，并位于归档内同一 `bin` 目录。
+- macOS 的 `ffmpeg` 与 `ffprobe` 必须来自同一个 `source.lock.json` 源码构建；`media-tools.sha256` 必须只包含这两个相对文件名。
+- NSIS / DMG 在替换既有候选产物前必须检查两者存在且可执行，并用 `scripts/test_packaged_media_tools.mjs` 生成含视频和音频的样本，再由 FFprobe 验证流与容器。
+- CI 必须分别对 `desktop/resources/bin` 和安装包内的 `Resources/bin` 执行同一 smoke；缺少任一工具、版本命令失败、探测 JSON 无效或样本缺少预期流都会阻止打包交付。
 
 ---
 
