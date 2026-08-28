@@ -59,6 +59,10 @@ def verified_output_dependencies(monkeypatch, tmp_path):
             "mp4", ("video",), (), False, False, 0
         ),
     )
+    monkeypatch.setattr(
+        "src.core.download_manager.ensure_local_thumbnail",
+        lambda *_args, **_kwargs: "",
+    )
 
     def commit(*, download_root, playlist_folder, result):
         folder = Path(download_root)
@@ -161,6 +165,20 @@ def test_download_rebinds_missing_system_proxy_before_starting(manager):
 
     assert task.options.proxy == "http://127.0.0.1:7897"
     assert opts["proxy"] == "http://127.0.0.1:7897"
+
+
+def test_verified_output_fixture_skips_thumbnail_extraction_for_fake_media(
+    manager, monkeypatch
+):
+    def fail_if_thumbnail_extraction_runs(*_args, **_kwargs):
+        raise AssertionError("test fixture leaked into real thumbnail extraction")
+
+    monkeypatch.setattr(
+        "src.core.local_thumbnail.extract_video_thumbnail",
+        fail_if_thumbnail_extraction_runs,
+    )
+
+    _run_one_task(manager, _make_task(title="fake-media-thumbnail-isolation"))
 
 
 def test_auto_detected_proxy_credentials_are_not_logged(manager, caplog):
