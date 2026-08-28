@@ -2,7 +2,7 @@
 
 ## v0.3.0 Windows 本地候选门槛
 
-本工作树的桌面与 Sidecar 为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。这是 Windows x64 本地候选，不表示已安装、提交、打标签或公开发布。本轮按用户范围不执行 Mac 构建或人工验收；下文双平台正式发布流程保留为独立流程。
+本工作树的桌面与 Sidecar 为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。2026-08-28 已完成本地提交、合入 main 与 Windows 原目录覆盖安装，自动核验见 [本地集成与安装记录](acceptance/v0.3.0-windows-local-integration.md)。尚未推送、打标签或公开发布。本轮按用户范围不执行 Mac 构建或人工验收；下文双平台正式发布流程保留为独立流程。
 
 自动门槛依次为完整测试、Main/Renderer 类型检查、真实 Electron 最小窗口检查、同源 Sidecar/NSIS、包内媒体工具、旧数据恢复和隔离 Electron 入队。打包前冻结源文件/资源清单，完成后再次核对。结果见 [候选记录](acceptance/v0.3.0-stable-baseline.md)。
 

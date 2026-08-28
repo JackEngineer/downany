@@ -2,7 +2,7 @@
 
 macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
-本工作树已完成 **v0.3.0 Windows 本地候选** 的自动化门槛，尚未安装、提交或公开发布；扩展独立版本为 `0.8.2`。本轮不包含 Mac 构建或人工验收。结果与边界见 [候选验证记录](docs/acceptance/v0.3.0-stable-baseline.md)。
+**v0.3.0 已提交并合入本地 main，Windows 已从 0.2.4 原目录升级至 0.3.0**，完整回归、安装文件核对、数据保留和隔离入队检查通过。尚未推送、打标签或公开发布；扩展独立版本为 `0.8.2`。本轮不包含 Mac 构建或人工验收。结果与边界见 [本地集成与安装记录](docs/acceptance/v0.3.0-windows-local-integration.md)。
 
 ## 功能
 
