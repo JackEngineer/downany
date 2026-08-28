@@ -191,4 +191,29 @@ describe("AddConfirmDialog playlist selection", () => {
     expect(payload.items[0].group_title).toBeUndefined();
     expect(payload.items[0].playlist_index).toBeUndefined();
   });
+
+  it("shows a user-facing parse failure and prevents an empty download", async () => {
+    const parentUrl = "https://www.bilibili.com/video/BV1blocked";
+    useAppStore.setState({ pendingAddUrls: [parentUrl] });
+    render(<AddConfirmDialog />);
+
+    await emitParseResult({
+      event: "download.parseResult",
+      payload: {
+        parseId: "parse-1",
+        index: 0,
+        url: parentUrl,
+        ok: false,
+        error:
+          "ERROR: [BiliBili] Unable to download webpage: HTTP Error 412: Precondition Failed",
+      },
+    });
+
+    expect(
+      await screen.findByText("暂时无法解析此链接，可尝试网页识别"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/HTTP Error 412/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "网页识别" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "开始下载" })).toBeDisabled();
+  });
 });

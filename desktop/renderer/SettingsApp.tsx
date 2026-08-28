@@ -6,7 +6,7 @@ import { SitesPanel } from "./components/SitesPanel";
 import { TelegramSettingsTab } from "./components/TelegramSettingsTab";
 import { ToastHost } from "./components/ToastHost";
 import { request } from "./lib/api";
-import { getLocale, setLocale, t, type Locale } from "./i18n";
+import { setLocale, t, useLocale, type Locale } from "./i18n";
 import { useDocumentTheme } from "./lib/documentTheme";
 import {
   subtitleModeFromSettings,
@@ -14,6 +14,8 @@ import {
   type SubtitleMode,
 } from "./lib/outputSettings";
 import type { AppSettings } from "./lib/types";
+import { appUpdateToast, safeVersion } from "./lib/updatePresentation";
+import { startSettingsSession } from "./lib/settingsSession";
 import { useAppStore } from "./store/appStore";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -27,12 +29,12 @@ type YtDlpInfo = {
 
 type TabKey = "general" | "quality" | "postprocess" | "appearance" | "telegram";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "general", label: "通用" },
-  { key: "quality", label: "质量" },
-  { key: "postprocess", label: "后处理" },
-  { key: "appearance", label: "界面" },
-  { key: "telegram", label: "Telegram" },
+const TABS: { key: TabKey; labelKey: string }[] = [
+  { key: "general", labelKey: "settings.general" },
+  { key: "quality", labelKey: "settings.quality" },
+  { key: "postprocess", labelKey: "settings.postprocess" },
+  { key: "appearance", labelKey: "settings.appearance" },
+  { key: "telegram", labelKey: "Telegram" },
 ];
 
 function useBootstrap() {
@@ -40,30 +42,7 @@ function useBootstrap() {
 
   useDocumentTheme(themeMode);
 
-  useEffect(() => {
-    const store = useAppStore.getState();
-    void window.api.getConnectionState().then((state) => store.setConnection(state));
-    const offState = window.api.onState((state) => {
-      useAppStore.getState().setConnection(state);
-      if (state === "connected") {
-        void request<AppSettings>("settings.get").then((settings) => {
-          useAppStore.setState({ settings });
-        });
-      }
-    });
-    const offEvent = window.api.onEvent((event) => {
-      if (event.event === "settings.changed" && event.payload.settings) {
-        useAppStore.setState({ settings: event.payload.settings as AppSettings });
-      }
-    });
-    void request<AppSettings>("settings.get")
-      .then((settings) => useAppStore.setState({ settings }))
-      .catch(() => undefined);
-    return () => {
-      offState();
-      offEvent();
-    };
-  }, []);
+  useEffect(() => startSettingsSession(window.api), []);
 
 }
 
@@ -75,10 +54,11 @@ interface TabProps {
 }
 
 function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
+  const locale = useLocale();
   return (
     <div className="settings-grid">
       <label className="settings-row">
-        <span>下载目录</span>
+        <span>{t("settings.downloadDir", locale)}</span>
         <div className="settings-control">
           <input
             value={draft.download_dir}
@@ -86,13 +66,13 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
             onChange={(e) => update({ download_dir: e.target.value })}
           />
           <button type="button" disabled={disabled} onClick={() => void pickDir()}>
-            选择…
+            {t("settings.chooseDir", locale)}
           </button>
         </div>
       </label>
 
       <label className="settings-row">
-        <span>并发下载</span>
+        <span>{t("settings.concurrent", locale)}</span>
         <input
           type="number"
           min={1}
@@ -104,7 +84,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>速度限制 (B/s，0=不限)</span>
+        <span>{t("settings.speedLimit", locale)}</span>
         <input
           type="number"
           min={0}
@@ -115,13 +95,13 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>从浏览器导入 Cookie</span>
+        <span>{t("settings.cookies", locale)}</span>
         <select
           value={draft.cookies_from_browser || ""}
           disabled={disabled}
           onChange={(e) => update({ cookies_from_browser: e.target.value })}
         >
-          <option value="">不导入</option>
+          <option value="">{t("settings.noCookies", locale)}</option>
           <option value="chrome">Chrome</option>
           {window.api?.platform === "darwin" && <option value="safari">Safari</option>}
           <option value="firefox">Firefox</option>
@@ -130,7 +110,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>写入媒体信息</span>
+        <span>{t("settings.metadata", locale)}</span>
         <input
           type="checkbox"
           checked={draft.embed_metadata !== false}
@@ -138,10 +118,10 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
           onChange={(e) => update({ embed_metadata: e.target.checked })}
         />
       </label>
-      <p className="muted small">来源提供时写入标题、封面和章节</p>
+      <p className="muted small">{t("settings.metadataHint", locale)}</p>
 
       <label className="settings-row">
-        <span>HLS 分片并发</span>
+        <span>{t("settings.fragments", locale)}</span>
         <input
           type="number"
           min={0}
@@ -153,7 +133,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>{t("settings.telemetry", getLocale())}</span>
+        <span>{t("settings.telemetry", locale)}</span>
         <input
           type="checkbox"
           checked={Boolean(draft.telemetry_enabled)}
@@ -163,13 +143,12 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>{t("settings.language", getLocale())}</span>
+        <span>{t("settings.language", locale)}</span>
         <select
-          value={getLocale()}
+          value={locale}
           disabled={disabled}
           onChange={(e) => {
             setLocale(e.target.value as Locale);
-            window.dispatchEvent(new CustomEvent("downany:locale"));
           }}
         >
           <option value="zh-CN">简体中文</option>
@@ -180,7 +159,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       <SitesPanel />
 
       <label className="settings-row">
-        <span>剪贴板监控</span>
+        <span>{t("settings.clipboard", locale)}</span>
         <input
           type="checkbox"
           checked={Boolean(draft.clipboard_monitor)}
@@ -190,7 +169,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>启用代理</span>
+        <span>{t("settings.proxyEnabled", locale)}</span>
         <input
           type="checkbox"
           checked={Boolean(draft.proxy_enabled)}
@@ -200,7 +179,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>代理地址</span>
+        <span>{t("settings.proxyUrl", locale)}</span>
         <input
           value={draft.proxy_url}
           disabled={disabled || !draft.proxy_enabled}
@@ -213,6 +192,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
 }
 
 function QualityTab({ draft, disabled, update }: TabProps) {
+  const locale = useLocale();
   const subtitleMode = subtitleModeFromSettings(draft);
   const mp3UsesExternalSubtitles =
     draft.postprocessing === "mp3" &&
@@ -221,13 +201,13 @@ function QualityTab({ draft, disabled, update }: TabProps) {
   return (
     <div className="settings-grid">
       <label className="settings-row">
-        <span>默认画质</span>
+        <span>{t("settings.defaultQuality", locale)}</span>
         <select
           value={draft.default_quality}
           disabled={disabled}
           onChange={(e) => update({ default_quality: e.target.value })}
         >
-          <option value="best">最佳</option>
+          <option value="best">{t("settings.best", locale)}</option>
           <option value="1080p">1080p</option>
           <option value="720p">720p</option>
           <option value="480p">480p</option>
@@ -235,7 +215,7 @@ function QualityTab({ draft, disabled, update }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>每次询问画质</span>
+        <span>{t("settings.askQuality", locale)}</span>
         <input
           type="checkbox"
           checked={draft.auto_start_downloads === false}
@@ -245,7 +225,7 @@ function QualityTab({ draft, disabled, update }: TabProps) {
       </label>
 
       <label className="settings-row">
-        <span>字幕</span>
+        <span>{t("settings.subtitles", locale)}</span>
         <select
           value={subtitleMode}
           disabled={disabled}
@@ -253,26 +233,26 @@ function QualityTab({ draft, disabled, update }: TabProps) {
             update(subtitleModePatch(e.target.value as SubtitleMode))
           }
         >
-          <option value="none">不下载字幕</option>
-          <option value="external">保存独立字幕</option>
-          <option value="embedded">写入视频</option>
-          <option value="both">写入视频并保留独立字幕</option>
+          <option value="none">{t("settings.subtitlesNone", locale)}</option>
+          <option value="external">{t("settings.subtitlesExternal", locale)}</option>
+          <option value="embedded">{t("settings.subtitlesEmbedded", locale)}</option>
+          <option value="both">{t("settings.subtitlesBoth", locale)}</option>
         </select>
       </label>
 
       <label className="settings-row">
-        <span>字幕语言</span>
+        <span>{t("settings.subtitleLanguages", locale)}</span>
         <input
           value={draft.subtitle_langs || ""}
           disabled={disabled}
-          placeholder="如 zh-Hans,en（留空则自动选择一个可用字幕）"
+          placeholder={t("settings.subtitleHint", locale)}
           onChange={(e) => update({ subtitle_langs: e.target.value })}
         />
       </label>
 
       {mp3UsesExternalSubtitles ? (
         <p className="muted small">
-          MP3 不支持写入字幕，将保存为独立字幕文件
+          {t("settings.mp3Subtitles", locale)}
         </p>
       ) : null}
     </div>
@@ -397,6 +377,7 @@ function AppearanceTab({ draft, disabled, update }: TabProps) {
 
 export function SettingsApp() {
   useBootstrap();
+  const locale = useLocale();
   const connection = useAppStore((s) => s.connection);
   const settings = useAppStore((s) => s.settings);
   const pushToast = useAppStore((s) => s.pushToast);
@@ -405,6 +386,10 @@ export function SettingsApp() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<TabKey>("general");
   const timer = useRef<number | null>(null);
+  const mounted = useRef(true);
+  const draftRef = useRef(draft);
+  const editVersion = useRef(0);
+  const savedVersion = useRef(0);
 
   const [ytInfo, setYtInfo] = useState<YtDlpInfo | null>(null);
   const [ytBusy, setYtBusy] = useState(false);
@@ -417,8 +402,19 @@ export function SettingsApp() {
   const [appUpdateUrl, setAppUpdateUrl] = useState("");
 
   useEffect(() => {
+    if (editVersion.current !== savedVersion.current) return;
+    draftRef.current = settings;
     setDraft(settings);
   }, [settings]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     return window.api.onMigration((result) => setMigration(result));
@@ -431,30 +427,44 @@ export function SettingsApp() {
       .catch(() => undefined);
   }, [connection]);
 
-  const persist = async (next: AppSettings) => {
-    setSaveState("saving");
-    setError("");
+  const persist = async (next: AppSettings, version: number) => {
     try {
       const updated = await request<AppSettings>("settings.update", next);
-      useAppStore.setState({ settings: updated });
+      if (!mounted.current || version !== editVersion.current) return;
+      savedVersion.current = version;
+      draftRef.current = updated;
+      setDraft(updated);
+      useAppStore.getState().applyEvent({ event: "settings.changed", payload: { settings: updated } });
       setSaveState("saved");
-    } catch (err) {
+    } catch {
+      if (!mounted.current || version !== editVersion.current) return;
       setSaveState("error");
-      setError(String(err));
+      setError(t("settings.saveFailed"));
     }
   };
 
   const update = (partial: Partial<AppSettings>) => {
-    if (!draft) return;
-    const next = { ...draft, ...partial };
+    if (!draftRef.current) return;
+    const next = { ...draftRef.current, ...partial };
+    const version = ++editVersion.current;
+    draftRef.current = next;
     setDraft(next);
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void persist(next), 300);
+    setSaveState("saving");
+    setError("");
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      void persist(next, version);
+    }, 300);
   };
 
   const pickDir = async () => {
-    const dir = await window.api.selectDirectory();
-    if (dir) update({ download_dir: dir });
+    try {
+      const dir = await window.api.selectDirectory();
+      if (dir) update({ download_dir: dir });
+    } catch {
+      pushToast({ kind: "error", title: t("error.openFolder") });
+    }
   };
 
   const checkYtDlp = async () => {
@@ -466,11 +476,11 @@ export function SettingsApp() {
       pushToast({
         kind: "info",
         title: info.updateAvailable
-          ? `发现新版本 ${info.latestVersion}`
-          : `已是最新（${info.currentVersion}）`,
+          ? t("settings.toolNew", undefined, { version: safeVersion(info.latestVersion) || "—" })
+          : t("settings.toolCurrentResult", undefined, { version: safeVersion(info.currentVersion) || "—" }),
       });
-    } catch (err) {
-      setYtError(String(err));
+    } catch {
+      setYtError(t("settings.toolCheckFailed"));
     } finally {
       setYtBusy(false);
     }
@@ -484,6 +494,7 @@ export function SettingsApp() {
         "updater.updateYtDlp",
         ytInfo?.downloadUrl ? { downloadUrl: ytInfo.downloadUrl } : {},
       );
+      if (!result.ok || !safeVersion(result.version)) throw new Error("invalid tool update result");
       setYtInfo((prev) =>
         prev
           ? {
@@ -497,10 +508,10 @@ export function SettingsApp() {
               updateAvailable: false,
             },
       );
-      pushToast({ kind: "success", title: `yt-dlp 已更新至 ${result.version}` });
-    } catch (err) {
-      setYtError(String(err));
-      pushToast({ kind: "error", title: "yt-dlp 更新失败" });
+      pushToast({ kind: "success", title: t("settings.toolUpdated", undefined, { version: result.version }) });
+    } catch {
+      setYtError(t("settings.toolUpdateFailed"));
+      pushToast({ kind: "error", title: t("settings.toolUpdateFailed") });
     } finally {
       setYtBusy(false);
     }
@@ -513,15 +524,34 @@ export function SettingsApp() {
         "app.exportDiagnostics",
         {},
       );
+      if (!result.ok || !result.path) throw new Error("diagnostics unavailable");
       setDiagPath(result.path);
-      pushToast({ kind: "success", title: "诊断包已导出" });
-      if (result.path) {
-        void window.api.showItemInFolder(result.path);
-      }
+      pushToast({ kind: "success", title: t("diagnostics.success") });
+      await window.api.showItemInFolder(result.path).catch(() => {
+        pushToast({ kind: "info", title: t("diagnostics.revealFailed") });
+      });
     } catch {
-      pushToast({ kind: "error", title: "诊断包导出失败，请稍后重试。" });
+      pushToast({ kind: "error", title: t("diagnostics.failed") });
     } finally {
       setDiagBusy(false);
+    }
+  };
+
+  const checkAppUpdate = async () => {
+    setAppUpdateBusy(true);
+    setAppUpdateUrl("");
+    try {
+      const info = await window.api.checkAppUpdate();
+      const toast = appUpdateToast(info);
+      setAppUpdateMsg(toast.title);
+      setAppUpdateUrl(info.downloadUrl || "");
+      pushToast(toast);
+    } catch {
+      const message = t("update.failed");
+      setAppUpdateMsg(message);
+      pushToast({ kind: "error", title: message });
+    } finally {
+      setAppUpdateBusy(false);
     }
   };
 
@@ -537,7 +567,7 @@ export function SettingsApp() {
   if (!draft) {
     return (
       <div className="settings-shell">
-        <p className="muted">正在加载…</p>
+        <p className="muted">{t("settings.loading", locale)}</p>
       </div>
     );
   }
@@ -545,21 +575,21 @@ export function SettingsApp() {
   const disabled = connection !== "connected";
   const statusLabel =
     saveState === "saving"
-      ? "正在保存…"
+      ? t("settings.saving", locale)
       : saveState === "saved"
-        ? "已保存"
+        ? t("settings.saved", locale)
         : saveState === "error"
-          ? "输入有误"
+          ? t("settings.notSaved", locale)
           : "";
 
   const migrationLabel =
     migration == null
-      ? "尚未查询"
+      ? t("settings.migrationPending", locale)
       : migration.status === "migrated"
-        ? `已迁移：${migration.message || ""}`
+        ? t("settings.migrationDone", locale)
         : migration.status === "failed"
-          ? `失败：${migration.message || ""}`
-          : migration.message || "无需迁移";
+          ? t("settings.migrationFailed", locale)
+          : t("settings.migrationSkipped", locale);
 
   const tabProps: TabProps = { draft, disabled, update, pickDir };
 
@@ -567,20 +597,20 @@ export function SettingsApp() {
     <div className="settings-shell">
       <div className="settings-drag-strip" />
       <header className="row">
-        <h1>设置</h1>
+        <h1>{t("settings.open", locale)}</h1>
         <span className={`save-state ${saveState}`}>{statusLabel}</span>
       </header>
       {error && <p className="field-error">{error}</p>}
 
-      <nav className="settings-tabs" aria-label="设置分类">
-        {TABS.map((t) => (
+      <nav className="settings-tabs" aria-label={t("settings.categories", locale)}>
+        {TABS.map((item) => (
           <button
-            key={t.key}
+            key={item.key}
             type="button"
-            className={tab === t.key ? "settings-tab active" : "settings-tab"}
-            onClick={() => setTab(t.key)}
+            className={tab === item.key ? "settings-tab active" : "settings-tab"}
+            onClick={() => setTab(item.key)}
           >
-            {t.label}
+            {t(item.labelKey, locale)}
           </button>
         ))}
       </nav>
@@ -594,13 +624,13 @@ export function SettingsApp() {
       {tab === "general" && (
         <>
           <section className="settings-section">
-            <h2>yt-dlp</h2>
+            <h2>{t("settings.downloadTool", locale)}</h2>
             <p className="muted">
-              当前版本：{ytInfo?.currentVersion || "点击检查以查询"}
+              {t("settings.toolCurrent", locale, { version: safeVersion(ytInfo?.currentVersion) || t("settings.toolUnknown", locale) })}
               {ytInfo?.updateAvailable
-                ? ` · 可更新至 ${ytInfo.latestVersion}`
+                ? t("settings.toolAvailable", locale, { version: safeVersion(ytInfo.latestVersion) || "—" })
                 : ytInfo
-                  ? " · 已是最新"
+                  ? t("settings.toolLatest", locale)
                   : ""}
             </p>
             {ytError && <p className="field-error">{ytError}</p>}
@@ -610,79 +640,62 @@ export function SettingsApp() {
                 disabled={disabled || ytBusy}
                 onClick={() => void checkYtDlp()}
               >
-                检查更新
+                {t("settings.toolCheck", locale)}
               </button>
               <button
                 type="button"
                 disabled={disabled || ytBusy || !ytInfo?.updateAvailable}
                 onClick={() => void updateYtDlp()}
               >
-                更新 yt-dlp
+                {t("settings.toolUpdate", locale)}
               </button>
             </div>
           </section>
 
           <section className="settings-section">
-            <h2>数据迁移</h2>
+            <h2>{t("settings.migration", locale)}</h2>
             <p className="muted">{migrationLabel}</p>
             {migration?.details && (
               <p className="muted small">
-                历史复制{" "}
-                {String(
-                  (migration.details as { history_copied?: number }).history_copied ?? 0,
-                )}{" "}
-                条
+                {t("settings.historyCopied", locale, {
+                  count: Math.max(0, Number(migration.details.history_copied) || 0),
+                })}
               </p>
             )}
           </section>
 
           <section className="settings-section">
-            <h2>应用更新</h2>
+            <h2>{t("update.title", locale)}</h2>
             <p className="muted">
-              通过 GitHub Releases 检查新版本。当前为未签名分发：有更新时请前往下载页手动安装。
-              自动替换需签名公证后接入 electron-updater，见 docs/RELEASE.md。
+              {t("update.copy", locale)}
             </p>
             {appUpdateMsg && <p className="muted small">{appUpdateMsg}</p>}
             <div className="settings-control">
               <button
                 type="button"
                 disabled={disabled || appUpdateBusy}
-                onClick={() => {
-                  setAppUpdateBusy(true);
-                  void window.api
-                    .checkAppUpdate()
-                    .then((info) => {
-                      setAppUpdateMsg(info.message);
-                      setAppUpdateUrl(info.downloadUrl || "");
-                      const kind =
-                        info.status === "available"
-                          ? "success"
-                          : info.status === "error"
-                            ? "error"
-                            : "info";
-                      pushToast({ kind, title: info.message });
-                    })
-                    .finally(() => setAppUpdateBusy(false));
-                }}
+                onClick={() => void checkAppUpdate()}
               >
-                {appUpdateBusy ? "检查中…" : "检查应用更新"}
+                {t(appUpdateBusy ? "update.checking" : "update.check", locale)}
               </button>
               <button
                 type="button"
                 disabled={disabled || !appUpdateUrl}
                 onClick={() => {
-                  void window.api.openExternal(appUpdateUrl);
+                  void window.api.openExternal(appUpdateUrl).catch(() => {
+                    pushToast({ kind: "error", title: t("update.openFailed") });
+                  });
                 }}
               >
-                前往下载
+                {t("update.download", locale)}
               </button>
             </div>
           </section>
 
           <section className="settings-section">
-            <h2>诊断</h2>
+            <h2>{t("diagnostics.title", locale)}</h2>
             <p className="muted">
-              诊断包只包含应用版本、系统环境、错误类型和日志数量；不会包含下载链接、内容标题、日志正文或账号信息。
+              {t("diagnostics.copy", locale)}
             </p>
             {diagPath && <p className="muted small">{diagPath}</p>}
             <div className="settings-control">
@@ -691,14 +704,14 @@ export function SettingsApp() {
                 disabled={disabled || diagBusy}
                 onClick={() => void exportDiagnosticsBundle()}
               >
-                {diagBusy ? "导出中…" : "导出诊断包"}
+                {t(diagBusy ? "diagnostics.exporting" : "diagnostics.export", locale)}
               </button>
             </div>
           </section>
         </>
       )}
 
-      <p className="muted">更改将自动保存。</p>
+      <p className="muted">{t("settings.autoSave", locale)}</p>
       <ToastHost />
     </div>
   );

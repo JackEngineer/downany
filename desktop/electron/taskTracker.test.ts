@@ -3,6 +3,33 @@ import { describe, expect, it } from "vitest";
 import { TaskTracker } from "./taskTracker";
 
 describe("TaskTracker", () => {
+  it("applies 100 patches only to existing non-terminal tasks", () => {
+    const tracker = new TaskTracker();
+    tracker.hydrate(Array.from({ length: 1000 }, (_, index) => ({
+      id: String(index), title: `task ${index}`, status: index === 99 ? "completed" : "downloading",
+      progress: index === 99 ? 100 : 0,
+    })));
+    tracker.applyProgressBatch([
+      ...Array.from({ length: 100 }, (_, index) => ({ taskId: String(index), progress: 50 })),
+      { taskId: "missing", progress: 99 },
+    ]);
+    expect(tracker.getByIds(["0", "98", "99", "100", "missing"]).map((task) => task.progress))
+      .toEqual([50, 50, 100, 0, 0]);
+    expect(tracker.getByIds(["missing"])[0].status).toBe("unknown");
+  });
+
+  it("late legacy progress cannot regress completed tasks or resurrect removed ones", () => {
+    const tracker = new TaskTracker();
+    tracker.hydrate([{ id: "done", status: "completed", progress: 100 }]);
+    for (const id of ["done", "removed"]) {
+      tracker.applyEvent({ event: "task.progress", payload: {
+        taskId: id, task: { id, status: "downloading", progress: 99 },
+      } });
+    }
+    expect(tracker.getByIds(["done"])[0].progress).toBe(100);
+    expect(tracker.getByIds(["removed"])[0].status).toBe("unknown");
+  });
+
   it("aggregates progress of active tasks", () => {
     const tracker = new TaskTracker();
     tracker.hydrate([

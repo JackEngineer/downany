@@ -6,7 +6,12 @@ import uuid
 from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
-from src.core.download_manager import DownloadManager
+from src.core.download_manager import (
+    DownloadManager,
+    QueueMutationError,
+    TaskActionBatchResult,
+    TaskActionResult,
+)
 from src.core.download_task import (
     DownloadOptions,
     DownloadTask,
@@ -17,6 +22,7 @@ from src.core.download_task import (
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
+from src.core.task_actions import TaskAction, TaskActionOutcome
 from src.core.twitter_fallback import is_twitter_url, normalize_twitter_url
 from src.core.url_normalizer import normalize_download_url
 from src.core.url_parser import (
@@ -154,6 +160,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_RETRY.value: _retry,
         Method.DOWNLOAD_REMOVE.value: _remove,
         Method.DOWNLOAD_REMOVE_GROUP.value: _remove_group,
+        Method.DOWNLOAD_APPLY_GROUP_ACTION.value: _apply_group_action,
         Method.DOWNLOAD_CLEAR_FINISHED.value: _clear_finished,
         Method.DOWNLOAD_UPDATE_TASK.value: _update_task,
         Method.DOWNLOAD_REORDER.value: _reorder,
@@ -191,7 +198,12 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
     handler = handlers.get(method)
     if handler is None:
         raise HandlerError(ErrorCode.METHOD_NOT_FOUND, f"未知方法: {method}")
-    return handler(ctx, payload)
+    try:
+        return handler(ctx, payload)
+    except QueueMutationError as exc:
+        raise HandlerError(
+            ErrorCode.INTERNAL, "无法保存任务更改，请重试", retryable=True,
+        ) from exc
 
 
 def _ping(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -199,7 +211,7 @@ def _ping(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get_snapshot(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    tasks = [ctx.snapshot_task(t) for t in ctx.manager.get_all_tasks().values()]
+    tasks = [asdict(task) for task in ctx.manager.get_snapshot()]
     body: Dict[str, Any] = {"tasks": tasks, "settings": ctx.config.to_dict()}
     if ctx.last_migration is not None:
         body["migration"] = ctx.last_migration
@@ -503,23 +515,59 @@ def _require_task_id(payload: Dict[str, Any]) -> str:
 
 
 def _pause(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    ctx.manager.pause_task(_require_task_id(payload))
-    return {"ok": True}
+    return _single_action(ctx, payload, TaskAction.PAUSE)
 
 
 def _resume(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    ctx.manager.resume_task(_require_task_id(payload))
-    return {"ok": True}
+    return _single_action(ctx, payload, TaskAction.RESUME)
 
 
 def _cancel(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    ctx.manager.cancel_task(_require_task_id(payload))
-    return {"ok": True}
+    return _single_action(ctx, payload, TaskAction.CANCEL)
 
 
 def _retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    ctx.manager.retry_task(_require_task_id(payload))
-    return {"ok": True}
+    return _single_action(ctx, payload, TaskAction.RETRY)
+
+
+def _single_action(
+    ctx: HandlerContext, payload: Dict[str, Any], action: TaskAction,
+) -> Dict[str, Any]:
+    result = ctx.manager.apply_task_action(_require_task_id(payload), action)
+    if result.outcome == TaskActionOutcome.SKIPPED:
+        message = "任务不存在" if result.reason == "task_not_found" else "当前状态不能执行此操作"
+        raise HandlerError(ErrorCode.INVALID_PARAMS, message)
+    return {"ok": True, "outcome": result.outcome.value, **_action_entry(result)}
+
+
+def _action_entry(result: TaskActionResult) -> Dict[str, Any]:
+    entry = {"taskId": result.task_id, "status": result.status.value if result.status else None}
+    if result.reason:
+        entry["reason"] = result.reason
+    return entry
+
+
+def _action_report(report: TaskActionBatchResult) -> Dict[str, Any]:
+    return {
+        "action": report.action.value,
+        "applied": [_action_entry(result) for result in report.applied],
+        "deferred": [_action_entry(result) for result in report.deferred],
+        "skipped": [_action_entry(result) for result in report.skipped],
+    }
+
+
+def _apply_group_action(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    group_id = payload.get("groupId")
+    raw_action = payload.get("action")
+    if not isinstance(group_id, str) or not group_id.strip():
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "请选择合集")
+    if not isinstance(raw_action, str):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "不支持此任务操作")
+    try:
+        action = TaskAction(raw_action)
+    except ValueError as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "不支持此任务操作") from exc
+    return _action_report(ctx.manager.apply_group_action(group_id, action))
 
 
 def _remove(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -537,10 +585,17 @@ def _remove_group(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     if not group_id:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少 groupId")
     delete_files = bool(payload.get("delete_files") or payload.get("deleteFiles"))
-    removed = ctx.manager.remove_group(group_id, delete_files=delete_files)
-    for task_id in removed:
+    result = ctx.manager.remove_group(group_id, delete_files=delete_files)
+    for task_id in result.removed:
         ctx.emit_event(EventName.TASK_REMOVED.value, {"taskId": task_id})
-    return {"ok": True, "removed": removed}
+    return {
+        "ok": True,
+        "removed": list(result.removed),
+        "fileDeleteFailures": [
+            {"taskId": failure.task_id, "message": failure.message}
+            for failure in result.file_delete_failures
+        ],
+    }
 
 
 def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -572,30 +627,35 @@ def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]
         raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
     if task is None:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "任务不存在")
-    return {"task": ctx.snapshot_task(task)}
+    result = {"task": ctx.snapshot_task(task)}
+    if "priority" in kwargs:
+        group_id = (task.group_id or "").strip()
+        result["tasks"] = [
+            asdict(snapshot) for snapshot in ctx.manager.get_snapshot()
+            if snapshot.id == task_id or (
+                group_id and snapshot.group_id.strip() == group_id and snapshot.status != "completed"
+            )
+        ]
+    return result
 
 
 def _reorder(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    ordered_ids = payload.get("ordered_ids") or payload.get("orderedIds") or []
+    ordered_ids = payload.get("ordered_ids") if "ordered_ids" in payload else payload.get("orderedIds", [])
     if not isinstance(ordered_ids, list):
         raise HandlerError(ErrorCode.INVALID_PARAMS, "ordered_ids 必须是数组")
-    ids = [str(item).strip() for item in ordered_ids if str(item).strip()]
-    ctx.manager.reorder_tasks(ids)
-    return {"ok": True}
+    try:
+        snapshots = ctx.manager.reorder_tasks(ordered_ids)
+    except ValueError as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
+    return {"ok": True, "tasks": [asdict(task) for task in snapshots], "settings": ctx.config.to_dict()}
 
 
 def _pause_all(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    for task_id, task in list(ctx.manager.get_all_tasks().items()):
-        if task.status == TaskStatus.DOWNLOADING:
-            ctx.manager.pause_task(task_id)
-    return {"ok": True}
+    return _action_report(ctx.manager.apply_all_action(TaskAction.PAUSE))
 
 
 def _resume_all(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    for task_id, task in list(ctx.manager.get_all_tasks().items()):
-        if task.status == TaskStatus.PAUSED:
-            ctx.manager.resume_task(task_id)
-    return {"ok": True}
+    return _action_report(ctx.manager.apply_all_action(TaskAction.RESUME))
 
 
 def _clear_finished(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

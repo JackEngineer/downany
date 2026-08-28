@@ -2,14 +2,18 @@
 
 macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
+本工作树已完成 **v0.3.0 Windows 本地候选** 的自动化门槛，尚未安装、提交或公开发布；扩展独立版本为 `0.8.2`。本轮不包含 Mac 构建或人工验收。结果与边界见 [候选验证记录](docs/acceptance/v0.3.0-stable-baseline.md)。
+
 ## 功能
 
 - **平台识别**：YouTube、Bilibili、抖音、TikTok、Twitter、Instagram 等常见视频平台
 - **网络搜索**：支持 YouTube、Bilibili，搜索结果可直接加入下载列表
 - **下载工作台**：单条 / 批量 URL 解析与入队
 - **队列管理**：可配置并发、暂停 / 恢复 / 取消 / 重试、实时进度
+- **恢复与顺序**：保留暂停选择与队列顺序，支持整组操作和同优先级内调整顺序；失败或取消的任务不会自行重试
 - **历史记录**：SQLite 存储，可检索与重新下载
 - **设置**：下载目录、并发、限速、代理、画质、字幕、主题、yt-dlp 更新
+- **界面语言**：默认中文；English 覆盖添加、任务状态与操作、合集、排序及常规设置中的更新/诊断。部分低频设置、原生菜单和服务端历史说明仍为中文
 - **Telegram 自动转发**：绑定 Bot、验证私聊/群组/频道，下载完成后自动发送并保留发送记录
 - **桌面集成**：原生菜单、通知、Dock 徽标、窗口几何、旧 Trae 数据迁移
 - **Chrome 扩展**：识别页面媒体后一键入队（见 [`browser-extension/`](browser-extension/)）
@@ -108,9 +112,11 @@ packaging/         # Sidecar PyInstaller 规格
 ```bash
 source venv/bin/activate
 pip install -r requirements-dev.txt
-pytest tests/core tests/data tests/sidecar -q
+pytest tests/core tests/data tests/sidecar tests/cli -q
 cd desktop && npm test && npm run build
 ```
+
+`npm run build` 会先检查 Main 和 Renderer 的 TypeScript 类型。Windows 自动窗口布局、旧格式迁移和真实包恢复命令见 [本地候选门槛](docs/RELEASE.md#v030-windows-本地候选门槛)。自动化测试不等于覆盖安装、真实账号发送或真实网站全量验证。
 
 产品路线见 [docs/roadmap.md](docs/roadmap.md)；发布与签名见 [docs/RELEASE.md](docs/RELEASE.md)。
 

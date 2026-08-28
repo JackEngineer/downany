@@ -188,7 +188,7 @@ afterEach(() => {
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-    function getBoundingClientRect() {
+    function getBoundingClientRect(this: HTMLElement) {
       if (this.getAttribute("aria-label") === "更多操作") {
         return rect(700, 100, 28, 28);
       }
@@ -1224,7 +1224,7 @@ describe("MediaTaskBanner", () => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
         if (this.getAttribute("aria-label") === "更多操作") {
           return rect(720, 700, 28, 28);
         }
@@ -1267,7 +1267,7 @@ describe("MediaTaskBanner", () => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
         if (this.getAttribute("aria-label") === "更多操作") return triggerRect;
         if (this.classList.contains("task-actions-menu__panel")) {
           return rect(0, 0, 196, 300);
@@ -1295,7 +1295,7 @@ describe("MediaTaskBanner", () => {
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(760);
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(560);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
         if (this.getAttribute("aria-label") === "更多操作") return triggerRect;
         if (this.classList.contains("task-actions-menu__panel")) {
           return rect(0, 0, 196, 300);
@@ -1321,7 +1321,7 @@ describe("MediaTaskBanner", () => {
       () => viewportHeight,
     );
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
         if (this.getAttribute("aria-label") === "更多操作") {
           return rect(700, 220, 28, 28);
         }
@@ -1332,7 +1332,7 @@ describe("MediaTaskBanner", () => {
       },
     );
     vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
-      function scrollHeight() {
+      function scrollHeight(this: HTMLElement) {
         return this.classList.contains("task-actions-menu__panel") ? 300 : 0;
       },
     );

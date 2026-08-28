@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- **用户范围调整（2026-08-27）：** 必须先读 `docs/superpowers/specs/2026-08-27-downany-windows-execution-scope.md`。本任务仅负责 Windows；Mac 相关步骤不执行、不计入未完成门槛，不得用 Windows 证据标记 Mac 通过。
 - 继续使用 Electron Main + preload IPC + React Renderer + Python Sidecar + yt-dlp 唯一主线；不引入 PyQt、SwiftUI 或第二套下载引擎。
 - 所有单任务下载保持 `noplaylist=true`；播放列表必须先展开为带 `group_id` 与 `playlist_index` 的单任务。
 - 任务专属暂存目录固定为 `<AppPaths.temp_dir>/<task_id>`；用户标题、URL 和模板不参与该目录命名。
@@ -1646,7 +1647,7 @@ git add tests/core/test_media_pipeline_integration.py .github/workflows/ci.yml
 git commit -m "test: verify real media postprocessing"
 ```
 
-### Task 14: Build and accept the v0.2.4-A dual-platform candidate
+### Task 14: Build and accept the v0.2.4-A Windows candidate
 
 **Files:**
 - Modify: `desktop/package.json:3`
@@ -1711,9 +1712,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_nsis.ps1
 
 Run the packaged media-tool, Sidecar, and Electron smokes against `win-unpacked`. Install the NSIS artifact on a real Windows user account, launch it, and confirm Open/In Folder uses the final verified output. Record installer filename, byte size, SHA-256, host architecture, and whether the build is unsigned.
 
-- [ ] **Step 5: Build and inspect the macOS DMG candidate**
+- **Step 5: macOS DMG candidate — excluded by the user's 2026-08-27 scope change**
 
-On an Apple Silicon macOS host, run:
+Historical instructions only; do not execute or wait for this step in the current task. On an Apple Silicon macOS host, the original plan was:
 
 ```bash
 BUILD_TELEGRAM_NATIVE=0 ALLOW_CLOUD_ONLY_PACKAGE=1 FETCH_BINS=1 BUILD_SIDECAR=1 \
@@ -1722,9 +1723,9 @@ BUILD_TELEGRAM_NATIVE=0 ALLOW_CLOUD_ONLY_PACKAGE=1 FETCH_BINS=1 BUILD_SIDECAR=1 
 
 Run the packaged media-tool, Sidecar, and Electron smokes against the `.app`, install/open the DMG on a real macOS account, and confirm Open/Reveal uses the final verified output. Record DMG filename, byte size, SHA-256, host architecture, deployment target, and unsigned Gatekeeper behavior.
 
-If no actual macOS host is available, stop at a Windows-only candidate and report that v0.2.4-A is not yet a stable dual-platform candidate. Do not replace this step with a mocked, cross-compiled, or prior-version result.
+No macOS host is required for the current task. Record macOS as out of scope, not passed; do not substitute a mocked, cross-compiled, or prior-version result.
 
-- [ ] **Step 6: Perform the seven visible acceptance journeys on each platform**
+- [ ] **Step 6: Perform the seven visible acceptance journeys on Windows**
 
 Record date, OS version, app build hash, source URL or safe source identifier, final relative path, container/stream evidence, UI result, player used, and observed outcome for each:
 
@@ -1744,8 +1745,8 @@ Create `docs/acceptance/v0.2.4-output-correctness.md` only after the runs. Inclu
 
 - candidate commit and dirty-state check;
 - exact automated command results;
-- Windows and macOS artifact hashes and package-smoke results;
-- one row per visible journey per platform;
+- Windows artifact hashes and package-smoke results;
+- one row per Windows visible journey; macOS explicitly out of scope and not claimed as passed;
 - remaining known limitations;
 - explicit statement that no merge, push, tag, cleanup, or public release occurred.
 

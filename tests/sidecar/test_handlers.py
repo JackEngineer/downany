@@ -633,3 +633,94 @@ def test_download_remove_group(tmp_path):
     assert ctx.manager.get_all_tasks() == {}
     removed_events = [e for e in events if e[0] == "task.removed"]
     assert len(removed_events) == 2
+
+
+@pytest.mark.parametrize("method", ["pause", "resume", "cancel", "retry"])
+def test_single_action_rejects_missing_task(tmp_path, method):
+    ctx, _ = _ctx(tmp_path)
+    with pytest.raises(HandlerError, match="任务不存在") as error:
+        dispatch(ctx, f"download.{method}", {"taskId": "missing"})
+    assert error.value.code is ErrorCode.INVALID_PARAMS
+
+
+@pytest.mark.parametrize("method", ["pause", "resume", "cancel", "retry"])
+def test_single_action_rejects_incompatible_state(tmp_path, method):
+    ctx, _ = _ctx(tmp_path)
+    task = DownloadTask(
+        video_info=VideoInfo(url="https://example.com/completed", title="成品"),
+        status=TaskStatus.COMPLETED,
+    )
+    ctx.manager.add_task(task)
+    with pytest.raises(HandlerError, match="当前状态不能执行此操作") as error:
+        dispatch(ctx, f"download.{method}", {"taskId": task.id})
+    assert error.value.code is ErrorCode.INVALID_PARAMS
+
+
+def test_group_action_returns_truthful_report_and_global_resume_uses_same_contract(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    for task_id, status in [("waiting", TaskStatus.PENDING), ("done", TaskStatus.COMPLETED)]:
+        ctx.manager.add_task(DownloadTask(
+            id=task_id,
+            video_info=VideoInfo(url=f"https://example.com/{task_id}", title=task_id),
+            status=status,
+            group_id="playlist",
+        ))
+    result = dispatch(ctx, "download.applyGroupAction", {"groupId": "playlist", "action": "pause"})
+    assert result == {
+        "action": "pause",
+        "applied": [{"taskId": "waiting", "status": "paused"}],
+        "deferred": [],
+        "skipped": [{"taskId": "done", "status": "completed", "reason": "incompatible_status"}],
+    }
+    resumed = dispatch(ctx, "download.resumeAll", {})
+    assert resumed["action"] == "resume"
+    assert resumed["applied"] == [{"taskId": "waiting", "status": "pending"}]
+    assert len(resumed["skipped"]) == 1
+    paused = dispatch(ctx, "download.pauseAll", {})
+    assert paused["applied"] == [{"taskId": "waiting", "status": "paused"}]
+
+
+@pytest.mark.parametrize("payload", [
+    {}, {"groupId": "", "action": "pause"}, {"groupId": 7, "action": "pause"},
+    {"groupId": "playlist"}, {"groupId": "playlist", "action": "run"},
+    {"groupId": "playlist", "action": ["pause"]},
+])
+def test_group_action_rejects_invalid_parameters(tmp_path, payload):
+    ctx, _ = _ctx(tmp_path)
+    with pytest.raises(HandlerError) as error:
+        dispatch(ctx, "download.applyGroupAction", payload)
+    assert error.value.code is ErrorCode.INVALID_PARAMS
+
+
+@pytest.mark.parametrize("ordered", [[], ["first"], ["first", "first"], ["first", 1], ["first", ""], "first"])
+def test_reorder_rejects_invalid_payload_without_discarding_entries(tmp_path, ordered):
+    ctx, _ = _ctx(tmp_path)
+    for task_id in ("first", "second"):
+        ctx.manager.add_task(DownloadTask(id=task_id, video_info=VideoInfo(url=f"https://example.com/{task_id}")))
+    before = dispatch(ctx, "app.getSnapshot", {})["tasks"]
+    with pytest.raises(HandlerError) as error:
+        dispatch(ctx, "download.reorder", {"orderedIds": ordered})
+    assert error.value.code is ErrorCode.INVALID_PARAMS
+    assert dispatch(ctx, "app.getSnapshot", {})["tasks"] == before
+
+
+def test_reorder_returns_the_authoritative_snapshot(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    for task_id in ("first", "second"):
+        ctx.manager.add_task(DownloadTask(id=task_id, video_info=VideoInfo(url=f"https://example.com/{task_id}")))
+    result = dispatch(ctx, "download.reorder", {"orderedIds": ["second", "first"]})
+    assert [task["id"] for task in result["tasks"]] == ["second", "first"]
+    assert result["tasks"] == dispatch(ctx, "app.getSnapshot", {})["tasks"]
+    assert "settings" in result
+
+
+def test_priority_update_reports_all_affected_group_members(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    for task_id in ("first", "second"):
+        ctx.manager.add_task(DownloadTask(
+            id=task_id, group_id="playlist", video_info=VideoInfo(url=f"https://example.com/{task_id}"),
+        ))
+    result = dispatch(ctx, "download.updateTask", {"taskId": "first", "priority": 1})
+    assert result["task"]["id"] == "first"
+    assert {task["id"] for task in result["tasks"]} == {"first", "second"}
+    assert all(task["priority"] == 1 for task in result["tasks"])

@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TextIO
 
@@ -43,6 +44,7 @@ class SidecarServer:
         # serialized with its flush; otherwise an event can interleave with a
         # response and corrupt both protocol lines.
         self._stdout_lock = threading.RLock()
+        self._event_lock = threading.RLock()
         self._last_progress_emit: Dict[str, float] = {}
         self._unsubscribe = None
 
@@ -102,15 +104,18 @@ class SidecarServer:
             self._stdout.flush()
 
     def _write_event(self, event: str, payload: Dict[str, Any]) -> None:
-        self._write(
-            {
-                "protocolVersion": PROTOCOL_VERSION,
-                "type": MessageType.EVENT.value,
-                "event": event,
-                "payload": payload,
-                "timestamp": self._now(),
-            }
-        )
+        with self._event_lock:
+            if event == EventName.TASK_REMOVED.value:
+                self._last_progress_emit.pop(payload.get("taskId", ""), None)
+            self._write(
+                {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "type": MessageType.EVENT.value,
+                    "event": event,
+                    "payload": payload,
+                    "timestamp": self._now(),
+                }
+            )
 
     def _write_response(
         self,
@@ -159,21 +164,29 @@ class SidecarServer:
         name = mapping.get(event)
         if not name:
             return
-        if event == "task_progress":
-            now = time.monotonic()
-            last = self._last_progress_emit.get(task_id, 0.0)
-            if now - last < _PROGRESS_MIN_INTERVAL:
-                return
-            self._last_progress_emit[task_id] = now
-        body: Dict[str, Any] = {"taskId": task_id}
-        if "progress" in payload:
-            body["progress"] = payload["progress"]
-        if "error" in payload:
-            body["error"] = payload["error"]
-        task = self.ctx.manager.get_task(task_id)
-        if task is not None:
-            body["task"] = self.ctx.snapshot_task(task)
-        self._write_event(name, body)
+        # Manager events are emitted after its mutation lock is released.
+        # Serialize snapshot + bookkeeping + write so an older progress event
+        # cannot be sent after an already-emitted terminal/removal event.
+        with self._event_lock:
+            task = self.ctx.manager.get_task_snapshot(task_id)
+            if task is None or task.status != "downloading":
+                self._last_progress_emit.pop(task_id, None)
+                if event == "task_progress":
+                    return
+            if event == "task_progress":
+                now = time.monotonic()
+                last = self._last_progress_emit.get(task_id)
+                if last is not None and now - last < _PROGRESS_MIN_INTERVAL:
+                    return
+                self._last_progress_emit[task_id] = now
+            body: Dict[str, Any] = {"taskId": task_id}
+            if "progress" in payload:
+                body["progress"] = payload["progress"]
+            if "error" in payload:
+                body["error"] = payload["error"]
+            if task is not None:
+                body["task"] = asdict(task)
+            self._write_event(name, body)
 
     def run(self, stdin: TextIO, stdout: TextIO) -> int:
         """完整握手 + 请求循环（测试与兼容入口）。"""
@@ -270,6 +283,9 @@ class SidecarServer:
             self.ctx.manager.stop()
         except Exception as exc:
             logger.error("停止管理器失败: %s", exc)
+        finally:
+            with self._event_lock:
+                self._last_progress_emit.clear()
 
 
 def _write_early_hello(stdout: TextIO) -> None:

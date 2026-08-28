@@ -1,10 +1,15 @@
 """QueueStore 读写与任务重建测试。"""
 import json
+import sqlite3
+from datetime import datetime
+
+import pytest
 
 from src.core.download_task import (
     DownloadOptions,
     DownloadTask,
     Platform,
+    TaskRunIntent,
     TaskStatus,
     VideoInfo,
 )
@@ -218,9 +223,8 @@ def test_same_database_reload_preserves_grouped_output_fields(tmp_path):
         } == expected
 
 
-def test_group_columns_migrate_from_legacy_schema(tmp_path):
-    import sqlite3
-
+@pytest.mark.parametrize("legacy_status,expected_intent", [("pending", "run"), ("paused", "pause"), ("downloading", "run")])
+def test_group_columns_migrate_from_legacy_schema(tmp_path, legacy_status, expected_intent):
     db_path = tmp_path / "legacy.db"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -249,7 +253,7 @@ def test_group_columns_migrate_from_legacy_schema(tmp_path):
             """,
             (
                 "legacy-1",
-                "pending",
+                legacy_status,
                 json.dumps(
                     {
                         "url": "https://example.com/v",
@@ -272,6 +276,11 @@ def test_group_columns_migrate_from_legacy_schema(tmp_path):
     assert loaded[0].group_title == ""
     assert loaded[0].playlist_index == 0
     assert loaded[0].completion_note == ""
+    assert loaded[0].run_intent is TaskRunIntent(expected_intent)
+    assert loaded[0].status is TaskStatus(legacy_status)
+    assert loaded[0].started_at is None
+    assert loaded[0].completed_at is None
+    assert QueueStore(str(db_path)).load_tasks()[0].run_intent is TaskRunIntent(expected_intent)
 
 
 def test_load_tasks_sorted_by_queue_order(tmp_path):
@@ -284,3 +293,188 @@ def test_load_tasks_sorted_by_queue_order(tmp_path):
     store.upsert_task(second)
     loaded = store.load_tasks()
     assert [t.id for t in loaded] == [second.id, first.id]
+
+
+def _raw_rows(store):
+    with sqlite3.connect(store.db_path) as conn:
+        return conn.execute("SELECT * FROM task_queue ORDER BY id").fetchall()
+
+
+def _seed_batch(store):
+    tasks = [_make_task(), _make_task()]
+    for order, (task, task_id) in enumerate(zip(tasks, ("a", "b"))):
+        task.id = task_id
+        task.queue_order = order
+        store.upsert_task(task)
+    return tasks
+
+
+def test_recovery_intent_and_timestamps_roundtrip(tmp_path):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    task = _make_task(TaskStatus.PAUSED)
+    task.run_intent = TaskRunIntent.PAUSE
+    task.started_at = datetime(2026, 8, 27, 12, 0, 1)
+    task.completed_at = datetime(2026, 8, 27, 12, 1, 2)
+    task.priority, task.queue_order = 2, 7
+    task.group_id, task.group_title, task.playlist_index = "group-one", "合集", 3
+    store.upsert_task(task)
+    restored = QueueStore(store.db_path).load_tasks()[0]
+    assert restored.run_intent is TaskRunIntent.PAUSE
+    assert restored.started_at == datetime(2026, 8, 27, 12, 0, 1)
+    assert restored.completed_at == datetime(2026, 8, 27, 12, 1, 2)
+    assert (restored.priority, restored.queue_order, restored.group_id,
+            restored.group_title, restored.playlist_index) == (2, 7, "group-one", "合集", 3)
+
+
+@pytest.mark.parametrize("raw", ["", "future-intent"])
+def test_bad_optional_recovery_fields_do_not_drop_the_task(tmp_path, raw):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    task = _make_task(TaskStatus.PAUSED)
+    store.upsert_task(task)
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute(
+            "UPDATE task_queue SET run_intent=?, started_at='invalid', completed_at=''",
+            (raw,),
+        )
+    restored = store.load_tasks()
+    assert len(restored) == 1
+    assert restored[0].run_intent is TaskRunIntent.PAUSE
+    assert restored[0].started_at is None
+    assert restored[0].completed_at is None
+
+
+@pytest.mark.parametrize("operation", ["upsert", "delete", "order", "progress"])
+def test_batch_rolls_back_every_row_when_second_write_fails(tmp_path, operation):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    tasks = _seed_batch(store)
+    before = _raw_rows(store)
+    event, predicate = ("DELETE", "OLD.id='b'") if operation == "delete" else ("UPDATE", "NEW.id='b'")
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute(
+            f"CREATE TRIGGER fail_second BEFORE {event} ON task_queue "
+            f"WHEN {predicate} BEGIN SELECT RAISE(ABORT, 'injected batch failure'); END"
+        )
+    tasks[0].priority = tasks[1].priority = 2
+    with pytest.raises(sqlite3.IntegrityError, match="injected batch failure"):
+        if operation == "upsert":
+            store.upsert_tasks(tasks)
+        elif operation == "delete":
+            store.remove_tasks(["a", "b"])
+        elif operation == "order":
+            store.rewrite_queue_order(["a", "b"])
+        else:
+            store.update_progress_many([("a", 20, 200, 1000), ("b", 40, 400, 1000)])
+    assert _raw_rows(store) == before
+
+
+@pytest.mark.parametrize("ordered_ids", [["a", "a"], ["a", "missing"], ["a"], [], ["", "b"]])
+def test_invalid_reorder_is_rejected_before_any_update(tmp_path, ordered_ids, monkeypatch):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    _seed_batch(store)
+    before = _raw_rows(store)
+    statements = []
+    real_connect = store._get_connection
+
+    def connect():
+        conn = real_connect()
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(store, "_get_connection", connect)
+    with pytest.raises(ValueError):
+        store.rewrite_queue_order(ordered_ids)
+    assert not any(statement.lstrip().upper().startswith("UPDATE ") for statement in statements)
+    assert _raw_rows(store) == before
+
+
+def test_reorder_excludes_terminal_rows(tmp_path):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    _seed_batch(store)
+    completed = _make_task(TaskStatus.COMPLETED)
+    completed.id, completed.queue_order = "done", 70
+    store.upsert_task(completed)
+    store.rewrite_queue_order(["b", "a"])
+    tasks = {task.id: task for task in store.load_tasks()}
+    assert (tasks["b"].queue_order, tasks["a"].queue_order, tasks["done"].queue_order) == (0, 1, 70)
+    with pytest.raises(ValueError):
+        store.rewrite_queue_order(["b", "a", "done"])
+
+
+@pytest.mark.parametrize("operation", ["upsert", "delete", "progress"])
+@pytest.mark.parametrize("task_ids", [["a", "a"], ["a", ""]])
+def test_batch_rejects_invalid_ids_without_partial_mutation(tmp_path, operation, task_ids):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    _seed_batch(store)
+    before = _raw_rows(store)
+    with pytest.raises(ValueError):
+        if operation == "upsert":
+            tasks = [_make_task(), _make_task()]
+            for task, task_id in zip(tasks, task_ids):
+                task.id = task_id
+            store.upsert_tasks(tasks)
+        elif operation == "delete":
+            store.remove_tasks(task_ids)
+        else:
+            store.update_progress_many([(task_id, 1, 1, 100) for task_id in task_ids])
+    assert _raw_rows(store) == before
+
+
+@pytest.mark.parametrize("operation", ["delete", "progress"])
+def test_missing_id_rolls_back_whole_batch(tmp_path, operation):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    _seed_batch(store)
+    before = _raw_rows(store)
+    with pytest.raises(ValueError):
+        if operation == "delete":
+            store.remove_tasks(["a", "missing"])
+        else:
+            store.update_progress_many([("a", 1, 1, 100), ("missing", 2, 2, 100)])
+    assert _raw_rows(store) == before
+
+
+def test_progress_batch_preserves_recovery_and_error_fields(tmp_path):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    task = _make_task(TaskStatus.PAUSED)
+    task.run_intent = TaskRunIntent.PAUSE
+    task.error_message, task.error_code, task.completion_note = "暂时断开", "network_error", "字幕已保存"
+    task.completed_at = datetime(2026, 8, 27, 12, 1, 2)
+    store.upsert_task(task)
+    store.update_progress_many([(task.id, 50, 150, 300)])
+    got = store.load_tasks()[0]
+    assert (got.progress, got.downloaded_bytes, got.total_bytes) == (50, 150, 300)
+    assert (got.status, got.run_intent) == (TaskStatus.PAUSED, TaskRunIntent.PAUSE)
+    assert (got.error_message, got.error_code, got.completion_note) == ("暂时断开", "network_error", "字幕已保存")
+    assert got.completed_at == datetime(2026, 8, 27, 12, 1, 2)
+
+
+def test_each_batch_uses_one_connection_and_one_commit(tmp_path, monkeypatch):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    tasks = _seed_batch(store)
+    connections, statements = [], []
+    real_connect = store._get_connection
+
+    def connect():
+        conn = real_connect()
+        connections.append(conn)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(store, "_get_connection", connect)
+    store.upsert_tasks(tasks)
+    store.update_progress_many([("a", 1, 1, 100), ("b", 2, 2, 100)])
+    store.rewrite_queue_order(["b", "a"])
+    store.remove_tasks(["a", "b"])
+    assert len(connections) == 4
+    assert sum(statement == "COMMIT" for statement in statements) == 4
+    assert _raw_rows(store) == []
+
+
+@pytest.mark.parametrize("status", [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED])
+def test_stale_progress_batch_cannot_rewrite_terminal_facts(tmp_path, status):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    task = _make_task(status)
+    task.progress, task.downloaded_bytes, task.total_bytes = 100, 300, 300
+    store.upsert_task(task)
+    before = _raw_rows(store)
+    store.update_progress_many([(task.id, 99, 297, 300)])
+    assert _raw_rows(store) == before

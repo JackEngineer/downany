@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
 from typing import List
 
@@ -14,9 +15,32 @@ from src.core.download_task import (
     TaskStatus,
     VideoInfo,
 )
+from src.core.task_actions import parse_stored_run_intent
 from src.utils.logger import setup_logger
 
 logger = setup_logger("QueueStore")
+
+_TASK_COLUMNS = (
+    "id", "status", "progress", "downloaded_bytes", "total_bytes", "error_message",
+    "error_code", "completion_note", "file_path", "video_info_json", "options_json",
+    "created_at", "updated_at", "priority", "queue_order", "group_id", "group_title",
+    "playlist_index", "run_intent", "started_at", "completed_at",
+)
+_UPSERT_SQL = (
+    f"INSERT INTO task_queue ({', '.join(_TASK_COLUMNS)}) "
+    f"VALUES ({', '.join('?' for _ in _TASK_COLUMNS)}) "
+    "ON CONFLICT(id) DO UPDATE SET "
+    + ", ".join(f"{column}=excluded.{column}" for column in _TASK_COLUMNS if column != "id")
+)
+
+
+def _optional_datetime(raw: object) -> datetime | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 class _ClosingConnection(sqlite3.Connection):
@@ -104,9 +128,18 @@ class QueueStore:
                 )
             except sqlite3.OperationalError:
                 pass  # 列已存在
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(task_queue)")}
+            for column, declaration in (
+                ("run_intent", "TEXT NOT NULL DEFAULT ''"),
+                ("started_at", "TEXT NULL"),
+                ("completed_at", "TEXT NULL"),
+            ):
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE task_queue ADD COLUMN {column} {declaration}")
             conn.commit()
 
-    def upsert_task(self, task: DownloadTask) -> None:
+    @staticmethod
+    def _serialize_task(task: DownloadTask) -> tuple[object, ...]:
         # formats 列表可能很大且可再解析，不落库
         video_info = {
             "url": task.video_info.url,
@@ -139,61 +172,111 @@ class QueueStore:
             "download_sections": task.options.download_sections,
             "sponsorblock_remove": task.options.sponsorblock_remove,
         }
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO task_queue
-                (id, status, progress, downloaded_bytes, total_bytes, error_message,
-                 error_code, completion_note, file_path, video_info_json, options_json, created_at, updated_at,
-                 priority, queue_order, group_id, group_title, playlist_index)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    task.id,
-                    task.status.value,
-                    task.progress,
-                    task.downloaded_bytes,
-                    task.total_bytes,
-                    task.error_message,
-                    task.error_code,
-                    task.completion_note,
-                    task.file_path,
-                    json.dumps(video_info, ensure_ascii=False),
-                    json.dumps(options, ensure_ascii=False),
-                    task.created_at.isoformat(),
-                    datetime.now().isoformat(),
-                    task.priority,
-                    task.queue_order,
-                    task.group_id,
-                    task.group_title,
-                    task.playlist_index,
-                ),
+        return (
+            task.id, task.status.value, task.progress, task.downloaded_bytes,
+            task.total_bytes, task.error_message, task.error_code, task.completion_note,
+            task.file_path, json.dumps(video_info, ensure_ascii=False),
+            json.dumps(options, ensure_ascii=False), task.created_at.isoformat(),
+            datetime.now().isoformat(), task.priority, task.queue_order, task.group_id,
+            task.group_title, task.playlist_index, task.run_intent.value,
+            task.started_at.isoformat() if task.started_at else None,
+            task.completed_at.isoformat() if task.completed_at else None,
+        )
+
+    @staticmethod
+    def _validate_ids(task_ids: Sequence[str]) -> tuple[str, ...]:
+        if isinstance(task_ids, (str, bytes)):
+            raise ValueError("任务列表格式不正确")
+        ids = tuple(task_ids)
+        if any(not isinstance(task_id, str) or not task_id.strip() for task_id in ids):
+            raise ValueError("任务标识不能为空")
+        if len(ids) != len(set(ids)):
+            raise ValueError("任务标识不能重复")
+        return ids
+
+    @staticmethod
+    def _require_existing(conn: sqlite3.Connection, ids: Sequence[str]) -> None:
+        placeholders = ", ".join("?" for _ in ids)
+        found = {
+            row["id"] for row in conn.execute(
+                f"SELECT id FROM task_queue WHERE id IN ({placeholders})", ids,
             )
-            conn.commit()
+        }
+        if found != set(ids):
+            raise ValueError("任务不存在，请刷新后重试")
+
+    def upsert_task(self, task: DownloadTask) -> None:
+        self.upsert_tasks([task])
+
+    def upsert_tasks(self, tasks: Sequence[DownloadTask]) -> None:
+        tasks = tuple(tasks)
+        self._validate_ids([task.id for task in tasks])
+        if not tasks:
+            return
+        rows = [self._serialize_task(task) for task in tasks]
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.executemany(_UPSERT_SQL, rows)
 
     def update_progress(
         self, task_id: str, progress: float, downloaded_bytes: int, total_bytes: int
     ) -> None:
+        self.update_progress_many([(task_id, progress, downloaded_bytes, total_bytes)])
+
+    def update_progress_many(
+        self, rows: Sequence[tuple[str, float, int, int]],
+    ) -> None:
+        rows = tuple(rows)
+        ids = self._validate_ids([row[0] for row in rows])
+        if not rows:
+            return
+        updated_at = datetime.now().isoformat()
         with self._get_connection() as conn:
-            conn.execute(
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_existing(conn, ids)
+            conn.executemany(
                 """
                 UPDATE task_queue
                 SET progress = ?, downloaded_bytes = ?, total_bytes = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'cancelled')
                 """,
-                (progress, downloaded_bytes, total_bytes, datetime.now().isoformat(), task_id),
+                [(progress, downloaded, total, updated_at, task_id)
+                 for task_id, progress, downloaded, total in rows],
             )
-            conn.commit()
 
     def remove_task(self, task_id: str) -> None:
+        self.remove_tasks([task_id])
+
+    def remove_tasks(self, task_ids: Sequence[str]) -> None:
+        ids = self._validate_ids(task_ids)
+        if not ids:
+            return
         with self._get_connection() as conn:
-            conn.execute("DELETE FROM task_queue WHERE id = ?", (task_id,))
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_existing(conn, ids)
+            conn.executemany("DELETE FROM task_queue WHERE id = ?", [(task_id,) for task_id in ids])
+
+    def rewrite_queue_order(self, ordered_ids: Sequence[str]) -> None:
+        ids = self._validate_ids(ordered_ids)
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            schedulable_ids = {
+                row["id"] for row in conn.execute(
+                    "SELECT id FROM task_queue WHERE status IN ('pending', 'downloading', 'paused')"
+                )
+            }
+            if set(ids) != schedulable_ids:
+                raise ValueError("队列已变化，请刷新后重试")
+            updated_at = datetime.now().isoformat()
+            conn.executemany(
+                "UPDATE task_queue SET queue_order=?, updated_at=? WHERE id=?",
+                [(order, updated_at, task_id) for order, task_id in enumerate(ids)],
+            )
 
     def load_tasks(self) -> List[DownloadTask]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM task_queue ORDER BY queue_order ASC, created_at ASC"
+                "SELECT * FROM task_queue ORDER BY priority DESC, queue_order ASC, created_at ASC, id ASC"
             ).fetchall()
         tasks: List[DownloadTask] = []
         for row in rows:
@@ -227,6 +310,7 @@ class QueueStore:
             platform = Platform(info.get("platform", "unknown"))
         except ValueError:
             platform = Platform.UNKNOWN
+        status = TaskStatus(row["status"])
         return DownloadTask(
             id=row["id"],
             video_info=VideoInfo(
@@ -262,7 +346,8 @@ class QueueStore:
                 download_sections=str(opts.get("download_sections", "")),
                 sponsorblock_remove=str(opts.get("sponsorblock_remove", "")),
             ),
-            status=TaskStatus(row["status"]),
+            status=status,
+            run_intent=parse_stored_run_intent(status, row["run_intent"]),
             progress=row["progress"],
             downloaded_bytes=row["downloaded_bytes"],
             total_bytes=row["total_bytes"],
@@ -282,4 +367,6 @@ class QueueStore:
                 int(row["playlist_index"]) if "playlist_index" in row.keys() else 0
             ),
             created_at=datetime.fromisoformat(row["created_at"]),
+            started_at=_optional_datetime(row["started_at"]),
+            completed_at=_optional_datetime(row["completed_at"]),
         )

@@ -1,0 +1,17 @@
+{
+  "tag": "v0.2.1",
+  "commit": "0dbaeb7fb0394887be51f6dea773aaa79ae38546",
+  "source_archive_sha256": "051c373f4a68940161b448e277e7c2e6fb1920d7c095ff4146ab954bcab63384",
+  "source_hash_bytes": "SHA-256 of Windows CRLF files extracted from the source archive, not canonical LF Git blobs.",
+  "method": "Initialized SQLite and serialized a queue task with archived v0.2.1 data modules in an isolated Python process.",
+  "boundary": "Old-source format fixture, not execution of the v0.2.1 packaged application. No user data or network was used.",
+  "sanitization": "Download paths use @OUTPUT@. Test-only local URLs, IDs, titles and settings are synthetic; timestamps are fixed. No credentials.",
+  "source_sha256": {
+    "src/data/queue_store.py": "18f98c30d0b10fc2eb3c5715bb6d7f130ec2e33ce68174f02d437729e2ad93de",
+    "src/data/database.py": "cf8fd8792637438d7dbff5e293537a9b4d63b0279ecb215dcab9aaa4afc5d17e",
+    "src/data/json_config.py": "0fbc6fe4547948979496472643240d007dc9bd4606bcc655c538e758bdbfa040",
+    "src/data/telegram_delivery_store.py": "0e25f2a585a115ad5f20aaace1b259f3183fb4051c0487c0237f917f438af15a",
+    "src/data/models.py": "0a13945ddf371060ffa6e388cb6f8ac767f39a96c4a8ee79e619df8bb28ab280",
+    "src/core/download_task.py": "9944a6527fb9fb1762ed570d2268807fa4828a4319420a1600deccd07373ba73"
+  }
+}

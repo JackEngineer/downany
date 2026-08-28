@@ -33,6 +33,31 @@ beforeEach(() => {
 });
 
 describe("TaskList media density", () => {
+  it("puts a high-priority task ahead of an earlier normal task", () => {
+    useAppStore.setState({ tasks: [
+      taskFixture({ id: "normal", queue_order: 0 }),
+      taskFixture({ id: "high", queue_order: 8, priority: 1 }),
+    ] });
+    const { container } = render(<TaskList />);
+    expect(Array.from(container.querySelectorAll(".download-list > li")).map((element) => element.id))
+      .toEqual(["task-high", "task-normal"]);
+  });
+
+  it("shows reorder controls only on active top-level units, not on group children or results", () => {
+    useAppStore.setState({ tasks: [
+      taskFixture({ id: "a1", group_id: "g", group_title: "合集", playlist_index: 1 }),
+      taskFixture({ id: "a2", group_id: "g", group_title: "合集", playlist_index: 2 }),
+      taskFixture({ id: "solo", title: "独立任务", queue_order: 2 }),
+      taskFixture({ id: "done", title: "已完成任务", status: "completed", queue_order: 3 }),
+    ] });
+    const { container } = render(<TaskList />);
+    expect(screen.getByRole("group", { name: "合集的队列顺序" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "独立任务的队列顺序" })).toBeInTheDocument();
+    expect(container.querySelectorAll(".queue-order-controls")).toHaveLength(2);
+    expect(container.querySelector(".playlist-group-list .queue-order-controls")).toBeNull();
+    expect(container.querySelector("#task-done .queue-order-controls")).toBeNull();
+  });
+
   it("renders the empty state when there are no tasks", () => {
     render(<TaskList />);
 
@@ -73,6 +98,7 @@ describe("TaskList media density", () => {
     const opened: string[] = [];
     window.api.openPath = async (path) => {
       opened.push(path);
+      return "";
     };
     useAppStore.getState().hydrateSnapshot({
       settings,

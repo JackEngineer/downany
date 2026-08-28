@@ -1,3 +1,5 @@
+import { t, useLocale } from "../i18n";
+
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -11,10 +13,11 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "确认",
+  confirmLabel,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const locale = useLocale();
   if (!open) return null;
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
@@ -29,10 +32,10 @@ export function ConfirmDialog({
         <p>{message}</p>
         <div className="dialog-actions">
           <button type="button" onClick={onCancel}>
-            取消
+            {t("action.cancel", locale)}
           </button>
           <button type="button" className="danger" onClick={onConfirm}>
-            {confirmLabel}
+            {confirmLabel || t("action.confirm", locale)}
           </button>
         </div>
       </div>

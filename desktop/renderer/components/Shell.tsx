@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
+import { t } from "../i18n";
 import { submitAddText } from "../lib/addFlow";
+import { refreshQueueAfterChange } from "../lib/refreshQueue";
 import { useDocumentTheme } from "../lib/documentTheme";
 import { useAppStore } from "../store/appStore";
 import { AddConfirmDialog } from "./AddConfirmDialog";
@@ -105,19 +107,17 @@ export function Shell() {
       if (payload.error) {
         pushToast({
           kind: "error",
-          title: "外部入队失败",
-          detail: payload.error,
+          title: t("add.browserFailed"),
+          detail: t("add.browserRetry"),
         });
         return;
       }
       const n = payload.count;
       pushToast({
         kind: "success",
-        title: n === 1 ? "已从浏览器加入 1 个任务" : `已从浏览器加入 ${n} 个任务`,
+        title: t("add.browserSuccess", undefined, { count: n }),
       });
-      void window.api.request("app.getSnapshot").then((snap) => {
-        useAppStore.getState().hydrateSnapshot(snap as never);
-      });
+      void refreshQueueAfterChange();
     });
   }, []);
 

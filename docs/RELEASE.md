@@ -1,5 +1,38 @@
 # 发布与签名
 
+## v0.3.0 Windows 本地候选门槛
+
+本工作树的桌面与 Sidecar 为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。这是 Windows x64 本地候选，不表示已安装、提交、打标签或公开发布。本轮按用户范围不执行 Mac 构建或人工验收；下文双平台正式发布流程保留为独立流程。
+
+自动门槛依次为完整测试、Main/Renderer 类型检查、真实 Electron 最小窗口检查、同源 Sidecar/NSIS、包内媒体工具、旧数据恢复和隔离 Electron 入队。打包前冻结源文件/资源清单，完成后再次核对。结果见 [候选记录](acceptance/v0.3.0-stable-baseline.md)。
+
+```powershell
+# 仓库根；数据与媒体工具变量必须指向隔离目录和已核对的工具。
+$env:DOWNANY_REQUIRE_MEDIA_INTEGRATION = '1'
+python -m pytest tests/core tests/data tests/sidecar tests/cli -q
+node browser-extension/shared.test.js
+node browser-extension/sniff-core.test.js
+node browser-extension/bridge-timeout.test.js
+node --test scripts/package_smoke_helpers.test.mjs scripts/test_packaged_media_tools.test.mjs
+
+# desktop/；宿主 Node 25 的 Vitest 兼容参数不能传给 Electron。
+$env:NODE_OPTIONS = '--no-experimental-webstorage'
+npm.cmd test
+npm.cmd run build
+npm.cmd run test:electron-layout:unit
+Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+npm.cmd run test:electron-layout
+# 布局检查生成开发展示页；打包前必须再运行生产构建。
+npm.cmd run build
+```
+
+包级升级证据分开记录：
+
+- `python scripts/test_packaged_queue_recovery.py --executable <本次包内Sidecar绝对路径> --previous-executable <v0.2.5包内Sidecar绝对路径> --expected-version 0.3.0 --previous-version 0.2.5 --rounds 5`：旧实际进程生成数据，新包接续真实本地 HTTP 音视频下载。
+- `python -m scripts.test_packaged_legacy_upgrade --executable <本次包内Sidecar绝对路径> --expected-version 0.3.0`：新包读取 v0.2.1 旧源码生成的格式 fixture，检查配置、六态任务、历史与 Telegram 结果；成品是哈希保留样本，不是媒体播放样本。
+
+所有包测试使用新建隔离目录并保留证据。Electron 测试跳过协议注册，输出必须位于测试数据根内，不得使用日常数据目录。布局检查使用真实页面和隔离接口数据，验证最终样式与可操作几何，不声称验证动画、外部网站或真实账号。
+
 ## 未签名 DMG（当前默认）
 
 本阶段不强制 Apple Developer 证书。本地构建：
@@ -60,11 +93,11 @@ FFmpeg 与 FFprobe；两者都会检查架构、部署基线和动态依赖，�
 
 ### GitHub Releases 发布步骤
 
-#### v0.2.1 云端模式发行版（当前通道）
+#### v0.2.1 云端模式发行版（历史发布示例）
 
 当前没有 Telegram 应用凭据时，`v0.2.1` 仍可发布云端模式安装包。带 `v0.2.1` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、同源 FFmpeg/FFprobe 工具对和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
 
-1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（当前 `0.2.1`，tag 为 `v0.2.1`）。
+1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（本历史示例为 `0.2.1`，tag 为 `v0.2.1`；不要对当前候选照抄执行）。
 2. 推送含发布说明的提交到 `main`。  
 3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
    ```bash

@@ -22,14 +22,14 @@ afterEach(cleanup);
 
 describe("useDocumentTheme", () => {
   it("keeps the CSS dark bootstrap untouched until settings hydrate", () => {
-    window.api = {
+    window.api = ({
       setThemeSource,
       getNativeTheme: vi.fn().mockResolvedValue("light"),
       onNativeTheme: (listener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-    } as typeof window.api;
+    } satisfies Partial<typeof window.api>) as unknown as typeof window.api;
 
     render(<Harness mode={undefined} />);
 
@@ -42,14 +42,14 @@ describe("useDocumentTheme", () => {
     const nativeTheme = new Promise<"light" | "dark">((resolve) => {
       resolveNative = resolve;
     });
-    window.api = {
+    window.api = ({
       setThemeSource,
       getNativeTheme: vi.fn(() => nativeTheme),
       onNativeTheme: (listener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-    } as typeof window.api;
+    } satisfies Partial<typeof window.api>) as unknown as typeof window.api;
 
     const { rerender } = render(<Harness mode="system" />);
     rerender(<Harness mode="dark" />);
@@ -62,14 +62,14 @@ describe("useDocumentTheme", () => {
   });
 
   it("tracks native changes only while system theme is active", async () => {
-    window.api = {
+    window.api = ({
       setThemeSource,
       getNativeTheme: vi.fn().mockResolvedValue("light"),
       onNativeTheme: (listener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-    } as typeof window.api;
+    } satisfies Partial<typeof window.api>) as unknown as typeof window.api;
 
     const { rerender } = render(<Harness mode="system" />);
     await Promise.resolve();

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getLocale, t, type Locale } from "../../i18n";
+import { t, useLocale } from "../../i18n";
 import { request, openExtractWindow } from "../../lib/api";
 import { submitAddText } from "../../lib/addFlow";
-import type { AppSnapshot } from "../../lib/types";
+import { taskActionToast } from "../../lib/taskActionReport";
+import { refreshQueueAfterChange } from "../../lib/refreshQueue";
+import type { TaskActionReport, ToastItem } from "../../lib/types";
 import { useAppStore } from "../../store/appStore";
 import { Button, IconButton } from "../ui/Button";
 import { Icon } from "../ui/Icon";
@@ -20,19 +22,15 @@ export function ActionBar() {
   const pushToast = useAppStore((state) => state.pushToast);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const batchPending = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [locale, setLocaleState] = useState<Locale>(() => getLocale());
+  const locale = useLocale();
   const addRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
   const disabled = connection !== "connected";
-
-  useEffect(() => {
-    const updateLocale = () => setLocaleState(getLocale());
-    window.addEventListener("downany:locale", updateLocale);
-    return () => window.removeEventListener("downany:locale", updateLocale);
-  }, []);
 
   useEffect(() => {
     if (addFocusSignal > 0) addRef.current?.focus();
@@ -95,42 +93,61 @@ export function ActionBar() {
     }
   };
 
-  const batch = async (method: string, successTitle: string) => {
+  const batch = async (method: "download.pauseAll" | "download.resumeAll" | "download.clearFinished") => {
+    if (batchPending.current || disabled) return;
+    batchPending.current = true;
+    setBatchBusy(true);
     if (menuRef.current) menuRef.current.open = false;
     try {
-      await request(method, {});
-      const snapshot = await request<AppSnapshot>("app.getSnapshot");
-      useAppStore.getState().hydrateSnapshot(snapshot);
-      pushToast({ kind: "success", title: successTitle });
-    } catch (error) {
-      pushToast({ kind: "error", title: "操作失败", detail: String(error) });
+      let toast: Pick<ToastItem, "kind" | "title">;
+      switch (method) {
+        case "download.pauseAll":
+        case "download.resumeAll":
+          toast = taskActionToast(await request<TaskActionReport>(method, {}));
+          break;
+        case "download.clearFinished":
+          await request(method, {});
+          toast = { kind: "success", title: t("batch.cleared") };
+          break;
+        default: {
+          const exhaustive: never = method;
+          throw new Error(`Unknown batch action: ${exhaustive}`);
+        }
+      }
+      await refreshQueueAfterChange();
+      pushToast(toast);
+    } catch {
+      pushToast({ kind: "error", title: t("error.action"), detail: t("error.retryLater") });
+    } finally {
+      batchPending.current = false;
+      setBatchBusy(false);
     }
   };
 
   const openExtract = async () => {
     const candidate = text.trim();
     if (!candidate) {
-      pushToast({ kind: "info", title: "请先输入要识别的页面链接" });
+      pushToast({ kind: "info", title: t("add.pageRequired") });
       addRef.current?.focus();
       return;
     }
     try {
       await openExtractWindow(candidate);
-    } catch (error) {
+    } catch {
       pushToast({
         kind: "error",
-        title: "无法打开网页识别",
-        detail: String(error),
+        title: t("add.recognizeFailed"),
+        detail: t("error.retryLater"),
       });
     }
   };
 
   return (
-    <section className="action-bar" aria-label="下载操作">
+    <section className="action-bar" aria-label={t("add.actions", locale)}>
       <TextField
         ref={addRef}
         leadingIcon="link"
-        aria-label="添加下载链接"
+        aria-label={t("add.label", locale)}
         placeholder={t("add.placeholder", locale)}
         value={text}
         disabled={disabled || busy}
@@ -176,26 +193,26 @@ export function ActionBar() {
           <button
             type="button"
             role="menuitem"
-            disabled={disabled}
-            onClick={() => void batch("download.pauseAll", "已全部暂停")}
+            disabled={disabled || batchBusy}
+            onClick={() => void batch("download.pauseAll")}
           >
-            全部暂停
+            {t("batch.pauseAll", locale)}
           </button>
           <button
             type="button"
             role="menuitem"
-            disabled={disabled}
-            onClick={() => void batch("download.resumeAll", "已全部恢复")}
+            disabled={disabled || batchBusy}
+            onClick={() => void batch("download.resumeAll")}
           >
-            全部恢复
+            {t("batch.resumeAll", locale)}
           </button>
           <button
             type="button"
             role="menuitem"
-            disabled={disabled}
-            onClick={() => void batch("download.clearFinished", "已清除完成项")}
+            disabled={disabled || batchBusy}
+            onClick={() => void batch("download.clearFinished")}
           >
-            清除已完成
+            {t("batch.clearFinished", locale)}
           </button>
         </div>
       </details>

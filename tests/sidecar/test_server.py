@@ -1,10 +1,18 @@
 """SidecarServer 握手与 ping 集成测试。"""
+import io
 import json
 import queue
 import threading
 import time
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
+import pytest
+
+from src.core.download_manager import DownloadManager
+from src.core.download_task import DownloadTask, TaskStatus, VideoInfo
+from src.data.json_config import JsonConfig
+from src.sidecar.handlers import HandlerContext
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import APP_NAME, APP_VERSION, PROTOCOL_VERSION
 from src.sidecar.server import SidecarServer
@@ -198,3 +206,62 @@ def test_protocol_messages_are_serialized_across_event_threads():
 
     assert stream.max_active_writes == 1
     assert {json.loads(chunk)["id"] for chunk in stream.chunks} == {0, 1}
+
+
+def _event_server(tmp_path):
+    paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs").ensure()
+    config = JsonConfig(str(paths.config_path))
+    manager = DownloadManager(config=config, db=MagicMock())
+    task = DownloadTask(id="task", status=TaskStatus.DOWNLOADING,
+                        video_info=VideoInfo(url="https://example.com/v", title="video"))
+    manager.add_task(task)
+    ctx = HandlerContext(config=config, db=MagicMock(), manager=manager,
+                         emit_event=lambda *_: None, paths=paths)
+    server = SidecarServer(ctx, paths)
+    server._stdout = io.StringIO()
+    return server, task
+
+
+@pytest.mark.parametrize("event,status", [
+    ("task_paused", TaskStatus.PAUSED), ("task_cancelled", TaskStatus.CANCELLED),
+    ("task_completed", TaskStatus.COMPLETED), ("task_failed", TaskStatus.FAILED),
+    ("task_updated", TaskStatus.PENDING),
+])
+def test_leaving_progress_clears_throttle_and_late_progress_is_ignored(tmp_path, event, status):
+    server, task = _event_server(tmp_path)
+    server._last_progress_emit[task.id] = 0.0
+    task.status = status
+    server._on_manager_event(event, {"task_id": task.id})
+    assert task.id not in server._last_progress_emit
+    before = server._stdout.getvalue()
+    server._on_manager_event("task_progress", {"task_id": task.id, "progress": {"progress": 99}})
+    assert task.id not in server._last_progress_emit
+    assert server._stdout.getvalue() == before
+
+
+def test_removed_event_clears_throttle_and_missing_task_progress_is_ignored(tmp_path):
+    server, task = _event_server(tmp_path)
+    server._last_progress_emit[task.id] = 0.0
+    server.ctx.manager.remove_task(task.id, force=True)
+    server._write_event("task.removed", {"taskId": task.id})
+    assert task.id not in server._last_progress_emit
+    before = server._stdout.getvalue()
+    server._on_manager_event("task_progress", {"task_id": task.id, "progress": {"progress": 99}})
+    assert server._stdout.getvalue() == before
+
+
+def test_progress_events_use_a_locked_single_task_snapshot(tmp_path, monkeypatch):
+    server, task = _event_server(tmp_path)
+    original = server.ctx.manager.get_task_snapshot
+    calls = []
+
+    def snapshot(task_id):
+        calls.append(task_id)
+        return original(task_id)
+
+    monkeypatch.setattr(server.ctx.manager, "get_task_snapshot", snapshot)
+    server._on_manager_event("task_progress", {"task_id": task.id, "progress": {"progress": 10}})
+    message = json.loads(server._stdout.getvalue())
+    assert calls == [task.id]
+    assert message["payload"]["task"]["status"] == "downloading"
+    assert message["payload"]["task"]["id"] == task.id

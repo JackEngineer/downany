@@ -172,21 +172,21 @@ describe("artwork presentation", () => {
 
   it("times out a sampler that never loads and releases the image request", async () => {
     const image = controlledImage();
-    let timeoutCallback: (() => void) | null = null;
+    const timeout = { callback: null as (() => void) | null };
     const clearTimeout = vi.fn();
     const sampler = createArtworkToneSampler({
       timeoutMs: 25,
       createImage: () => image as unknown as HTMLImageElement,
       setTimeout: (callback) => {
-        timeoutCallback = callback;
+        timeout.callback = callback;
         return 7;
       },
       clearTimeout,
     });
 
     const sampled = sampler.sample("https://example.com/hangs.jpg");
-    expect(timeoutCallback).not.toBeNull();
-    timeoutCallback?.();
+    expect(timeout.callback).not.toBeNull();
+    timeout.callback?.();
 
     await expect(sampled).resolves.toBe("light");
     expect(clearTimeout).toHaveBeenCalledWith(7);

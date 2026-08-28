@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { zhCN, type MessageKey } from "./locales/zh-CN";
+
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const settingsSource = readFileSync(
   path.resolve(directory, "SettingsApp.tsx"),
@@ -16,24 +18,31 @@ const typesSource = readFileSync(
 
 describe("settings output copy contract", () => {
   it("shows one truthful four-mode subtitle control", () => {
-    expect(settingsSource).toContain("<span>字幕</span>");
-    expect(settingsSource).toContain("不下载字幕");
-    expect(settingsSource).toContain("保存独立字幕");
-    expect(settingsSource).toContain("写入视频</option>");
-    expect(settingsSource).toContain("写入视频并保留独立字幕");
-    expect(settingsSource).toContain(
-      "如 zh-Hans,en（留空则自动选择一个可用字幕）",
-    );
+    const copy: Partial<Record<MessageKey, string>> = {
+      "settings.subtitles": "字幕",
+      "settings.subtitlesNone": "不下载字幕",
+      "settings.subtitlesExternal": "保存独立字幕",
+      "settings.subtitlesEmbedded": "写入视频",
+      "settings.subtitlesBoth": "写入视频并保留独立字幕",
+      "settings.subtitleHint": "如 zh-Hans,en（留空则自动选择一个可用字幕）",
+    };
+    for (const [key, value] of Object.entries(copy)) {
+      expect(settingsSource).toContain(`t("${key}", locale)`);
+      expect(zhCN[key as MessageKey]).toBe(value);
+    }
     expect(settingsSource).not.toContain("<span>下载字幕</span>");
     expect(settingsSource).not.toContain("<span>内嵌字幕</span>");
   });
 
   it("explains the MP3 fallback and media information boundary", () => {
-    expect(settingsSource).toContain(
+    expect(settingsSource).toContain('t("settings.mp3Subtitles", locale)');
+    expect(zhCN["settings.mp3Subtitles"]).toBe(
       "MP3 不支持写入字幕，将保存为独立字幕文件",
     );
-    expect(settingsSource).toContain("<span>写入媒体信息</span>");
-    expect(settingsSource).toContain("来源提供时写入标题、封面和章节");
+    expect(settingsSource).toContain('t("settings.metadata", locale)');
+    expect(settingsSource).toContain('t("settings.metadataHint", locale)');
+    expect(zhCN["settings.metadata"]).toBe("写入媒体信息");
+    expect(zhCN["settings.metadataHint"]).toBe("来源提供时写入标题、封面和章节");
   });
 
   it("hides unsupported controls without deleting persisted legacy fields", () => {

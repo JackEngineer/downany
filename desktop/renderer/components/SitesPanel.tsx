@@ -1,4 +1,4 @@
-import { getLocale, t } from "../i18n";
+import { t, useLocale } from "../i18n";
 
 const SUPPORTED_SITES = [
   { name: "YouTube", url: "https://www.youtube.com" },
@@ -11,7 +11,7 @@ const SUPPORTED_SITES = [
 ] as const;
 
 export function SitesPanel() {
-  const locale = getLocale();
+  const locale = useLocale();
   return (
     <div className="settings-grid sites-panel">
       <h3>{t("sites.title", locale)}</h3>

@@ -1,5 +1,33 @@
 """协议常量冻结测试。"""
-from src.sidecar.protocol import PROTOCOL_VERSION, ErrorCode, Method, EventName
+import json
+from pathlib import Path
+
+from src.sidecar.protocol import (
+    APP_VERSION,
+    PROTOCOL_VERSION,
+    ErrorCode,
+    EventName,
+    Method,
+)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_candidate_version_matches_desktop_package():
+    package = json.loads(
+        (PROJECT_ROOT / "desktop" / "package.json").read_text(encoding="utf-8")
+    )
+    lockfile = json.loads(
+        (PROJECT_ROOT / "desktop" / "package-lock.json").read_text(encoding="utf-8")
+    )
+
+    assert {
+        "desktop": package["version"],
+        "lockfile": lockfile["version"],
+        "lockfile_root": lockfile["packages"][""]["version"],
+        "sidecar": APP_VERSION,
+    } == dict.fromkeys(("desktop", "lockfile", "lockfile_root", "sidecar"), "0.3.0")
 
 
 def test_protocol_version_is_one():
@@ -24,6 +52,7 @@ def test_required_methods_exist():
         "download.retry",
         "download.remove",
         "download.removeGroup",
+        "download.applyGroupAction",
         "download.clearFinished",
         "download.updateTask",
         "download.reorder",

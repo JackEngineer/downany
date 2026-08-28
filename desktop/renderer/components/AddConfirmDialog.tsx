@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { t, useLocale } from "../i18n";
 import { onEvent, openExtractWindow, request } from "../lib/api";
 import { createTasksAndRefresh } from "../lib/addFlow";
 import { formatOptionLabel, formatSelectorValue } from "../lib/formats";
@@ -21,6 +22,7 @@ interface ParseRow {
   playlistTitle?: string;
   playlistIndex?: number;
   unavailable?: boolean;
+  unavailableId?: string;
 }
 
 function entryLooksUnavailable(entry: {
@@ -80,7 +82,7 @@ function buildBlocks(rows: ParseRow[]): RenderBlock[] {
       blocks.push({
         kind: "playlist",
         key,
-        title: group[0]?.row.playlistTitle || "播放列表",
+        title: group[0]?.row.playlistTitle || t("group.title"),
         rows: group,
       });
       continue;
@@ -100,6 +102,7 @@ function newGroupId(): string {
 
 /** 「自动开始下载」关闭时的添加确认弹层：先解析，再确认入队。 */
 export function AddConfirmDialog() {
+  const locale = useLocale();
   const pendingAddUrls = useAppStore((s) => s.pendingAddUrls);
   const setPendingAddUrls = useAppStore((s) => s.setPendingAddUrls);
   const pushToast = useAppStore((s) => s.pushToast);
@@ -110,7 +113,7 @@ export function AddConfirmDialog() {
   const startedRef = useRef(false);
 
   const open = pendingAddUrls !== null;
-  const blocks = useMemo(() => buildBlocks(rows), [rows]);
+  const blocks = useMemo(() => buildBlocks(rows), [rows, locale]);
 
   useEffect(() => {
     if (!pendingAddUrls || startedRef.current) return;
@@ -123,8 +126,8 @@ export function AddConfirmDialog() {
       allow_playlist: true,
     })
       .then((res) => setParseId(res.parseId))
-      .catch((err) => {
-        pushToast({ kind: "error", title: "解析启动失败", detail: String(err) });
+      .catch(() => {
+        pushToast({ kind: "error", title: t("parse.startFailed"), detail: t("error.retryLater") });
         setPendingAddUrls(null);
       });
   }, [pendingAddUrls, pushToast, setPendingAddUrls]);
@@ -156,11 +159,11 @@ export function AddConfirmDialog() {
         if (!row) return prev;
         if (data.cancelled) {
           row.status = "cancelled";
-          row.error = "已取消";
+          row.error = undefined;
         } else if (data.ok && data.entries && data.entries.length > 1) {
           const playlistKey = `pl-${data.index}-${data.playlist?.id || data.url}`;
           const playlistTitle =
-            data.playlist?.title || data.info?.title || "播放列表";
+            data.playlist?.title || data.info?.title || "";
           const expanded: ParseRow[] = data.entries.map((entry, entryIdx) => {
             const rawIndex = entry.index;
             const playlistIndex =
@@ -172,9 +175,8 @@ export function AddConfirmDialog() {
             return {
               url: entry.url,
               status: "ok" as const,
-              title: unavailable
-                ? `已下架（${idTag}）`
-                : entry.title || entry.id || entry.url,
+              title: entry.title || entry.id || entry.url,
+              unavailableId: idTag,
               platform: data.info?.platform,
               thumbnailUrl: entry.thumbnail_url || undefined,
               formats: [],
@@ -183,7 +185,7 @@ export function AddConfirmDialog() {
               playlistTitle,
               playlistIndex,
               unavailable,
-              error: unavailable ? "上传者已删除或不可用，默认跳过" : undefined,
+              error: undefined,
             };
           });
           next.splice(rowIndex, 1, ...expanded);
@@ -197,7 +199,7 @@ export function AddConfirmDialog() {
           row.selected = true;
         } else {
           row.status = "error";
-          row.error = data.error || "解析失败";
+          row.error = undefined;
           row.selected = false;
         }
         return next;
@@ -208,6 +210,7 @@ export function AddConfirmDialog() {
   if (!open) return null;
 
   const parsing = rows.some((r) => r.status === "pending");
+  const hasSelection = rows.some((r) => r.selected && canSelectRow(r));
 
   const close = async () => {
     if (parseId) {
@@ -230,8 +233,8 @@ export function AddConfirmDialog() {
     if (!selected) {
       pushToast({
         kind: "warning",
-        title: "范围无效",
-        detail: "请输入如 5-20 或 1,3,8-10",
+        title: t("parse.rangeInvalid"),
+        detail: t("parse.rangeHint"),
       });
       return;
     }
@@ -244,7 +247,7 @@ export function AddConfirmDialog() {
   const confirm = async () => {
     const selected = rows.filter((r) => r.selected && r.status === "ok");
     if (selected.length === 0) {
-      pushToast({ kind: "warning", title: "请选择至少一个解析成功的条目" });
+      pushToast({ kind: "warning", title: t("parse.selectRequired") });
       return;
     }
     setSubmitting(true);
@@ -277,8 +280,8 @@ export function AddConfirmDialog() {
         }),
       );
       setPendingAddUrls(null);
-    } catch (err) {
-      pushToast({ kind: "error", title: "添加失败", detail: String(err) });
+    } catch {
+      pushToast({ kind: "error", title: t("add.failed"), detail: t("add.retry") });
     } finally {
       setSubmitting(false);
     }
@@ -306,7 +309,7 @@ export function AddConfirmDialog() {
           type="checkbox"
           checked={row.selected}
           disabled={!canSelectRow(row)}
-          aria-label="选择此条目"
+          aria-label={t("parse.selectItem", locale)}
           onChange={(e) =>
             setRows((prev) =>
               prev.map((r) =>
@@ -347,15 +350,15 @@ export function AddConfirmDialog() {
           disabled={!canSelectRow(row)}
           onClick={toggleSelected}
         >
-          <strong>{row.title || row.url}</strong>
+          <strong>{row.unavailable ? t("parse.unavailableTitle", locale, { id: row.unavailableId || row.url }) : row.title || row.url}</strong>
           <span className="muted">
-            {row.status === "pending" && "解析中…"}
+            {row.status === "pending" && t("parse.busy", locale)}
             {row.status === "ok" && !row.unavailable && row.platform}
             {row.status === "ok" && row.unavailable && (
-              <span className="danger-text">{row.error || "不可用"}</span>
+              <span className="danger-text">{t("parse.unavailableCopy", locale)}</span>
             )}
-            {row.status === "error" && row.error}
-            {row.status === "cancelled" && "已取消"}
+            {row.status === "error" && t("parse.failed", locale)}
+            {row.status === "cancelled" && t("parse.cancelled", locale)}
           </span>
         </button>
         {row.status === "error" && (
@@ -364,7 +367,7 @@ export function AddConfirmDialog() {
             className="link-btn"
             onClick={() => void openExtractWindow(row.url)}
           >
-            用浏览器抓取
+            {t("action.recognize", locale)}
           </button>
         )}
         {row.status === "ok" && !row.unavailable && (
@@ -372,7 +375,7 @@ export function AddConfirmDialog() {
             {row.formats && row.formats.length > 0 && !row.audioOnly && (
               <select
                 value={row.formatValue || ""}
-                aria-label="画质"
+                aria-label={t("parse.quality", locale)}
                 onChange={(e) =>
                   setRows((prev) =>
                     prev.map((r) =>
@@ -383,7 +386,7 @@ export function AddConfirmDialog() {
                   )
                 }
               >
-                <option value="">最佳画质</option>
+                <option value="">{t("parse.bestQuality", locale)}</option>
                 {row.formats.map((f) => (
                   <option key={f.format_id} value={formatSelectorValue(f)}>
                     {formatOptionLabel(f)}
@@ -405,7 +408,7 @@ export function AddConfirmDialog() {
                   )
                 }
               />
-              仅音频
+              {t("parse.audioOnly", locale)}
             </label>
           </div>
         )}
@@ -419,10 +422,10 @@ export function AddConfirmDialog() {
         className="dialog dialog-wide"
         role="dialog"
         aria-modal="true"
-        aria-label="确认下载"
+        aria-label={t("parse.confirm", locale)}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2>确认下载</h2>
+        <h2>{t("parse.confirm", locale)}</h2>
         <ul className="confirm-list">
           {blocks.map((block) => {
             if (block.kind === "single") {
@@ -437,8 +440,8 @@ export function AddConfirmDialog() {
                   <div className="confirm-playlist-title">
                     <strong>{block.title}</strong>
                     <span className="muted">
-                      已选 {selectedCount}/{selectable.length}
-                      {skipped > 0 ? ` · 跳过不可用 ${skipped}` : ""}
+                      {t("parse.selected", locale, { selected: selectedCount, total: selectable.length })}
+                      {skipped > 0 ? t("parse.skipped", locale, { count: skipped }) : ""}
                     </span>
                   </div>
                   <div className="confirm-playlist-toolbar">
@@ -452,7 +455,7 @@ export function AddConfirmDialog() {
                           }))
                         }
                       >
-                        全选
+                        {t("parse.selectAll", locale)}
                       </button>
                       <button
                         type="button"
@@ -463,7 +466,7 @@ export function AddConfirmDialog() {
                           }))
                         }
                       >
-                        全不选
+                        {t("parse.selectNone", locale)}
                       </button>
                       <button
                         type="button"
@@ -474,14 +477,14 @@ export function AddConfirmDialog() {
                           }))
                         }
                       >
-                        反选
+                        {t("parse.invert", locale)}
                       </button>
                     </div>
                     <div className="confirm-range">
                       <input
                         className="confirm-range-input"
                         placeholder="5-20"
-                        aria-label="选择范围"
+                        aria-label={t("parse.range", locale)}
                         value={rangeDrafts[block.key] || ""}
                         onChange={(e) =>
                           setRangeDrafts((prev) => ({
@@ -497,7 +500,7 @@ export function AddConfirmDialog() {
                         }}
                       />
                       <button type="button" onClick={() => applyRange(block.key)}>
-                        应用范围
+                        {t("parse.applyRange", locale)}
                       </button>
                     </div>
                   </div>
@@ -515,15 +518,15 @@ export function AddConfirmDialog() {
         </ul>
         <div className="dialog-actions">
           <button type="button" onClick={() => void close()}>
-            取消
+            {t("action.cancel", locale)}
           </button>
           <button
             type="button"
             className="primary"
-            disabled={parsing || submitting}
+            disabled={parsing || submitting || !hasSelection}
             onClick={() => void confirm()}
           >
-            {parsing ? "解析中…" : "开始下载"}
+            {t(parsing ? "parse.busy" : "parse.startDownload", locale)}
           </button>
         </div>
       </div>

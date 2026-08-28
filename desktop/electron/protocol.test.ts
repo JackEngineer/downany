@@ -14,6 +14,7 @@ describe("protocol constants", () => {
     expect(Methods).toContain("app.runMigration");
     expect(Methods).toContain("updater.updateYtDlp");
     expect(Methods).toContain("download.updateTask");
+    expect(Methods).toContain("download.applyGroupAction");
     expect(Methods).toContain("search.query");
     expect(new Set(Methods).size).toBe(Methods.length);
   });

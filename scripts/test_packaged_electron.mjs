@@ -9,7 +9,10 @@ import { spawn } from "node:child_process";
 import {
   assertBridgeUnused,
   assertSmokeTaskVisible,
+  buildPackagedSmokeEnvironment,
   enqueueSmokeTask,
+  prepareSmokeData,
+  stopChildProcessTree,
   waitForBridgeReady,
 } from "./package_smoke_helpers.mjs";
 
@@ -35,58 +38,6 @@ function optionalArgument(name) {
     .find((arg) => arg.startsWith(prefix))
     ?.slice(prefix.length);
   return value ? path.resolve(value) : null;
-}
-
-function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve(true);
-  }
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      child.off("exit", onExit);
-      resolve(false);
-    }, timeoutMs);
-    const onExit = () => {
-      clearTimeout(timer);
-      resolve(true);
-    };
-    child.once("exit", onExit);
-  });
-}
-
-async function stopProcessTree(child) {
-  const pid = child?.pid;
-  if (!pid || child.exitCode !== null || child.signalCode !== null) return;
-  if (process.platform === "win32") {
-    const killer = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    await new Promise((resolve) => killer.once("exit", resolve));
-    await waitForExit(child, 5_000);
-    return;
-  }
-
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    try {
-      child.kill("SIGTERM");
-    } catch {
-      return;
-    }
-  }
-  if (await waitForExit(child, 5_000)) return;
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      // Process already exited.
-    }
-  }
-  await waitForExit(child, 3_000);
 }
 
 function removeOwnedDataRoot(dataRoot) {
@@ -115,9 +66,8 @@ const dataRoot = suppliedDataRoot
   : fs.mkdtempSync(path.join(os.tmpdir(), "downany-packaged-electron-"));
 const ownsDataRoot = suppliedDataRoot === null;
 const electronUserDataDir = path.join(dataRoot, "electron-user-data");
-const downanyDataDir = path.join(dataRoot, "downany-data");
+const { dataDir: downanyDataDir } = prepareSmokeData(dataRoot);
 fs.mkdirSync(electronUserDataDir, { recursive: true });
-fs.mkdirSync(downanyDataDir, { recursive: true });
 
 let child = null;
 let stdout = "";
@@ -133,11 +83,7 @@ try {
     ],
     {
       cwd: path.dirname(executable),
-      env: {
-        ...process.env,
-        DOWNANY_DATA_DIR: downanyDataDir,
-        DOWNANY_UPDATE_DISABLED: "1",
-      },
+      env: buildPackagedSmokeEnvironment(process.env, downanyDataDir),
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       detached: process.platform !== "win32",
@@ -165,6 +111,6 @@ try {
       `(pid=${child.pid}, taskId=${taskId}, status=${task.status})`,
   );
 } finally {
-  if (child) await stopProcessTree(child);
+  if (child) await stopChildProcessTree(child);
   if (ownsDataRoot) removeOwnedDataRoot(dataRoot);
 }

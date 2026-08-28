@@ -34,7 +34,6 @@ import {
   type WindowThemeSource,
 } from "./windowChrome";
 import {
-  PROTOCOL_SCHEME,
   extractAddsFromArgv,
   isOpenDeepLink,
   parseDeepLinkAdd,
@@ -46,10 +45,12 @@ import {
 } from "./enqueueGate";
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
+import { registerProtocolClient } from "./protocolClient";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
 import { resourcesRoot } from "./paths";
 import { openSettingsWindow } from "./settingsWindow";
 import { TaskTracker } from "./taskTracker";
+import { TaskProgressRelay } from "./taskProgressRelay";
 import { TrayController } from "./tray";
 import { parseWeblocUrl } from "./webloc";
 import { resolveOpenablePath } from "./resolveOpenablePath";
@@ -152,6 +153,15 @@ let quitSequenceStarted = false;
 const pendingEnqueueItems: BridgeEnqueueItem[] = [];
 
 const taskTracker = new TaskTracker();
+const taskProgressRelay = new TaskProgressRelay(
+  (updates) => {
+    taskTracker.applyProgressBatch(updates);
+    broadcastAll("sidecar:event", { event: "task.progressBatch", payload: { updates } });
+    updateDockUi(false);
+  },
+  (callback, delayMs) => setTimeout(callback, delayMs),
+  (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+);
 const clipboardWatcher = new ClipboardWatcher((urls) => {
   enqueueFromExternal(urls.map((url) => ({ url })));
 });
@@ -183,18 +193,6 @@ function focusMainWindow(): void {
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.focus();
-}
-
-function registerProtocolClient(): void {
-  if (process.defaultApp) {
-    if (process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
-        path.resolve(process.argv[1]),
-      ]);
-    }
-  } else {
-    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
-  }
 }
 
 function dedupeItems(items: BridgeEnqueueItem[]): BridgeEnqueueItem[] {
@@ -457,7 +455,10 @@ app.on("open-file", (event, filePath) => {
   }
 });
 
-registerProtocolClient();
+registerProtocolClient(app, {
+  env: process.env, defaultApp: process.defaultApp,
+  execPath: process.execPath, argv: process.argv,
+});
 // 冷启动：部分平台把协议 URL 放在 argv
 handleArgv(process.argv);
 
@@ -606,6 +607,7 @@ async function refreshDockFromSnapshot(): Promise<void> {
     const snap = (await sidecar.request("app.getSnapshot", {})) as {
       tasks?: Array<{ id?: string; title?: string; status?: string; progress?: number }>;
     };
+    taskProgressRelay.clear();
     taskTracker.hydrate(snap.tasks || []);
     updateDockUi();
   } catch {
@@ -628,7 +630,7 @@ function syncClipboardWatcher(enabled: boolean): void {
 
 async function startSidecar(): Promise<void> {
   const repoRoot = resolveRepoRoot(__dirname);
-  sidecar = new SidecarProcess({ repoRoot });
+  sidecar = new SidecarProcess({ repoRoot, appVersion: app.getVersion() });
   sidecar.on("state", (state: ConnectionState) => {
     broadcastState(state);
     // 与真实连接态同步：重连成功后自动冲刷 pending；失联后拒收假成功
@@ -636,11 +638,21 @@ async function startSidecar(): Promise<void> {
       markSidecarReady(true);
     } else if (!isQuitting) {
       sidecarReady = false;
+      taskProgressRelay.clear();
     }
   });
   sidecar.on("event", (event: { event: string; payload: Record<string, unknown> }) => {
-    broadcastAll("sidecar:event", event);
     const name = event.event;
+    if (name === "task.progress") {
+      taskProgressRelay.enqueue(event);
+      return;
+    }
+    const task = event.payload.task as { id?: string; status?: string } | undefined;
+    if (name === "task.completed" || name === "task.failed" || name === "task.removed"
+      || (name === "task.updated" && task?.status !== "downloading")) {
+      taskProgressRelay.drop(String(event.payload.taskId || event.payload.task_id || task?.id || ""));
+    }
+    broadcastAll("sidecar:event", event);
     if (name === "settings.changed") {
       const settings = event.payload.settings as
         | { clipboard_monitor?: boolean; menu_bar_mode?: boolean; dock_progress?: boolean }
@@ -659,9 +671,6 @@ async function startSidecar(): Promise<void> {
     ) {
       taskTracker.applyEvent(event);
       updateDockUi();
-    } else if (name === "task.progress") {
-      taskTracker.applyEvent(event);
-      updateDockUi(false);
     }
     if (name === "task.completed" || name === "task.failed") {
       const task = event.payload.task as { title?: string } | undefined;
@@ -943,6 +952,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   quitSequenceStarted = true;
   isQuitting = true;
+  taskProgressRelay.dispose();
   if (mainWindow) saveWindowState(mainWindow);
   sidecarReady = false;
   clipboardWatcher.stop();

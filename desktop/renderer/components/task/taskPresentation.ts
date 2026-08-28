@@ -32,11 +32,11 @@ export interface TaskPresentation {
 
 const STATE_VIEW = {
   pending: { tone: "neutral", primaryAction: null, primaryLabel: "" },
-  downloading: { tone: "active", primaryAction: "pause", primaryLabel: "暂停" },
-  paused: { tone: "warning", primaryAction: "resume", primaryLabel: "继续" },
-  completed: { tone: "success", primaryAction: "open", primaryLabel: "打开" },
-  failed: { tone: "danger", primaryAction: "retry", primaryLabel: "重试" },
-  cancelled: { tone: "neutral", primaryAction: "retry", primaryLabel: "重新下载" },
+  downloading: { tone: "active", primaryAction: "pause", primaryLabel: "action.pause" },
+  paused: { tone: "warning", primaryAction: "resume", primaryLabel: "action.continue" },
+  completed: { tone: "success", primaryAction: "open", primaryLabel: "action.open" },
+  failed: { tone: "danger", primaryAction: "retry", primaryLabel: "action.retry" },
+  cancelled: { tone: "neutral", primaryAction: "retry", primaryLabel: "action.downloadAgain" },
   unknown: { tone: "neutral", primaryAction: null, primaryLabel: "" },
 } as const satisfies Record<
   TaskVisualState,
@@ -65,7 +65,7 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-function completedLabel(value: string, now: Date): string {
+function completedLabel(value: string, now: Date, locale: Locale): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -74,24 +74,25 @@ function completedLabel(value: string, now: Date): string {
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
   return sameDay
-    ? `今天 ${time}`
+    ? t("task.today", locale, { time })
     : `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
 }
 
 export function presentTask(
   task: TaskSnapshot,
   now = new Date(),
+  locale: Locale = getLocale(),
 ): TaskPresentation {
   const status = toTaskVisualState(task.status);
   const stateView = STATE_VIEW[status];
   const failure =
-    status === "failed" ? failureRecoveryFor(task.error_code) : null;
+    status === "failed" ? failureRecoveryFor(task.error_code, locale) : null;
   const bytes = formatBytes(task.total_bytes || task.downloaded_bytes);
-  const meta = [platformLabel(task.platform)];
+  const meta = [platformLabel(task.platform, locale)];
   if (task.quality && task.quality !== "best") meta.push(task.quality);
   if (bytes !== "—") meta.push(bytes);
   if (status === "completed" && task.completed_at) {
-    const completed = completedLabel(task.completed_at, now);
+    const completed = completedLabel(task.completed_at, now, locale);
     if (completed) meta.push(completed);
   }
 
@@ -118,13 +119,14 @@ export function presentTask(
 
   return {
     status,
-    label: statusLabel(status),
+    label: statusLabel(status, locale),
     tone: stateView.tone,
     meta,
     detail,
     primaryAction: allowPrimary ? stateView.primaryAction : null,
-    primaryLabel: allowPrimary ? stateView.primaryLabel : "",
+    primaryLabel: allowPrimary ? t(stateView.primaryLabel, locale) : "",
     showProgress: status === "downloading" || status === "paused",
     progress,
   };
 }
+import { getLocale, t, type Locale } from "../../i18n";

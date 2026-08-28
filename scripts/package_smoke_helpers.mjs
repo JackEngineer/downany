@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { TextDecoder } from "node:util";
 import { inflateRawSync } from "node:zlib";
 
@@ -18,6 +21,155 @@ const ZIP_ENCRYPTED_FLAG = 0x0001;
 const ZIP_STORED_METHOD = 0;
 const ZIP_DEFLATE_METHOD = 8;
 const MAX_DIAGNOSTIC_MEMBER_BYTES = 1024 * 1024;
+
+export function buildPackagedSmokeEnvironment(inherited, dataDir) {
+  return {
+    ...inherited,
+    DOWNANY_DATA_DIR: dataDir,
+    DOWNANY_UPDATE_DISABLED: "1",
+    DOWNANY_SKIP_PROTOCOL_REGISTRATION: "1",
+  };
+}
+
+function assertInsideSmokeRoot(root, target) {
+  const relative = path.relative(root, target);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Smoke paths must stay inside the isolated data root");
+  }
+  // Resolve the nearest existing ancestor before mkdir/write, including junctions.
+  let ancestor = target;
+  while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
+  const realRelative = path.relative(fs.realpathSync(root), fs.realpathSync(ancestor));
+  if (realRelative === ".." || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+    throw new Error("Smoke paths must stay inside the isolated data root");
+  }
+}
+
+export function prepareSmokeData(dataRoot) {
+  if (!path.isAbsolute(dataRoot)) throw new Error("Smoke data root must be absolute");
+  const root = path.resolve(dataRoot);
+  fs.mkdirSync(root, { recursive: true });
+  assertInsideSmokeRoot(root, path.join(root, "electron-user-data"));
+  const dataDir = path.join(root, "downany-data");
+  assertInsideSmokeRoot(root, dataDir);
+  fs.mkdirSync(dataDir, { recursive: true });
+  const configPath = path.join(dataDir, "config.json");
+  assertInsideSmokeRoot(root, configPath);
+  let outputDir = path.join(root, "output");
+  const exists = fs.existsSync(configPath);
+  if (exists) {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    if (!config || typeof config.download_dir !== "string" || !path.isAbsolute(config.download_dir)) {
+      throw new Error("Existing smoke configuration needs an absolute isolated download directory");
+    }
+    outputDir = path.resolve(config.download_dir);
+  }
+  assertInsideSmokeRoot(root, outputDir);
+  fs.mkdirSync(outputDir, { recursive: true });
+  if (!exists) {
+    fs.writeFileSync(configPath, JSON.stringify({ download_dir: outputDir }, null, 2) + "\n", { flag: "wx" });
+  }
+  return { dataDir, outputDir };
+}
+
+function waitForProcessExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      child.off("error", onError);
+    };
+    const onExit = () => {
+      cleanup();
+      resolve(true);
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(false);
+    }, timeoutMs);
+    child.once("exit", onExit);
+    child.once("error", onError);
+  });
+}
+
+export async function stopChildProcessTree(
+  child,
+  {
+    platform = process.platform,
+    spawnProcess = spawn,
+    timeoutMs = 5_000,
+  } = {},
+) {
+  const pid = child?.pid;
+  if (!pid || child.exitCode !== null || child.signalCode !== null) return;
+
+  if (platform === "win32") {
+    let killer;
+    let taskkillResult = "unavailable";
+    try {
+      killer = spawnProcess("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      const taskkillExited = await waitForProcessExit(killer, timeoutMs);
+      if (!taskkillExited) {
+        try {
+          killer.kill();
+        } catch {
+          // The command may have exited between the timeout and cleanup.
+        }
+      }
+      taskkillResult = taskkillExited
+        ? String(killer.exitCode ?? killer.signalCode ?? "unknown")
+        : "timeout";
+      if (taskkillExited && killer.exitCode === 0) {
+        if (await waitForProcessExit(child, timeoutMs)) return;
+      }
+    } catch {
+      // Keep the owned handle available when taskkill is unavailable or denied.
+    }
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    try {
+      child.kill();
+    } catch {
+      // The final wait reports a failure if the owned handle cannot terminate it.
+    }
+    if (await waitForProcessExit(child, timeoutMs)) return;
+    throw new Error(
+      `taskkill exited with ${taskkillResult}; packaged Electron is still running`,
+    );
+  }
+
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      return;
+    }
+  }
+  if (await waitForProcessExit(child, timeoutMs)) return;
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // The process may already have exited.
+    }
+  }
+  if (!(await waitForProcessExit(child, timeoutMs))) {
+    throw new Error("packaged Electron process tree did not exit");
+  }
+}
 
 function errorText(error) {
   const raw = error instanceof Error ? error.message : String(error);
@@ -132,7 +284,7 @@ export async function waitForBridgeReady({
 
 export async function enqueueSmokeTask({
   fetchImpl = globalThis.fetch,
-  url = "https://example.com/downany-package-smoke",
+  url = "http://127.0.0.1:17888/downany-package-smoke",
 } = {}) {
   const { response, payload } = await requestJson(
     fetchImpl,

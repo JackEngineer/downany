@@ -9,6 +9,7 @@ from src.core.download_task import (
     DownloadOptions,
     DownloadTask,
     Platform,
+    TaskRunIntent,
     TaskStatus,
     VideoInfo,
 )
@@ -55,6 +56,19 @@ def test_snapshot_is_immutable():
     snap = _make_task().to_snapshot()
     with pytest.raises(dataclasses.FrozenInstanceError):
         snap.progress = 99.0
+
+
+def test_durable_intent_is_internal_and_does_not_add_a_public_state():
+    task = _make_task()
+    task.status = TaskStatus.PAUSED
+    task.run_intent = TaskRunIntent.RUN
+    snapshot = dataclasses.asdict(task.to_snapshot())
+    assert snapshot["status"] == "paused"
+    assert "run_intent" not in snapshot
+    assert "run_intent" not in task.to_dict()
+    assert {status.value for status in TaskStatus} == {
+        "pending", "downloading", "paused", "completed", "failed", "cancelled",
+    }
 
 
 def test_manager_get_snapshot_returns_all_tasks():

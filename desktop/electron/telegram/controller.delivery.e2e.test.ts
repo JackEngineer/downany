@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,6 +25,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 4_000): Promise<voi
 
 afterEach(async () => {
   if (server) {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server!.close(() => resolve()));
     server = undefined;
   }
@@ -34,8 +36,9 @@ afterEach(async () => {
 });
 
 describe("Telegram bind-to-delivery flow", () => {
-  it("binds a Bot, selects a chat, enables auto-send, and uploads a completed file", async () => {
+  it.each(["sent", "failed", "uncertain"] as const)("keeps completed output independent from %s delivery", async (outcome) => {
     const sentRequests: string[] = [];
+    let uploadArrived = false;
     server = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
@@ -49,6 +52,13 @@ describe("Telegram bind-to-delivery flow", () => {
         } else if (url.endsWith("/getChat")) {
           result = { id: "-100123", type: "supergroup", title: "Delivery target" };
         } else if (url.endsWith("/sendDocument")) {
+          uploadArrived = true;
+          if (outcome === "uncertain") return; // Stop while the server may have accepted the upload.
+          if (outcome === "failed") {
+            response.statusCode = 400;
+            response.end(JSON.stringify({ ok: false, error_code: 400, description: "fixture rejection" }));
+            return;
+          }
           result = { message_id: 99 };
         }
         response.end(JSON.stringify({ ok: true, result }));
@@ -65,6 +75,7 @@ describe("Telegram bind-to-delivery flow", () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-e2e-"));
     const filePath = path.join(tempDir, "completed.mp4");
     fs.writeFileSync(filePath, Buffer.from("completed output"));
+    const originalHash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
     const fileStat = fs.statSync(filePath, { bigint: true });
     const claim: TelegramClaim = {
       delivery: {
@@ -105,6 +116,7 @@ describe("Telegram bind-to-delivery flow", () => {
     };
     let claimReturned = false;
     let sentPayload: Record<string, unknown> | undefined;
+    let settledMethod: string | undefined;
     const calls: string[] = [];
     const request = async (method: string, payload?: Record<string, unknown>): Promise<unknown> => {
       calls.push(method);
@@ -127,8 +139,16 @@ describe("Telegram bind-to-delivery flow", () => {
       }
       if (method === "telegram.markSent") {
         sentPayload = payload;
+        settledMethod = method;
         return { ...config, status: "sent", telegramMessageId: "99" };
       }
+      if (method === "telegram.markTargetFailed" || method === "telegram.markUncertain") {
+        sentPayload = payload;
+        settledMethod = method;
+        return { status: outcome };
+      }
+      if (method === "telegram.retry") return { id: "delivery-e2e", taskId: "task-e2e", status: "pending" };
+      if (method === "telegram.cancelPending") return { count: 1 };
       if (method === "telegram.markSending" || method === "telegram.renewLease") {
         return { ok: true };
       }
@@ -143,9 +163,14 @@ describe("Telegram bind-to-delivery flow", () => {
     const token = `12345:${"a".repeat(24)}`;
 
     try {
+      await controller.start();
       await controller.bind(token);
       await controller.selectTarget("-100123");
       await controller.setAutoSend(true);
+      if (outcome === "uncertain") {
+        await waitFor(() => uploadArrived);
+        await controller.stop();
+      }
       try {
         await waitFor(() => sentPayload !== undefined);
       } catch (error) {
@@ -154,11 +179,21 @@ describe("Telegram bind-to-delivery flow", () => {
 
       expect(calls).toContain("telegram.claimNext");
       expect(calls).toContain("telegram.markSending");
-      expect(calls).toContain("telegram.markSent");
-      expect(sentPayload).toMatchObject({ deliveryId: "delivery-e2e", leaseId: "lease-e2e", messageId: "99" });
+      expect(settledMethod).toBe(outcome === "sent" ? "telegram.markSent" : outcome === "failed" ? "telegram.markTargetFailed" : "telegram.markUncertain");
+      expect(sentPayload).toMatchObject({ deliveryId: "delivery-e2e", leaseId: "lease-e2e" });
+      if (outcome === "sent") expect(sentPayload?.messageId).toBe("99");
       expect(sentRequests.some((url) => url.endsWith("/sendDocument"))).toBe(true);
       expect(config.autoSendEnabled).toBe(true);
       expect(config.targetChatId).toBe("-100123");
+      if (outcome !== "sent") {
+        await controller.retry("delivery-e2e", outcome === "uncertain");
+        expect(calls).toContain("telegram.retry");
+      }
+      await controller.disconnect();
+      expect(calls).toContain("telegram.cancelPending");
+      expect(calls.every((method) => method.startsWith("telegram."))).toBe(true);
+      expect(createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")).toBe(originalHash);
+      expect(sentRequests.filter((url) => url.endsWith("/sendDocument"))).toHaveLength(1);
     } finally {
       await controller.stop();
       if (oldApiBase === undefined) delete process.env.DOWNANY_TELEGRAM_API_BASE;

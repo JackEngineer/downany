@@ -7,20 +7,23 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
-import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from dataclasses import dataclass, fields
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from src.core.download_task import (
     DownloadOptions,
     DownloadTask,
     Platform,
+    TaskRunIntent,
     TaskSnapshot,
     TaskStatus,
     VideoInfo,
@@ -51,7 +54,20 @@ from src.core.platform_detector import (
     normalize_thumbnail_url,
     pick_thumbnail_from_ydl_info,
 )
+from src.core.progress_buffer import ProgressBuffer, ProgressUpdate
 from src.core.title_utils import is_weak_title, pick_title_from_ydl_info
+from src.core.task_actions import (
+    TaskAction,
+    TaskActionOutcome,
+    decide_task_action,
+    normalize_restored_state,
+)
+from src.core.queue_ordering import (
+    SCHEDULABLE_STATUSES,
+    playlist_sort_key,
+    queue_normalization,
+    queue_sort_key as _scheduler_key,
+)
 from src.core.url_normalizer import normalize_download_url
 from src.core.video_info_extractor import VideoInfoExtractor
 from src.data.models import DownloadRecord
@@ -175,6 +191,19 @@ def _verify_external_subtitles(paths: tuple[Path, ...], root: Path) -> None:
             raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE) from exc
 
 
+def _verified_output_size(path: Path) -> int:
+    """Return the final regular-file size through the product verification error."""
+    try:
+        size = path.stat().st_size
+        if not path.is_file() or size <= 0:
+            raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE)
+        return size
+    except OutputVerificationFailed:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise OutputVerificationFailed(_OUTPUT_VERIFICATION_MESSAGE) from exc
+
+
 def _completion_note(plan: OutputPlan, facts: SourceFacts) -> str:
     notes = [str(plan.completion_note or "").strip()]
     if facts.missing_requested_subtitles:
@@ -204,6 +233,40 @@ def _safe_contract_error(exc: BaseException) -> tuple[str, str]:
     return classify_download_error(exc), str(exc)
 
 
+class QueueMutationError(RuntimeError):
+    """A requested queue mutation was not durably committed."""
+
+
+@dataclass(frozen=True)
+class TaskActionResult:
+    task_id: str
+    action: TaskAction
+    outcome: TaskActionOutcome
+    status: TaskStatus | None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class TaskActionBatchResult:
+    action: TaskAction
+    applied: tuple[TaskActionResult, ...]
+    deferred: tuple[TaskActionResult, ...]
+    skipped: tuple[TaskActionResult, ...]
+    related_updates: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TaskFileDeleteFailure:
+    task_id: str
+    message: str = "本地文件未删除"
+
+
+@dataclass(frozen=True)
+class GroupRemovalResult:
+    removed: tuple[str, ...]
+    file_delete_failures: tuple[TaskFileDeleteFailure, ...] = ()
+
+
 class DownloadManager:
     """下载管理器（Qt 无关）。事件通过 self.events 分发。"""
 
@@ -224,12 +287,14 @@ class DownloadManager:
         )
         self.output_ready_sink = output_ready_sink
         self.events = EventEmitter()
-        self._last_progress_persist: Dict[str, float] = {}
 
         self._lock = threading.RLock()
+        # Always acquire the manager lock before the persistence lock. Actions,
+        # removals, shutdown and progress flushes must never invert this order.
+        self._persistence_lock = threading.RLock()
+        self._progress_buffer = ProgressBuffer()
         self.tasks: Dict[str, DownloadTask] = {}
         self.active_tasks: Dict[str, threading.Thread] = {}
-        self._resume_requested: Set[str] = set()
 
         self.scheduler_thread: Optional[threading.Thread] = None
         self.running = False
@@ -237,19 +302,27 @@ class DownloadManager:
         logger.info("下载管理器初始化完成")
 
     def restore_tasks(self) -> None:
-        """从队列存储恢复任务。下载中降级为已暂停；等待中重新入队。"""
+        """按持久化运行意图恢复；用户暂停和终态不会自动重试。"""
         if self.queue_store is None:
             return
         restored = self.queue_store.load_tasks()
-        downgraded = []
+        changed = {}
         with self._lock:
+            if self.running or self.active_tasks:
+                raise QueueMutationError("任务运行中，无法重新载入队列")
             for task in restored:
-                if task.status == TaskStatus.DOWNLOADING:
-                    task.status = TaskStatus.PAUSED
-                    downgraded.append(task)
+                status, intent = normalize_restored_state(task.status, task.run_intent)
+                if (status, intent) != (task.status, task.run_intent):
+                    task.status, task.run_intent = status, intent
+                    changed[task.id] = task
+            normalization = queue_normalization(restored)
+            for task in restored:
+                if task.id in normalization:
+                    task.priority, task.queue_order = normalization[task.id]
+                    changed[task.id] = task
+            self._persist_tasks_or_raise(list(changed.values()))
+            for task in restored:
                 self.tasks[task.id] = task
-        for task in downgraded:
-            self._persist(task)
         if restored:
             logger.info(f"从数据库恢复 {len(restored)} 个任务")
 
@@ -264,19 +337,30 @@ class DownloadManager:
         logger.info("调度器已启动")
 
     def stop(self, join_timeout: float = 5.0):
-        """停止调度器。下载中的任务中断并标记为已暂停（保留半成品，可续传）。"""
-        paused_tasks = []
+        """中断活动任务但保留运行意图，下次启动只恢复用户要运行的任务。"""
+        changed_tasks = {}
+        persistence_error = None
         with self._lock:
             self.running = False
             for task in self.tasks.values():
-                if task.status == TaskStatus.DOWNLOADING:
+                if task.status == TaskStatus.DOWNLOADING or (
+                    task.id in self.active_tasks and task.status == TaskStatus.PENDING
+                ):
                     task.status = TaskStatus.PAUSED
-                    paused_tasks.append(task)
+                    changed_tasks[task.id] = task
+            with self._persistence_lock:
+                for update in self._progress_buffer.drain_due(force=True):
+                    task = self.tasks.get(update.task_id)
+                    if task is not None:
+                        changed_tasks[task.id] = task
+                try:
+                    self._persist_tasks_or_raise(list(changed_tasks.values()))
+                except QueueMutationError as exc:
+                    persistence_error = exc
+                finally:
+                    self._progress_buffer.clear()
             threads = list(self.active_tasks.values())
             scheduler = self.scheduler_thread
-
-        for task in paused_tasks:
-            self._persist(task)
 
         if scheduler and scheduler.is_alive():
             scheduler.join(timeout=join_timeout)
@@ -286,21 +370,60 @@ class DownloadManager:
                 thread.join(timeout=join_timeout)
 
         logger.info("调度器已停止")
+        if persistence_error is not None:
+            raise persistence_error
+
+    def _persist_tasks_or_raise(self, tasks: Sequence[DownloadTask]) -> None:
+        if not tasks:
+            return
+        with self._lock, self._persistence_lock:
+            try:
+                if self.queue_store is not None:
+                    self.queue_store.upsert_tasks(tasks)
+            except Exception as exc:
+                logger.error("队列更改未保存: %s", type(exc).__name__)
+                raise QueueMutationError("无法保存任务更改，请重试") from exc
+            # No callback can interleave while both locks are held. Discard
+            # after success so a failed/rolled-back action retains its progress.
+            for task in tasks:
+                self._progress_buffer.discard(task.id)
 
     def _persist(self, task: DownloadTask) -> bool:
         """把任务当前状态写入队列存储；失败只记日志，不影响下载。"""
-        if self.queue_store is None:
-            return True
-        # 已被 force 移除的任务：下载线程收尾时可能仍会调用 _persist，勿写回库
-        with self._lock:
-            if task.id not in self.tasks:
+        with self._lock, self._persistence_lock:
+            # A removed worker must not resurrect a row or overwrite a newly
+            # queued task that happens to use the same ID.
+            if self.tasks.get(task.id) is not task:
                 return False
-        try:
-            self.queue_store.upsert_task(task)
+            try:
+                if self.queue_store is not None:
+                    self.queue_store.upsert_task(task)
+            except Exception as exc:
+                logger.error("任务状态未保存: %s", type(exc).__name__)
+                return False
+            self._progress_buffer.discard(task.id)
             return True
-        except Exception as exc:
-            logger.error(f"持久化任务失败 {task.id}: {exc}")
-            return False
+
+    def _flush_progress_due(self) -> None:
+        with self._lock, self._persistence_lock:
+            if self.queue_store is None:
+                self._progress_buffer.clear()
+                return
+            updates = tuple(
+                update for update in self._progress_buffer.drain_due()
+                if (task := self.tasks.get(update.task_id)) is not None
+                and task.status == TaskStatus.DOWNLOADING
+            )
+            if not updates:
+                return
+            try:
+                self.queue_store.update_progress_many([
+                    (update.task_id, update.progress, update.downloaded_bytes, update.total_bytes)
+                    for update in updates
+                ])
+            except Exception as exc:
+                self._progress_buffer.requeue(updates)
+                logger.warning("下载进度暂未保存，将稍后重试: %s", type(exc).__name__)
 
     def _refresh_task_proxy(self, task: DownloadTask) -> None:
         """任务真正执行前补齐当前配置中的系统代理。"""
@@ -339,6 +462,8 @@ class DownloadManager:
             return
         task.options.proxy = current.proxy
         task.options.cookies_from_browser = current.cookies_from_browser
+        task.options.speed_limit = current.speed_limit
+        task.options.concurrent_fragments = current.concurrent_fragments
         logger.info("重试任务已刷新登录状态与代理设置")
 
     def _normalize_task_url(self, task: DownloadTask) -> None:
@@ -348,19 +473,26 @@ class DownloadManager:
         task.video_info.url = normalized
         logger.info("已修复任务 URL: %s", normalized)
 
-    def _persist_remove(self, task_id: str) -> None:
-        if self.queue_store is None:
+    def _persist_removals_or_raise(self, task_ids: Sequence[str]) -> None:
+        if not task_ids:
             return
-        try:
-            self.queue_store.remove_task(task_id)
-        except Exception as exc:
-            logger.error(f"删除持久化任务失败 {task_id}: {exc}")
+        with self._lock, self._persistence_lock:
+            try:
+                if self.queue_store is not None:
+                    self.queue_store.remove_tasks(task_ids)
+            except Exception as exc:
+                logger.error("任务移除未保存: %s", type(exc).__name__)
+                raise QueueMutationError("无法保存任务更改，请重试") from exc
+            for task_id in task_ids:
+                self._progress_buffer.discard(task_id)
 
     def _delete_task_file(self, file_path: str) -> bool:
         path = (file_path or "").strip()
-        if not path or not os.path.isfile(path):
-            return False
+        if not path:
+            return True
         try:
+            if not stat.S_ISREG(os.stat(path).st_mode):
+                return False
             os.remove(path)
             parent = os.path.dirname(path)
             # 合集子文件夹若已空则一并去掉，避免留下空目录
@@ -369,6 +501,8 @@ class DownloadManager:
                     os.rmdir(parent)
                 except OSError:
                     pass
+            return True
+        except FileNotFoundError:
             return True
         except OSError as exc:
             logger.warning("删除本地文件失败 %s: %s", path, exc)
@@ -400,16 +534,11 @@ class DownloadManager:
                     return False
                 if task_id in self.active_tasks:
                     return False
-            else:
-                if task.status not in (
-                    TaskStatus.COMPLETED,
-                    TaskStatus.FAILED,
-                    TaskStatus.CANCELLED,
-                ):
-                    task.status = TaskStatus.CANCELLED
             file_path = task.file_path or ""
+            self._persist_removals_or_raise([task_id])
+            if task.status in (TaskStatus.PENDING, TaskStatus.DOWNLOADING, TaskStatus.PAUSED):
+                task.status, task.run_intent = TaskStatus.CANCELLED, TaskRunIntent.PAUSE
             self.tasks.pop(task_id, None)
-        self._persist_remove(task_id)
         if delete_files and file_path:
             self._delete_task_file(file_path)
         return True
@@ -419,96 +548,199 @@ class DownloadManager:
         group_id: str,
         *,
         delete_files: bool = False,
-    ) -> List[str]:
-        """移除同一 group_id 下全部任务，返回成功移除的 id 列表。"""
+    ) -> GroupRemovalResult:
+        """先原子移除队列，再删除明确要求移除的成品并报告失败。"""
         gid = (group_id or "").strip()
         if not gid:
-            return []
+            return GroupRemovalResult(())
         with self._lock:
-            ids = [
-                task.id
+            members = [
+                task
                 for task in self.tasks.values()
                 if (task.group_id or "").strip() == gid
             ]
-        removed: List[str] = []
-        for task_id in ids:
-            if self.remove_task(task_id, delete_files=delete_files, force=True):
-                removed.append(task_id)
-        return removed
+            ids = tuple(task.id for task in members)
+            files = [(task.id, task.file_path) for task in members if task.file_path]
+            self._persist_removals_or_raise(ids)
+            for task in members:
+                if task.status in (TaskStatus.PENDING, TaskStatus.DOWNLOADING, TaskStatus.PAUSED):
+                    task.status, task.run_intent = TaskStatus.CANCELLED, TaskRunIntent.PAUSE
+                self.tasks.pop(task.id)
+        failures = []
+        if delete_files:
+            for task_id, file_path in files:
+                if not self._delete_task_file(file_path):
+                    failures.append(TaskFileDeleteFailure(task_id))
+        return GroupRemovalResult(ids, tuple(failures))
 
     def add_task(self, task: DownloadTask):
         """添加任务到队列"""
         with self._lock:
+            if task.id in self.tasks:
+                raise ValueError("任务已在队列中")
+            checkpoints = [(task, deepcopy(task))]
             max_order = max((t.queue_order for t in self.tasks.values()), default=-1)
             task.queue_order = max_order + 1
             self.tasks[task.id] = task
-        self._persist(task)
+            try:
+                related = self._normalize_queue_locked(checkpoints)
+                self._persist_tasks_or_raise([member for member, _ in checkpoints])
+            except Exception:
+                self.tasks.pop(task.id)
+                self._restore_checkpoints(checkpoints)
+                raise
         self.events.emit("task_added", {"task_id": task.id})
+        for task_id in related:
+            if task_id != task.id:
+                self.events.emit("task_updated", {"task_id": task_id})
         logger.info(f"添加任务: {task.video_info.title}")
 
-    def pause_task(self, task_id: str):
-        """暂停任务（中断当前下载；恢复时重新入队）。"""
-        with self._lock:
-            task = self.tasks.get(task_id)
-            if not task or task.status != TaskStatus.DOWNLOADING:
-                return
-            task.status = TaskStatus.PAUSED
-        self._persist(task)
-        self.events.emit("task_paused", {"task_id": task_id})
-        logger.info(f"暂停任务: {task.video_info.title}")
+    @staticmethod
+    def _restore_checkpoints(checkpoints: Sequence[tuple[DownloadTask, DownloadTask]]) -> None:
+        for task, checkpoint in checkpoints:
+            for task_field in fields(task):
+                setattr(task, task_field.name, getattr(checkpoint, task_field.name))
 
-    def resume_task(self, task_id: str):
-        """恢复暂停任务；若旧下载线程仍在收尾则等 finally 再入队。"""
-        with self._lock:
-            task = self.tasks.get(task_id)
-            if not task or task.status != TaskStatus.PAUSED:
-                return
-            if task_id in self.active_tasks:
-                self._resume_requested.add(task_id)
-                logger.info(f"恢复任务等待旧线程退出: {task.video_info.title}")
-                return
-            task.status = TaskStatus.PENDING
-            task.error_message = ""
-            task.error_code = ""
-        self._persist(task)
-        logger.info(f"恢复任务: {task.video_info.title}")
+    def _normalize_queue_locked(
+        self, checkpoints: List[tuple[DownloadTask, DownloadTask]],
+    ) -> tuple[str, ...]:
+        normalization = queue_normalization(tuple(self.tasks.values()))
+        saved = {task.id for task, _ in checkpoints}
+        for task_id, (priority, order) in normalization.items():
+            task = self.tasks[task_id]
+            if task_id not in saved:
+                checkpoints.append((task, deepcopy(task)))
+            task.priority, task.queue_order = priority, order
+        return tuple(normalization)
 
-    def cancel_task(self, task_id: str):
-        """取消任务"""
-        with self._lock:
-            task = self.tasks.get(task_id)
-            if not task:
-                return
-            if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED):
-                return
-            task.status = TaskStatus.CANCELLED
-        self._persist(task)
-        self.events.emit("task_cancelled", {"task_id": task_id})
-        logger.info(f"取消任务: {task.video_info.title}")
+    def apply_task_action(self, task_id: str, action: TaskAction) -> TaskActionResult:
+        report = self.apply_task_actions([task_id], action)
+        return (report.applied + report.deferred + report.skipped)[0]
 
-    def retry_task(self, task_id: str):
-        """重试失败的任务"""
+    def apply_task_actions(
+        self, task_ids: Sequence[str], action: TaskAction,
+    ) -> TaskActionBatchResult:
+        """一次提交整批操作，失败时原位恢复所有 worker 持有的对象。"""
+        if (
+            not isinstance(task_ids, Sequence)
+            or isinstance(task_ids, (str, bytes))
+            or any(not isinstance(task_id, str) or not task_id.strip() for task_id in task_ids)
+            or len(set(task_ids)) != len(task_ids)
+        ):
+            raise ValueError("任务列表无效")
         with self._lock:
-            task = self.tasks.get(task_id)
-            if not task or task.status != TaskStatus.FAILED:
-                return
-            if task_id in self.active_tasks:
-                return
-            self._refresh_retry_recovery_options(task)
-            self._normalize_task_url(task)
-            task.status = TaskStatus.PENDING
-            task.error_message = ""
-            task.error_code = ""
-            task.completion_note = ""
-            task.progress = 0.0
-            task.downloaded_bytes = 0
-            task.total_bytes = 0
-        self._persist(task)
-        logger.info(f"重试任务: {task.video_info.title}")
+            report = self._apply_task_actions_locked(tuple(task_ids), action)
+        self._emit_action_results(report)
+        return report
+
+    def apply_group_action(self, group_id: str, action: TaskAction) -> TaskActionBatchResult:
+        if not isinstance(group_id, str) or not group_id.strip():
+            raise ValueError("请选择合集")
+        with self._lock:
+            task_ids = tuple(
+                task.id for task in self.tasks.values()
+                if (task.group_id or "").strip() == group_id.strip()
+            )
+            report = self._apply_task_actions_locked(task_ids, action)
+        self._emit_action_results(report)
+        return report
+
+    def apply_all_action(self, action: TaskAction) -> TaskActionBatchResult:
+        with self._lock:
+            report = self._apply_task_actions_locked(tuple(self.tasks), action)
+        self._emit_action_results(report)
+        return report
+
+    def _apply_task_actions_locked(
+        self, task_ids: tuple[str, ...], action: TaskAction,
+    ) -> TaskActionBatchResult:
+        if not isinstance(action, TaskAction):
+            raise ValueError("不支持此任务操作")
+        results: Dict[TaskActionOutcome, List[TaskActionResult]] = {
+            outcome: [] for outcome in TaskActionOutcome
+        }
+        checkpoints: List[tuple[DownloadTask, DownloadTask]] = []
+        related = ()
+        try:
+            for task_id in task_ids:
+                task = self.tasks.get(task_id)
+                if task is None:
+                    results[TaskActionOutcome.SKIPPED].append(TaskActionResult(
+                        task_id, action, TaskActionOutcome.SKIPPED, None, "task_not_found",
+                    ))
+                    continue
+                decision = decide_task_action(
+                    task.status, task.run_intent, action,
+                    worker_active=task_id in self.active_tasks,
+                )
+                results[decision.outcome].append(TaskActionResult(
+                    task_id, action, decision.outcome, decision.next_status, decision.reason,
+                ))
+                if decision.outcome == TaskActionOutcome.SKIPPED:
+                    continue
+                checkpoints.append((task, deepcopy(task)))
+                task.status = decision.next_status
+                task.run_intent = decision.next_intent
+                if action in (TaskAction.RESUME, TaskAction.RETRY):
+                    task.error_message = ""
+                    task.error_code = ""
+                if decision.reset_for_retry:
+                    self._refresh_retry_recovery_options(task)
+                    self._normalize_task_url(task)
+                    task.completion_note = ""
+                    task.progress = 0.0
+                    task.downloaded_bytes = task.total_bytes = 0
+                    task.speed, task.eta = "0 B/s", "暂无"
+                    task.started_at = task.completed_at = None
+            if action == TaskAction.RETRY and checkpoints:
+                related = self._normalize_queue_locked(checkpoints)
+            self._persist_tasks_or_raise([task for task, _ in checkpoints])
+        except Exception:
+            self._restore_checkpoints(checkpoints)
+            raise
+        return TaskActionBatchResult(
+            action,
+            tuple(results[TaskActionOutcome.APPLIED]),
+            tuple(results[TaskActionOutcome.DEFERRED]),
+            tuple(results[TaskActionOutcome.SKIPPED]),
+            related,
+        )
+
+    def _emit_action_results(self, report: TaskActionBatchResult) -> None:
+        event = {
+            TaskAction.PAUSE: "task_paused",
+            TaskAction.RESUME: "task_updated",
+            TaskAction.CANCEL: "task_cancelled",
+            TaskAction.RETRY: "task_updated",
+        }[report.action]
+        for result in report.applied + report.deferred:
+            self.events.emit(event, {"task_id": result.task_id})
+        acted = {result.task_id for result in report.applied + report.deferred}
+        for task_id in report.related_updates:
+            if task_id not in acted:
+                self.events.emit("task_updated", {"task_id": task_id})
+
+    def pause_task(self, task_id: str) -> TaskActionResult:
+        return self.apply_task_action(task_id, TaskAction.PAUSE)
+
+    def resume_task(self, task_id: str) -> TaskActionResult:
+        return self.apply_task_action(task_id, TaskAction.RESUME)
+
+    def cancel_task(self, task_id: str) -> TaskActionResult:
+        return self.apply_task_action(task_id, TaskAction.CANCEL)
+
+    def retry_task(self, task_id: str) -> TaskActionResult:
+        return self.apply_task_action(task_id, TaskAction.RETRY)
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
         with self._lock:
             return self.tasks.get(task_id)
+
+    def get_task_snapshot(self, task_id: str) -> Optional[TaskSnapshot]:
+        """锁内构建单任务快照，供高频事件读取而不遍历整个队列。"""
+        with self._lock:
+            task = self.tasks.get(task_id)
+            return task.to_snapshot() if task is not None else None
 
     def get_all_tasks(self) -> Dict[str, DownloadTask]:
         with self._lock:
@@ -517,7 +749,7 @@ class DownloadManager:
     def get_snapshot(self) -> List[TaskSnapshot]:
         """所有任务的不可变快照（锁内构建，锁外安全使用）。"""
         with self._lock:
-            return [task.to_snapshot() for task in self.tasks.values()]
+            return [task.to_snapshot() for task in sorted(self.tasks.values(), key=_scheduler_key)]
 
     def update_task(
         self,
@@ -546,55 +778,95 @@ class DownloadManager:
             ) or clear_format
             if touches_options and task.status == TaskStatus.DOWNLOADING:
                 raise ValueError("下载进行中，请先暂停再修改选项")
+            if priority is not None and task.status == TaskStatus.COMPLETED:
+                raise ValueError("已完成任务不能调整优先级")
 
-            if title is not None:
-                new_title = title.strip() or task.video_info.title
-                if task.status == TaskStatus.COMPLETED and task.file_path:
-                    task.file_path = self._rename_output_file(task, new_title)
-                task.video_info.title = new_title
+            affected = [task]
+            group_id = (task.group_id or "").strip()
+            if priority is not None and group_id:
+                affected = [member for member in self.tasks.values()
+                            if (member.group_id or "").strip() == group_id
+                            and member.status != TaskStatus.COMPLETED]
+            checkpoints = [(member, deepcopy(member)) for member in affected] if priority is not None else []
+            try:
+                if title is not None:
+                    new_title = title.strip() or task.video_info.title
+                    if task.status == TaskStatus.COMPLETED and task.file_path:
+                        task.file_path = self._rename_output_file(task, new_title)
+                    task.video_info.title = new_title
 
-            if touches_options:
-                if clear_format:
-                    task.options.format_id = None
-                if format_id is not None:
-                    task.options.format_id = format_id or None
-                if quality is not None:
-                    task.options.quality = quality
-                if audio_only is not None:
-                    task.options.audio_only = audio_only
-                if postprocessing is not None:
-                    task.options.postprocessing = postprocessing
+                if touches_options:
+                    if clear_format:
+                        task.options.format_id = None
+                    if format_id is not None:
+                        task.options.format_id = format_id or None
+                    if quality is not None:
+                        task.options.quality = quality
+                    if audio_only is not None:
+                        task.options.audio_only = audio_only
+                    if postprocessing is not None:
+                        task.options.postprocessing = postprocessing
 
-            if priority is not None:
-                task.priority = int(priority)
+                if priority is not None:
+                    for member in affected:
+                        member.priority = int(priority)
+                    # Retried members may share old order values with another
+                    # priority band. Moving that group back into the band must
+                    # keep it contiguous in the same atomic write.
+                    self._normalize_queue_locked(checkpoints)
+                    affected = [member for member, _ in checkpoints]
+                    self._persist_tasks_or_raise(affected)
+            except Exception:
+                self._restore_checkpoints(checkpoints)
+                raise
 
-        self._persist(task)
-        self.events.emit("task_updated", {"task_id": task.id})
+        if priority is None:
+            self._persist(task)
+        for member in affected:
+            self.events.emit("task_updated", {"task_id": member.id})
         return task
 
-    def reorder_tasks(self, ordered_ids: List[str]) -> bool:
-        """按 ordered_ids 重写 queue_order；未列出的任务排在末尾。"""
+    def reorder_tasks(self, ordered_ids: Sequence[str]) -> List[TaskSnapshot]:
+        """严格校验完整活动队列，整批落盘后才发布新的顺序。"""
+        if not isinstance(ordered_ids, Sequence) or isinstance(ordered_ids, (str, bytes)):
+            raise ValueError("任务顺序无效，请刷新后重试")
+        ids = tuple(ordered_ids)
+        if (any(not isinstance(task_id, str) or not task_id.strip() for task_id in ids)
+                or len(ids) != len(set(ids))):
+            raise ValueError("任务顺序无效，请刷新后重试")
         with self._lock:
-            seen: Set[str] = set()
-            for idx, task_id in enumerate(ordered_ids):
-                task = self.tasks.get(task_id)
-                if not task:
-                    continue
-                task.queue_order = idx
-                seen.add(task_id)
-            next_order = len(seen)
-            for task in sorted(
-                self.tasks.values(), key=lambda t: (t.queue_order, t.created_at)
-            ):
-                if task.id in seen:
-                    continue
-                task.queue_order = next_order
-                next_order += 1
-            tasks_to_persist = list(self.tasks.values())
-        for task in tasks_to_persist:
-            self._persist(task)
+            active = {task.id: task for task in self.tasks.values()
+                      if task.status in SCHEDULABLE_STATUSES}
+            if set(ids) != set(active):
+                raise ValueError("队列已变化，请刷新后重试")
+            ordered = [active[task_id] for task_id in ids]
+            if any(first.priority < second.priority for first, second in zip(ordered, ordered[1:])):
+                raise ValueError("请在同一优先级内调整顺序")
+            groups: Dict[str, List[tuple[int, DownloadTask]]] = {}
+            for index, task in enumerate(ordered):
+                group_id = (task.group_id or "").strip()
+                if group_id:
+                    groups.setdefault(group_id, []).append((index, task))
+            for members in groups.values():
+                if members[-1][0] - members[0][0] + 1 != len(members):
+                    raise ValueError("请保持合集任务连续")
+                tasks = [task for _, task in members]
+                if tasks != sorted(tasks, key=playlist_sort_key):
+                    raise ValueError("请保持合集内的播放顺序")
+            if self.queue_store is not None:
+                try:
+                    with self._persistence_lock:
+                        self.queue_store.rewrite_queue_order(ids)
+                except ValueError:
+                    raise
+                except Exception as exc:
+                    logger.error("队列顺序未保存: %s", type(exc).__name__)
+                    raise QueueMutationError("无法保存任务更改，请重试") from exc
+            for index, task in enumerate(ordered):
+                task.queue_order = index
+            snapshots = self.get_snapshot()
         self.events.emit("tasks_reordered", {})
-        return True
+        return snapshots
 
     def _rename_output_file(self, task: DownloadTask, new_title: str) -> str:
         """已完成任务改名：同步重命名磁盘文件（保留扩展名）。"""
@@ -655,7 +927,7 @@ class DownloadManager:
             logger.warning("任务暂存目录清理失败 %s: %s", staging_dir.name, exc)
 
     def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
-        """锁内调用：queue_order 升序，再 priority 降序，再创建时间早优先。"""
+        """锁内调用：优先级、队列位置、创建时间和 ID 与可见队列一致。"""
         candidates = [
             task
             for task in self.tasks.values()
@@ -663,8 +935,7 @@ class DownloadManager:
         ]
         if not candidates:
             return None
-        candidates.sort(key=lambda t: (t.queue_order, -t.priority, t.created_at))
-        return candidates[0]
+        return min(candidates, key=_scheduler_key)
 
     def _scheduler_loop(self):
         while True:
@@ -672,6 +943,7 @@ class DownloadManager:
             with self._lock:
                 if not self.running:
                     break
+                self._flush_progress_due()
                 max_concurrent = self.config.get_concurrent_downloads()
                 if len(self.active_tasks) < max_concurrent:
                     task = self._pick_next_pending_locked()
@@ -690,6 +962,8 @@ class DownloadManager:
     def _download_task(self, task: DownloadTask):
         try:
             with self._lock:
+                if self.tasks.get(task.id) is not task:
+                    return
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                     return
                 self._refresh_task_proxy(task)
@@ -785,71 +1059,65 @@ class DownloadManager:
             def progress_callback(d):
                 nonlocal metadata_backfilled_from_progress
                 with self._lock:
+                    if self.tasks.get(task.id) is not task:
+                        raise DownloadCancelled("任务已移除")
                     if task.status == TaskStatus.CANCELLED:
                         raise DownloadCancelled("任务已取消")
                     if task.status == TaskStatus.PAUSED:
                         raise DownloadCancelled("任务已暂停")
+                    if task.status != TaskStatus.DOWNLOADING:
+                        return
 
-                metadata_changed = False
-                info_dict = d.get("info_dict")
-                if (
-                    not metadata_backfilled_from_progress
-                    and isinstance(info_dict, dict)
-                ):
-                    title = pick_title_from_ydl_info(
-                        info_dict,
-                        task.video_info.title if is_direct_media else "",
-                    )
-                    if title:
-                        with self._lock:
+                    metadata_changed = False
+                    info_dict = d.get("info_dict")
+                    if (
+                        not metadata_backfilled_from_progress
+                        and isinstance(info_dict, dict)
+                    ):
+                        title = pick_title_from_ydl_info(
+                            info_dict,
+                            task.video_info.title if is_direct_media else "",
+                        )
+                        if title:
                             if title != task.video_info.title and (
                                 not is_direct_media
                                 or is_weak_title(task.video_info.title)
                             ):
                                 task.video_info.title = title
                                 metadata_changed = True
-                        metadata_backfilled_from_progress = True
+                            metadata_backfilled_from_progress = True
 
+                    downloaded = int(d.get("downloaded_bytes") or 0)
+                    total = int(d.get("total_bytes") or d.get("total_bytes_estimate") or 0)
+                    task.downloaded_bytes = downloaded
+                    task.total_bytes = total
+
+                    try:
+                        percent_str = d.get("_percent_str", "0%")
+                        percent_str = re.sub(r"\x1b\[[0-9;]*m", "", str(percent_str))
+                        task.progress = float(percent_str.replace("%", "").strip() or 0)
+                    except (ValueError, AttributeError, TypeError):
+                        if total:
+                            task.progress = min(100.0, downloaded * 100.0 / total)
+
+                    task.speed = d.get("_speed_str", "0 B/s")
+                    task.eta = d.get("_eta_str", "暂无")
+                    slim = {
+                        "status": d.get("status"),
+                        "_percent_str": d.get("_percent_str"),
+                        "_speed_str": d.get("_speed_str"),
+                        "_eta_str": d.get("_eta_str"),
+                        "filename": d.get("filename"),
+                        "downloaded_bytes": downloaded,
+                        "total_bytes": total,
+                        "progress": task.progress,
+                    }
+                    if self.queue_store is not None:
+                        self._progress_buffer.put(ProgressUpdate(
+                            task.id, task.progress, downloaded, total,
+                        ))
                 if metadata_changed:
-                    self._persist(task)
                     self.events.emit("task_updated", {"task_id": task.id})
-
-                downloaded = int(d.get("downloaded_bytes") or 0)
-                total = int(d.get("total_bytes") or d.get("total_bytes_estimate") or 0)
-                task.downloaded_bytes = downloaded
-                task.total_bytes = total
-
-                try:
-                    percent_str = d.get("_percent_str", "0%")
-                    percent_str = re.sub(r"\x1b\[[0-9;]*m", "", str(percent_str))
-                    task.progress = float(percent_str.replace("%", "").strip() or 0)
-                except (ValueError, AttributeError, TypeError):
-                    if total:
-                        task.progress = min(100.0, downloaded * 100.0 / total)
-
-                task.speed = d.get("_speed_str", "0 B/s")
-                task.eta = d.get("_eta_str", "暂无")
-                slim = {
-                    "status": d.get("status"),
-                    "_percent_str": d.get("_percent_str"),
-                    "_speed_str": d.get("_speed_str"),
-                    "_eta_str": d.get("_eta_str"),
-                    "filename": d.get("filename"),
-                    "downloaded_bytes": downloaded,
-                    "total_bytes": total,
-                    "progress": task.progress,
-                }
-                if self.queue_store is not None:
-                    now = time.monotonic()
-                    last = self._last_progress_persist.get(task.id, 0.0)
-                    if now - last >= 2.0:
-                        self._last_progress_persist[task.id] = now
-                        try:
-                            self.queue_store.update_progress(
-                                task.id, task.progress, downloaded, total
-                            )
-                        except Exception as exc:
-                            logger.error(f"持久化进度失败 {task.id}: {exc}")
                 self.events.emit("task_progress", {"task_id": task.id, "progress": slim})
 
             downloader.set_callbacks(progress=progress_callback)
@@ -903,6 +1171,7 @@ class DownloadManager:
                         )
                 verify_media(final_main, toolchain.ffprobe, expectation)
                 _verify_external_subtitles(committed.subtitle_files, final_root)
+                final_size = _verified_output_size(final_main)
                 with self._lock:
                     if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                         raise DownloadCancelled(
@@ -918,6 +1187,9 @@ class DownloadManager:
                     )
                     task.file_path = str(committed.main_file)
                     task.progress = 100.0
+                    task.downloaded_bytes = final_size
+                    task.total_bytes = final_size
+                    task.video_info.file_size = final_size
                     task.error_message = ""
                     task.error_code = ""
                     if script_mode:
@@ -955,6 +1227,7 @@ class DownloadManager:
                 try:
                     verify_media(final_main, toolchain.ffprobe, expectation)
                     _verify_external_subtitles(committed.subtitle_files, final_root)
+                    final_size = _verified_output_size(final_main)
                     with self._lock:
                         if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                             raise DownloadCancelled(
@@ -962,6 +1235,9 @@ class DownloadManager:
                                 if task.status == TaskStatus.CANCELLED
                                 else "任务已暂停"
                             )
+                        task.downloaded_bytes = final_size
+                        task.total_bytes = final_size
+                        task.video_info.file_size = final_size
                         task.status = TaskStatus.COMPLETED
                         task.completed_at = datetime.now()
                         task.completion_note = (
@@ -1063,17 +1339,22 @@ class DownloadManager:
         finally:
             requeue = False
             with self._lock:
-                self.active_tasks.pop(task.id, None)
-                if task.id in self._resume_requested:
-                    self._resume_requested.discard(task.id)
-                    if task.status == TaskStatus.PAUSED:
-                        task.status = TaskStatus.PENDING
-                        task.error_message = ""
-                        task.error_code = ""
+                if self.active_tasks.get(task.id) is threading.current_thread():
+                    self.active_tasks.pop(task.id, None)
+                if (
+                    self.running and self.tasks.get(task.id) is task
+                    and task.status == TaskStatus.PAUSED
+                    and task.run_intent == TaskRunIntent.RUN
+                ):
+                    task.status = TaskStatus.PENDING
+                    try:
+                        self._persist_tasks_or_raise([task])
+                    except QueueMutationError:
+                        task.status = TaskStatus.PAUSED
+                    else:
                         requeue = True
             if requeue:
-                self._persist(task)
-                logger.info(f"暂停任务线程退出后重新入队: {task.video_info.title}")
+                self.events.emit("task_updated", {"task_id": task.id})
 
     def _maybe_report_failure(self, task: DownloadTask) -> None:
         """opt-in 本地失败统计（不上报网络）。"""

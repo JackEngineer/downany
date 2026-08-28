@@ -68,7 +68,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
-    { icon, label, className = "", children: _children, ...props },
+    { icon, label, className = "", ...props },
     ref,
   ) {
     return (

@@ -6,11 +6,12 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
 
 import type { ContextMenuTemplateItem } from "../../../electron/preload";
+import { getLocale, t, useLocale, type Locale } from "../../i18n";
 import type { TaskSnapshot } from "../../lib/types";
 import { IconButton } from "../ui/Button";
 import { Icon } from "../ui/Icon";
@@ -19,10 +20,10 @@ import { toTaskVisualState } from "./taskPresentation";
 import type { TaskCommands } from "./useTaskCommands";
 
 const POSTPROCESSING_OPTIONS = [
-  { value: "none", label: "无后处理" },
-  { value: "mp4", label: "转换为 MP4" },
-  { value: "mp3", label: "提取音频 (MP3)" },
-  { value: "script", label: "自定义脚本" },
+  { value: "none", labelKey: "postprocess.none" },
+  { value: "mp4", labelKey: "postprocess.mp4" },
+  { value: "mp3", labelKey: "postprocess.mp3" },
+  { value: "script", labelKey: "postprocess.script" },
 ] as const;
 
 interface TaskActionsMenuProps {
@@ -150,6 +151,7 @@ const menuSeparatorStyle = {
 
 export function buildTaskContextTemplate(
   task: TaskSnapshot,
+  locale: Locale = getLocale(),
 ): ContextMenuTemplateItem[] {
   const status = toTaskVisualState(task.status);
   const showDownloadOptions =
@@ -159,48 +161,54 @@ export function buildTaskContextTemplate(
     status === "failed";
   const optionEditable = status !== "downloading";
   const items: ContextMenuTemplateItem[] = [
-    { id: "rename", label: "重命名" },
-    { id: "extract", label: "网页识别" },
+    { id: "rename", label: t("action.rename", locale) },
+    { id: "extract", label: t("action.recognize", locale) },
   ];
 
-  if (showDownloadOptions) {
+  if (status !== "completed") {
     items.push(
       { id: "separator-download", label: "", type: "separator" },
       {
         id: (task.priority ?? 0) > 0 ? "priority-normal" : "priority-high",
-        label: (task.priority ?? 0) > 0 ? "取消高优先级" : "设为高优先级",
+        label: task.group_id?.trim()
+          ? t((task.priority ?? 0) > 0 ? "menu.groupPriorityNormal" : "menu.groupPriorityHigh", locale)
+          : t((task.priority ?? 0) > 0 ? "menu.priorityNormal" : "menu.priorityHigh", locale),
       },
+    );
+  }
+  if (showDownloadOptions) {
+    items.push(
       {
         id: "audio-toggle",
-        label: task.audio_only ? "取消仅音频" : "仅音频 (MP3)",
+        label: t(task.audio_only ? "menu.audioOff" : "menu.audio", locale),
         enabled: optionEditable,
       },
       ...POSTPROCESSING_OPTIONS.map((option) => ({
         id: `pp:${option.value}`,
-        label: option.label,
+        label: t(option.labelKey, locale),
         enabled: optionEditable,
       })),
     );
   }
-  if (status === "downloading") items.push({ id: "pause", label: "暂停" });
-  if (status === "paused") items.push({ id: "resume", label: "继续" });
+  if (status === "downloading") items.push({ id: "pause", label: t("action.pause", locale) });
+  if (status === "paused") items.push({ id: "resume", label: t("action.continue", locale) });
   if (status === "pending" || status === "downloading" || status === "paused") {
-    items.push({ id: "cancel", label: "取消下载" });
+    items.push({ id: "cancel", label: t("action.cancelDownload", locale) });
   }
   if (
     status === "cancelled" ||
     (status === "failed" && failureRecoveryFor(task.error_code).retryable)
   ) {
-    items.push({ id: "retry", label: status === "failed" ? "重试" : "重新下载" });
+    items.push({ id: "retry", label: t(status === "failed" ? "action.retry" : "action.downloadAgain", locale) });
   }
   if (status === "completed" && task.file_path) {
     items.push(
-      { id: "open", label: "打开" },
-      { id: "reveal", label: "在文件夹中显示" },
+      { id: "open", label: t("action.open", locale) },
+      { id: "reveal", label: t("action.reveal", locale) },
     );
   }
   if (status === "completed" || status === "failed" || status === "cancelled") {
-    items.push({ id: "remove", label: "移除" });
+    items.push({ id: "remove", label: t("action.remove", locale) });
   }
   return items;
 }
@@ -246,9 +254,9 @@ export async function dispatchTaskAction(
   }
 }
 
-function toVisibleMenuItems(task: TaskSnapshot): VisibleMenuItem[] {
+function toVisibleMenuItems(task: TaskSnapshot, locale: Locale): VisibleMenuItem[] {
   const activePostprocessing = task.postprocessing ?? "none";
-  return buildTaskContextTemplate(task).map((item) => ({
+  return buildTaskContextTemplate(task, locale).map((item) => ({
     id: item.id,
     label: item.label,
     enabled: item.enabled !== false,
@@ -263,13 +271,14 @@ export function TaskActionsMenu({
   onRename,
   onRetryRequested,
 }: TaskActionsMenuProps) {
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<TaskMenuPosition | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pendingFocusRef = useRef<"first" | "last" | null>(null);
-  const items = useMemo(() => toVisibleMenuItems(task), [task]);
+  const items = useMemo(() => toVisibleMenuItems(task, locale), [task, locale]);
 
   const focusMenuItem = (target: "first" | "last") => {
     const focusable = Array.from(
@@ -329,7 +338,7 @@ export function TaskActionsMenu({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [items.length, open, updatePosition]);
+  }, [items, open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -379,7 +388,7 @@ export function TaskActionsMenu({
     };
   }, [open, task.id]);
 
-  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       openMenu("first");
@@ -389,7 +398,7 @@ export function TaskActionsMenu({
     }
   };
 
-  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const focusable = Array.from(
       menuRef.current?.querySelectorAll<HTMLButtonElement>(
         '[role="menuitem"], [role="menuitemradio"]',
@@ -432,7 +441,7 @@ export function TaskActionsMenu({
       <IconButton
         ref={triggerRef}
         icon="more"
-        label="更多操作"
+        label={t("action.more", locale)}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? `task-actions-menu-${task.id}` : undefined}

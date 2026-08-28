@@ -1,4 +1,6 @@
+import { t } from "../i18n";
 import { request } from "./api";
+import { refreshQueueAfterChange } from "./refreshQueue";
 import { extractUrls, looksLikePlaylistUrl } from "./urls";
 import { useAppStore } from "../store/appStore";
 
@@ -24,10 +26,9 @@ export async function createTasksAndRefresh(
   const count = Array.isArray(result?.taskIds) ? result.taskIds.length : urls.length;
   pushToast({
     kind: "success",
-    title: count === 1 ? "已加入 1 个任务" : `已加入 ${count} 个任务`,
+    title: t("add.success", undefined, { count }),
   });
-  const snap = await request("app.getSnapshot");
-  useAppStore.getState().hydrateSnapshot(snap as never);
+  await refreshQueueAfterChange();
 }
 
 /**
@@ -41,7 +42,7 @@ export async function submitAddText(raw: string): Promise<string[]> {
   const urls = extractUrls(raw);
   if (urls.length === 0) {
     if (raw.trim()) {
-      pushToast({ kind: "warning", title: "没有发现有效链接" });
+      pushToast({ kind: "warning", title: t("add.none") });
     }
     return [];
   }
@@ -53,18 +54,18 @@ export async function submitAddText(raw: string): Promise<string[]> {
   }
   try {
     await createTasksAndRefresh(urls);
-  } catch (err) {
+  } catch {
     pushToast({
       kind: "error",
-      title: "添加失败",
-      detail: String(err),
+      title: t("add.failed"),
+      detail: t("add.retry"),
       sticky: true,
     });
     if (urls.length === 1) {
       pushToast({
         kind: "info",
-        title: "可尝试浏览器抓取",
-        detail: "若站点需要登录或 yt-dlp 无法解析，可使用顶部「浏览器抓取」按钮。",
+        title: t("add.captureHint"),
+        detail: t("add.captureCopy"),
       });
     }
   }

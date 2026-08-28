@@ -1,19 +1,11 @@
-import { useEffect, useState } from "react";
-
-import { getLocale, t, type Locale } from "../i18n";
+import { t, useLocale } from "../i18n";
 import { useAppStore } from "../store/appStore";
 import { Button } from "./ui/Button";
 import { Icon } from "./ui/Icon";
 
 export function EmptyState() {
   const requestAddFocus = useAppStore((state) => state.requestAddFocus);
-  const [locale, setLocaleState] = useState<Locale>(() => getLocale());
-
-  useEffect(() => {
-    const updateLocale = () => setLocaleState(getLocale());
-    window.addEventListener("downany:locale", updateLocale);
-    return () => window.removeEventListener("downany:locale", updateLocale);
-  }, []);
+  const locale = useLocale();
 
   return (
     <div className="empty-state">

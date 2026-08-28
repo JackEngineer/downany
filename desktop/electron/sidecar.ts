@@ -19,6 +19,7 @@ interface PendingRequest {
 
 export interface SidecarOptions {
   repoRoot: string;
+  appVersion: string;
   pythonPath?: string;
   dataDir?: string;
   requestTimeoutMs?: number;
@@ -149,7 +150,7 @@ export class SidecarProcess extends EventEmitter {
       this.write({
         protocolVersion: PROTOCOL_VERSION,
         type: "hello",
-        payload: { app: "electron", appVersion: "0.2.1" },
+        payload: { app: "electron", appVersion: this.opts.appVersion },
         timestamp: new Date().toISOString(),
       });
     } catch (err) {

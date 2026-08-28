@@ -33,6 +33,19 @@ function createProductionLayoutHarness() {
     handlersInstalled = true;
     ipcMain.handle("layout-fixture:request", (_event, method, payload = {}) => {
       if (method === "app.getSnapshot") return snapshot;
+      if (method === "settings.get") return snapshot.settings;
+      if (method === "app.runMigration") return { status: "skipped" };
+      if (method === "download.parseUrls") {
+        const parseId = "layout-parse";
+        setTimeout(() => {
+          if (!win || win.isDestroyed()) return;
+          (payload.urls || []).forEach((url, index) => win.webContents.send("layout-fixture:event", {
+            event: "download.parseResult",
+            payload: { parseId, index, url, ok: true, info: { title: "Layout video", platform: "web", formats: [], thumbnail_url: "" } },
+          }));
+        }, 30);
+        return { parseId };
+      }
       if (method === "search.query") {
         const searchId = String(payload.searchId || "");
         win?.webContents.send("layout-fixture:event", {
@@ -74,9 +87,11 @@ function createProductionLayoutHarness() {
         preload: path.join(__dirname, "production-preload.cjs"),
         contextIsolation: true,
         nodeIntegration: false,
+        backgroundThrottling: false,
       },
     });
     await win.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+    await win.webContents.insertCSS(".ui-button { transition: none !important; }");
     return win;
   }
 
@@ -122,10 +137,8 @@ function createProductionLayoutHarness() {
         label: "恢复 Electron userData 路径",
         run: () => app.setPath("userData", originalUserData),
       },
-      {
-        label: "删除生产验收临时目录",
-        run: () => fs.rmSync(tempDir, { recursive: true, force: true }),
-      },
+      // Chromium can retain cache handles until app exit on Windows. Keep this
+      // freshly owned directory as evidence instead of racing recursive deletion.
     ]);
   }
 

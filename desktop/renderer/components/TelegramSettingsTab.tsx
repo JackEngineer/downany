@@ -71,7 +71,7 @@ export function TelegramSettingsTab({ disabled }: { disabled: boolean }): JSX.El
     [config?.targetChatId, visibleTargets],
   );
 
-  const run = async <T,>(name: string, action: () => Promise<T>, success: string) => {
+  const run = async (name: string, action: () => Promise<unknown>, success: string) => {
     setBusy(name);
     setError("");
     setMessage("");

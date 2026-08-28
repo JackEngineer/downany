@@ -1,5 +1,7 @@
 # Chrome 扩展：媒体识别 + 一键入队
 
+扩展版本独立于桌面端：当前源码为 `0.8.2`，本轮随 `v0.3.0` Windows 本地候选验证，未因此更新商店或公开发布。桥协议和默认端口不变，不新增扩展权限。结果见 [候选记录](../docs/acceptance/v0.3.0-stable-baseline.md)。
+
 识别当前页面中的多媒体（DOM + 网络嗅探），勾选后发送到本机 **百纳**（Electron）。优先走本机 HTTP 桥 `127.0.0.1:17888`（可携带 Referer/Cookie）；若客户端未运行，会通过 `downany://open` 自动拉起，等桥就绪后再入队。仅在唤醒失败时才退回无 Cookie 的 `downany://add` 协议投递。
 
 纯嗅探逻辑在 `sniff-core.js`（无 Chrome API），桌面端 `desktop/electron/mediaSniff.ts` 与之对齐，便于复用清单解析与 URL 分类。

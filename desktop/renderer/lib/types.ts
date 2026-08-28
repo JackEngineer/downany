@@ -1,6 +1,7 @@
 import type { ConnectionState } from "../../electron/protocol";
 
 export type { ConnectionState };
+export type { TaskProgressPatch } from "../../electron/taskProgressRelay";
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 
@@ -63,6 +64,26 @@ export interface TaskSnapshot {
   group_id?: string;
   group_title?: string;
   playlist_index?: number;
+}
+
+export type TaskAction = "pause" | "resume" | "cancel" | "retry";
+
+export interface TaskActionEntry {
+  taskId: string;
+  status: string | null;
+  reason?: string;
+}
+
+export interface TaskActionReport {
+  action: TaskAction;
+  applied: TaskActionEntry[];
+  deferred: TaskActionEntry[];
+  skipped: TaskActionEntry[];
+}
+
+export interface GroupRemovalReport {
+  removed: string[];
+  fileDeleteFailures: { taskId: string; message: string }[];
 }
 
 export interface AppSettings {

@@ -19,6 +19,23 @@ from src.core.system_proxy import detect_system_proxy
 VALID_POSTPROCESSING = {"none", "mp4", "mp3", "script"}
 
 
+def _bounded_count(value: Any, *, lower: int, upper: int, fallback: int) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError, OverflowError):
+        count = fallback
+    return min(upper, max(lower, count))
+
+
+def _normalize_resource_limits(data: Dict[str, Any]) -> None:
+    data["concurrent_downloads"] = _bounded_count(
+        data.get("concurrent_downloads", 3), lower=1, upper=10, fallback=3,
+    )
+    data["concurrent_fragments"] = _bounded_count(
+        data.get("concurrent_fragments", 4) or 0, lower=0, upper=32, fallback=4,
+    )
+
+
 class JsonConfig:
     """基于 JSON 文件的配置，满足 DownloadConfig 协议。"""
 
@@ -92,9 +109,11 @@ class JsonConfig:
             merged["download_dir"] = self._sanitize_download_dir(
                 str(merged.get("download_dir") or "")
             )
+            _normalize_resource_limits(merged)
             self._data = merged
-            # 若从旧 Trae 路径纠正过来，落盘一次
-            if loaded.get("download_dir") != self._data["download_dir"]:
+            if any(loaded.get(key) != merged[key] for key in (
+                "download_dir", "concurrent_downloads", "concurrent_fragments",
+            )):
                 self._save()
         else:
             self._data = self._defaults()
@@ -129,6 +148,7 @@ class JsonConfig:
             merged["download_dir"] = self._sanitize_download_dir(
                 str(merged.get("download_dir") or "")
             )
+            _normalize_resource_limits(merged)
             self._data = merged
             return self.to_dict()
 
@@ -283,8 +303,8 @@ class JsonConfig:
         next_data["embed_metadata"] = bool(next_data.get("embed_metadata", True))
         next_data["subtitle_langs"] = str(next_data.get("subtitle_langs", "") or "")
         next_data["embed_subs"] = bool(next_data.get("embed_subs", False))
-        next_data["concurrent_fragments"] = max(
-            0, int(next_data.get("concurrent_fragments", 4) or 0)
+        next_data["concurrent_fragments"] = min(
+            32, max(0, int(next_data.get("concurrent_fragments", 4) or 0)),
         )
         next_data["download_sections"] = str(next_data.get("download_sections", "") or "")
         next_data["sponsorblock_remove"] = str(
@@ -308,7 +328,7 @@ class JsonConfig:
         self._save()
 
     def get_concurrent_downloads(self) -> int:
-        return int(self._data.get("concurrent_downloads", 3))
+        return _bounded_count(self._data.get("concurrent_downloads", 3), lower=1, upper=10, fallback=3)
 
     def set_concurrent_downloads(self, count: int) -> None:
         self._data["concurrent_downloads"] = max(1, min(int(count), 10))
@@ -409,7 +429,9 @@ class JsonConfig:
             embed_metadata=bool(self._data.get("embed_metadata", True)),
             subtitle_langs=str(self._data.get("subtitle_langs", "") or ""),
             embed_subs=bool(self._data.get("embed_subs", False)),
-            concurrent_fragments=int(self._data.get("concurrent_fragments", 4) or 0),
+            concurrent_fragments=_bounded_count(
+                self._data.get("concurrent_fragments", 4) or 0, lower=0, upper=32, fallback=4,
+            ),
             download_sections=str(self._data.get("download_sections", "") or ""),
             sponsorblock_remove=str(self._data.get("sponsorblock_remove", "") or ""),
         )

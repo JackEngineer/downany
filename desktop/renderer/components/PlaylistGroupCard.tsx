@@ -1,21 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
+import { t, useLocale } from "../i18n";
 import { request } from "../lib/api";
 import { isActiveStatus } from "../lib/format";
-import type { TaskSnapshot } from "../lib/types";
+import { comparePlaylistTasks } from "../lib/queueOrdering";
+import { taskActionToast } from "../lib/taskActionReport";
+import { refreshQueueAfterChange } from "../lib/refreshQueue";
+import type { GroupRemovalReport, TaskAction, TaskActionReport, TaskSnapshot } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 import { MediaTaskBanner } from "./task/MediaTaskBanner";
 import { Icon } from "./ui/Icon";
 
 function sortGroupTasks(tasks: TaskSnapshot[]): TaskSnapshot[] {
-  return tasks.slice().sort((a, b) => {
-    const ia = a.playlist_index ?? 0;
-    const ib = b.playlist_index ?? 0;
-    if (ia !== ib) return ia - ib;
-    const orderA = a.queue_order ?? 0;
-    const orderB = b.queue_order ?? 0;
-    return orderA - orderB;
-  });
+  return tasks.slice().sort(comparePlaylistTasks);
 }
 
 function aggregateProgress(tasks: TaskSnapshot[]): {
@@ -34,30 +31,20 @@ function aggregateProgress(tasks: TaskSnapshot[]): {
   return { completed, total, percent };
 }
 
-async function runForGroup(
-  tasks: TaskSnapshot[],
-  method: "download.pause" | "download.resume" | "download.cancel" | "download.retry",
-  predicate: (task: TaskSnapshot) => boolean,
-): Promise<void> {
-  const targets = tasks.filter(predicate);
-  await Promise.all(
-    targets.map((task) =>
-      request(method, { taskId: task.id }).catch(() => undefined),
-    ),
-  );
-}
-
-export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
+export function PlaylistGroupCard({ tasks, queueControls }: { tasks: TaskSnapshot[]; queueControls?: ReactNode }) {
+  const locale = useLocale();
   const pushToast = useAppStore((s) => s.pushToast);
   const [expanded, setExpanded] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [acting, setActing] = useState(false);
+  const actionPending = useRef(false);
   const ordered = useMemo(() => sortGroupTasks(tasks), [tasks]);
-  const title = ordered[0]?.group_title || "播放列表";
+  const title = ordered[0]?.group_title || t("group.title", locale);
   const groupId = (ordered[0]?.group_id || "").trim();
   const { completed, total, percent } = aggregateProgress(ordered);
-  const hasDownloading = ordered.some((t) => t.status === "downloading");
+  const hasRunning = ordered.some((t) => t.status === "pending" || t.status === "downloading");
   const hasPaused = ordered.some((t) => t.status === "paused");
   const hasFailed = ordered.some(
     (t) => t.status === "failed" || t.status === "cancelled",
@@ -67,46 +54,47 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
     (t) => t.status === "completed" && Boolean(t.file_path),
   );
 
-  const refresh = async () => {
-    const snap = await request<{ tasks: TaskSnapshot[]; settings: never }>(
-      "app.getSnapshot",
-    );
-    useAppStore.getState().hydrateSnapshot(snap as never);
-  };
-
-  const act = async (
-    method: "download.pause" | "download.resume" | "download.cancel" | "download.retry",
-    predicate: (task: TaskSnapshot) => boolean,
-    label: string,
-  ) => {
+  const act = async (action: TaskAction) => {
+    if (!groupId || actionPending.current || removing) return;
+    actionPending.current = true;
+    setActing(true);
     try {
-      await runForGroup(ordered, method, predicate);
-      pushToast({ kind: "info", title: label });
-    } catch (err) {
-      pushToast({ kind: "error", title: "组操作失败", detail: String(err) });
+      const report = await request<TaskActionReport>("download.applyGroupAction", { groupId, action });
+      await refreshQueueAfterChange();
+      pushToast(taskActionToast(report));
+    } catch {
+      pushToast({ kind: "error", title: t("group.actionFailed"), detail: t("error.retryLater") });
+    } finally {
+      actionPending.current = false;
+      setActing(false);
     }
   };
 
   const confirmRemoveGroup = async () => {
-    if (!groupId || removing) return;
+    if (!groupId || removing || actionPending.current) return;
     setRemoving(true);
     try {
-      const result = await request<{ removed?: string[] }>("download.removeGroup", {
+      const result = await request<GroupRemovalReport>("download.removeGroup", {
         groupId,
         delete_files: deleteFiles,
       });
-      await refresh();
-      const n = Array.isArray(result?.removed) ? result.removed.length : ordered.length;
+      await refreshQueueAfterChange();
+      const n = result.removed.length;
+      const failures = result.fileDeleteFailures?.length ?? 0;
       pushToast({
-        kind: "success",
-        title: deleteFiles
-          ? `已删除合集（含本地文件）· ${n} 项`
-          : `已从队列移除合集 · ${n} 项`,
+        kind: failures > 0 ? "warning" : n > 0 ? "success" : "info",
+        title: failures > 0
+          ? t("group.fileFailures", locale, { count: n, failures })
+          : n === 0
+            ? t("group.noneRemoved", locale)
+            : deleteFiles
+              ? t("group.removedFiles", locale, { count: n })
+              : t("group.removed", locale, { count: n }),
       });
       setConfirmDelete(false);
       setDeleteFiles(false);
-    } catch (err) {
-      pushToast({ kind: "error", title: "删除合集失败", detail: String(err) });
+    } catch {
+      pushToast({ kind: "error", title: t("group.removeFailed"), detail: t("error.retryLater") });
     } finally {
       setRemoving(false);
     }
@@ -127,78 +115,60 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
           <div className="playlist-group-heading">
             <strong className="playlist-group-title">{title}</strong>
             <span className="playlist-group-meta muted">
-              {completed}/{total} 完成 · {percent}%
+              {t("group.progress", locale, { completed, total, percent })}
             </span>
           </div>
         </button>
         <div className="playlist-group-actions">
-          {hasDownloading ? (
+          {queueControls}
+          {hasRunning ? (
             <button
               type="button"
               className="ghost-btn"
-              onClick={() =>
-                void act(
-                  "download.pause",
-                  (t) => t.status === "downloading",
-                  "已暂停组内下载",
-                )
-              }
+              disabled={acting || removing}
+              onClick={() => void act("pause")}
             >
-              暂停
+              {t("action.pause", locale)}
             </button>
           ) : null}
           {hasPaused ? (
             <button
               type="button"
               className="primary"
-              onClick={() =>
-                void act(
-                  "download.resume",
-                  (t) => t.status === "paused",
-                  "已恢复组内任务",
-                )
-              }
+              disabled={acting || removing}
+              onClick={() => void act("resume")}
             >
-              恢复
+              {t("action.resume", locale)}
             </button>
           ) : null}
           {hasFailed ? (
             <button
               type="button"
               className="ghost-btn"
-              onClick={() =>
-                void act(
-                  "download.retry",
-                  (t) => t.status === "failed" || t.status === "cancelled",
-                  "已重试组内失败任务",
-                )
-              }
+              disabled={acting || removing}
+              onClick={() => void act("retry")}
             >
-              重试
+              {t("action.retry", locale)}
             </button>
           ) : null}
           {hasActive ? (
             <button
               type="button"
               className="ghost-btn"
-              onClick={() =>
-                void act(
-                  "download.cancel",
-                  (t) => isActiveStatus(t.status),
-                  "已取消组内任务",
-                )
-              }
+              disabled={acting || removing}
+              onClick={() => void act("cancel")}
             >
-              取消
+              {t("action.cancel", locale)}
             </button>
           ) : null}
           {groupId ? (
             <button
               type="button"
               className="ghost-btn danger-btn"
+              disabled={acting || removing}
               onClick={() => setConfirmDelete(true)}
             >
-              删除
+              {t("action.delete", locale)}
             </button>
           ) : null}
         </div>
@@ -207,11 +177,11 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
         <div style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
       {confirmDelete ? (
-        <div className="playlist-group-delete" role="group" aria-label="确认删除合集">
+        <div className="playlist-group-delete" role="group" aria-label={t("group.confirmLabel", locale)}>
           <div className="playlist-group-delete-copy">
-            <strong>删除整组合集？</strong>
+            <strong>{t("group.confirmTitle", locale)}</strong>
             <p className="muted">
-              「{title}」共 {total} 项；进行中的任务会先取消再移除。
+              {t("group.confirmCopy", locale, { title, total })}
             </p>
             <label className="playlist-group-delete-option">
               <input
@@ -221,8 +191,8 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
                 onChange={(e) => setDeleteFiles(e.target.checked)}
               />
               <span>
-                同时删除已下载的本地文件
-                {!hasLocalFiles ? <em className="muted">（暂无已完成文件）</em> : null}
+                {t("group.deleteFiles", locale)}
+                {!hasLocalFiles ? <em className="muted">{t("group.noFiles", locale)}</em> : null}
               </span>
             </label>
           </div>
@@ -236,7 +206,7 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
                 setDeleteFiles(false);
               }}
             >
-              返回
+              {t("action.back", locale)}
             </button>
             <button
               type="button"
@@ -244,7 +214,7 @@ export function PlaylistGroupCard({ tasks }: { tasks: TaskSnapshot[] }) {
               disabled={removing}
               onClick={() => void confirmRemoveGroup()}
             >
-              {removing ? "删除中…" : "确认删除"}
+              {t(removing ? "action.deleting" : "action.confirmDelete", locale)}
             </button>
           </div>
         </div>

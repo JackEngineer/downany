@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import src.data.json_config as json_config
@@ -103,3 +105,68 @@ def test_invalid_windows_filename_template_does_not_mutate_config(tmp_path):
 
     assert path.read_bytes() == before_bytes
     assert cfg.to_dict() == before_data
+
+
+@pytest.mark.parametrize("source", ["load", "reload", "patch", "build"])
+@pytest.mark.parametrize("value,expected", [(-7, 0), (0, 0), (4, 4), (16, 16),
+                                          (32, 32), (128, 32), ("100", 32), (None, 0)])
+def test_fragment_limit_is_bounded_at_every_config_boundary(tmp_path, monkeypatch, source, value, expected):
+    monkeypatch.setattr(json_config, "detect_system_proxy", lambda: None)
+    path = tmp_path / "config.json"
+    cfg = JsonConfig(str(path))
+    if source in {"load", "reload"}:
+        saved = cfg.to_dict()
+        saved.update({"concurrent_fragments": value, "custom_setting": "keep"})
+        path.write_text(json.dumps(saved), encoding="utf-8")
+        if source == "load":
+            cfg = JsonConfig(str(path))
+        else:
+            cfg.reload_from_disk()
+        assert cfg.to_dict()["custom_setting"] == "keep"
+    elif source == "patch":
+        cfg.update_from_dict({"concurrent_fragments": value})
+    else:
+        cfg._data["concurrent_fragments"] = value
+    assert cfg.build_download_options().concurrent_fragments == expected
+    if source != "build":
+        assert cfg.to_dict()["concurrent_fragments"] == expected
+
+
+@pytest.mark.parametrize("source", ["load", "reload"])
+@pytest.mark.parametrize("value,expected", [(-2, 1), (0, 1), (30, 10), ("99", 10)])
+def test_legacy_worker_count_stays_within_scheduler_limits(tmp_path, source, value, expected):
+    path = tmp_path / "config.json"
+    cfg = JsonConfig(str(path))
+    saved = cfg.to_dict()
+    saved["concurrent_downloads"] = value
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    if source == "load":
+        cfg = JsonConfig(str(path))
+    else:
+        cfg.reload_from_disk()
+    assert cfg.get_concurrent_downloads() == expected
+    assert cfg.to_dict()["concurrent_downloads"] == expected
+
+
+@pytest.mark.parametrize("source", ["load", "reload"])
+def test_unreadable_legacy_resource_values_use_safe_defaults(tmp_path, source):
+    path = tmp_path / "config.json"
+    cfg = JsonConfig(str(path))
+    saved = cfg.to_dict()
+    saved.update({"concurrent_downloads": "future-value", "concurrent_fragments": "future-value"})
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    if source == "load":
+        cfg = JsonConfig(str(path))
+    else:
+        cfg.reload_from_disk()
+    assert cfg.get_concurrent_downloads() == 3
+    assert cfg.to_dict()["concurrent_fragments"] == 4
+
+
+def test_invalid_fragment_patch_does_not_change_settings(tmp_path):
+    path = tmp_path / "config.json"
+    cfg = JsonConfig(str(path))
+    before = path.read_bytes(), cfg.to_dict()
+    with pytest.raises(ValueError):
+        cfg.update_from_dict({"concurrent_fragments": "not-a-number"})
+    assert (path.read_bytes(), cfg.to_dict()) == before

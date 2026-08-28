@@ -10,26 +10,26 @@ export function isActiveStatus(status: string): boolean {
   return status === "downloading" || status === "pending" || status === "paused";
 }
 
-export function statusLabel(status: string): string {
+export function statusLabel(status: string, locale: Locale = getLocale()): string {
   switch (status) {
     case "pending":
-      return "等待中";
+      return t("status.pending", locale);
     case "downloading":
-      return "下载中";
+      return t("status.downloading", locale);
     case "paused":
-      return "已暂停";
+      return t("status.paused", locale);
     case "completed":
-      return "已完成";
+      return t("status.completed", locale);
     case "failed":
-      return "下载失败";
+      return t("status.failed", locale);
     case "cancelled":
-      return "已取消";
+      return t("status.cancelled", locale);
     default:
-      return "状态未知";
+      return t("status.unknown", locale);
   }
 }
 
-export function platformLabel(platform: string | undefined | null): string {
+export function platformLabel(platform: string | undefined | null, locale: Locale = getLocale()): string {
   const key = String(platform || "").trim().toLowerCase();
   switch (key) {
     case "youtube":
@@ -37,7 +37,7 @@ export function platformLabel(platform: string | undefined | null): string {
     case "bilibili":
       return "Bilibili";
     case "douyin":
-      return "抖音";
+      return t("platform.douyin", locale);
     case "tiktok":
       return "TikTok";
     case "twitter":
@@ -45,13 +45,14 @@ export function platformLabel(platform: string | undefined | null): string {
     case "instagram":
       return "Instagram";
     case "pornhub":
-      return "视频平台";
+      return t("platform.video", locale);
     case "xiaohongshu":
-      return "小红书";
+      return t("platform.xiaohongshu", locale);
     case "unknown":
     case "":
-      return "未知平台";
+      return t("platform.unknown", locale);
     default:
       return key;
   }
 }
+import { getLocale, t, type Locale } from "../i18n";

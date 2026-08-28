@@ -1,5 +1,7 @@
 /** 主进程侧的任务状态跟踪：驱动 Dock 角标/进度条与托盘菜单。 */
 
+import { acceptsTaskProgress, taskProgressPatch, type TaskProgressPatch } from "./taskProgressRelay";
+
 export interface TrackedTask {
   id: string;
   title: string;
@@ -50,6 +52,12 @@ export class TaskTracker {
     const taskId = String(payload.taskId || payload.task_id || "");
     const incoming = payload.task as SnapshotLike | undefined;
 
+    if (event.event === "task.progress") {
+      const patch = taskProgressPatch(event);
+      if (patch) this.applyProgressBatch([patch]);
+      return;
+    }
+
     if (event.event === "task.removed" && taskId) {
       this.tasks.delete(taskId);
       return;
@@ -73,15 +81,14 @@ export class TaskTracker {
       return;
     }
 
-    if (event.event === "task.progress" && taskId && payload.progress) {
-      const prev = this.tasks.get(taskId);
-      if (!prev) return;
-      const progress = payload.progress as { progress?: number };
-      this.tasks.set(taskId, {
-        ...prev,
-        progress:
-          typeof progress.progress === "number" ? progress.progress : prev.progress,
-      });
+  }
+
+  applyProgressBatch(updates: readonly TaskProgressPatch[]): void {
+    for (const update of updates) {
+      const previous = this.tasks.get(update.taskId);
+      if (!previous || !acceptsTaskProgress(previous.status)) continue;
+      if (typeof update.progress !== "number" || !Number.isFinite(update.progress)) continue;
+      this.tasks.set(update.taskId, { ...previous, progress: update.progress });
     }
   }
 

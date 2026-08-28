@@ -19,6 +19,13 @@ class TaskStatus(Enum):
     CANCELLED = "cancelled"      # 已取消
 
 
+class TaskRunIntent(str, Enum):
+    """持久化用户运行意图；不向任务快照增加公共状态。"""
+
+    RUN = "run"
+    PAUSE = "pause"
+
+
 class Platform(Enum):
     """支持的平台枚举"""
     YOUTUBE = "youtube"
@@ -126,6 +133,7 @@ class DownloadTask:
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    run_intent: TaskRunIntent = TaskRunIntent.RUN
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

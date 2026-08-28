@@ -121,7 +121,7 @@ export function installGalleryApiMock(): void {
   Object.defineProperty(window, "api", {
     configurable: true,
     writable: true,
-    value: mock as DesktopApi,
+    value: mock as unknown as DesktopApi,
   });
 }
 

@@ -5,7 +5,7 @@ from enum import Enum
 
 PROTOCOL_VERSION = 1
 APP_NAME = "Downany"
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.3.0"
 
 
 class MessageType(str, Enum):
@@ -32,6 +32,7 @@ class Method(str, Enum):
     DOWNLOAD_RETRY = "download.retry"
     DOWNLOAD_REMOVE = "download.remove"
     DOWNLOAD_REMOVE_GROUP = "download.removeGroup"
+    DOWNLOAD_APPLY_GROUP_ACTION = "download.applyGroupAction"
     DOWNLOAD_CLEAR_FINISHED = "download.clearFinished"
     DOWNLOAD_UPDATE_TASK = "download.updateTask"
     DOWNLOAD_REORDER = "download.reorder"

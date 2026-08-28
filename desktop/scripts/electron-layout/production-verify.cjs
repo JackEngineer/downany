@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { assert, waitFor } = require("./verification-utils.cjs");
+const { verifyKeyPaths } = require("./key-path-verify.cjs");
 
 const VIEWPORT_WIDTH = 760;
 const PRODUCTION_SMALL_HEIGHT = 560;
@@ -622,6 +623,7 @@ async function verifyProductionPath(harness, options = {}) {
   assertNetworkSearchGeometry(narrowNetworkSearch, 1);
   await returnToDownloadList(win);
 
+  const keyPaths = await verifyKeyPaths(win, harness);
   return {
     small,
     large,
@@ -632,6 +634,7 @@ async function verifyProductionPath(harness, options = {}) {
     states,
     networkSearch,
     narrowNetworkSearch,
+    keyPaths,
   };
 }
 

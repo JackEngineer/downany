@@ -170,6 +170,9 @@ async function inspectReducedTransparencyFocus(win) {
           outlineWidth: style.outlineWidth,
           outlineOffset: style.outlineOffset,
           boxShadow: style.boxShadow,
+          matchedBackgrounds: [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules])
+            .filter((rule) => rule.selectorText && action.matches(rule.selectorText) && rule.style?.background)
+            .map((rule) => ({ selector: rule.selectorText, background: rule.style.background })),
         });
       }, 250);
     })`,
@@ -191,9 +194,13 @@ async function run() {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        backgroundThrottling: false,
       },
     });
     await win.loadFile(path.join(__dirname, "..", "dist", "design-system.html"));
+    // Hidden windows may suspend CSS transition timelines. Inspect final-state
+    // colors and geometry, not a frozen intermediate animation frame.
+    await win.webContents.insertCSS(".ui-button { transition: none !important; }");
     await waitFor(
       win,
       'document.querySelectorAll(".design-system-gallery__product-queue > .media-task-banner").length === 3',
@@ -248,7 +255,7 @@ async function run() {
     });
 
     process.stdout.write(
-      `${JSON.stringify({ ok: true, gallery: { geometry, focus }, production }, null, 2)}\n`,
+      `${JSON.stringify({ ok: true, retainedDataRoot: productionHarness.tempDir, gallery: { geometry, focus }, production }, null, 2)}\n`,
     );
   } finally {
     await runBestEffortCleanup([

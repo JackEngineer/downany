@@ -4,9 +4,11 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type SyntheticEvent,
 } from "react";
 
+import { t, useLocale } from "../../i18n";
 import { platformLabel } from "../../lib/format";
 import type { TaskSnapshot } from "../../lib/types";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -33,17 +35,18 @@ import { useTaskCommands, type TaskCommands } from "./useTaskCommands";
 export interface MediaTaskBannerProps {
   task: TaskSnapshot;
   density?: "normal" | "compact";
+  queueControls?: ReactNode;
 }
 
 interface ArtworkState {
-  url: string;
+  url: string | undefined;
   broken: boolean;
   focusBroken: boolean;
   naturalSize: ArtworkDimensions | null;
   tone: ArtworkTone;
 }
 
-function initialArtworkState(url: string): ArtworkState {
+function initialArtworkState(url: string | undefined): ArtworkState {
   return {
     url,
     broken: false,
@@ -75,16 +78,16 @@ function runPrimaryAction(
 }
 
 const RECOVERY_ACTION_VIEWS = {
-  login: { label: "选择登录状态", icon: "settings" },
-  network: { label: "检查网络设置", icon: "settings" },
-  updateTool: { label: "更新下载工具", icon: "settings" },
-  recognize: { label: "网页识别", icon: "capture" },
-  downloadSettings: { label: "检查下载设置", icon: "settings" },
-  appDownload: { label: "重新安装 Downany", icon: "download" },
-  diagnostics: { label: "导出诊断", icon: "folder" },
+  login: { labelKey: "recovery.login", icon: "settings" },
+  network: { labelKey: "recovery.network", icon: "settings" },
+  updateTool: { labelKey: "recovery.updateTool", icon: "settings" },
+  recognize: { labelKey: "recovery.recognize", icon: "capture" },
+  downloadSettings: { labelKey: "recovery.downloadSettings", icon: "settings" },
+  appDownload: { labelKey: "recovery.appDownload", icon: "download" },
+  diagnostics: { labelKey: "recovery.diagnostics", icon: "folder" },
 } as const satisfies Record<
   FailureRecoveryAction,
-  { label: string; icon: "settings" | "capture" | "download" | "folder" }
+  { labelKey: string; icon: "settings" | "capture" | "download" | "folder" }
 >;
 
 function runRecoveryAction(
@@ -120,6 +123,7 @@ function FailureRecoveryActions({
   task: TaskSnapshot;
   commands: TaskCommands;
 }) {
+  const locale = useLocale();
   if (presentTask(task).status !== "failed") return null;
   const view = failureRecoveryFor(task.error_code);
 
@@ -127,6 +131,7 @@ function FailureRecoveryActions({
     <>
       {view.actions.map((action) => {
         const presentation = RECOVERY_ACTION_VIEWS[action];
+        const label = t(presentation.labelKey, locale);
         return (
           <Button
             key={action}
@@ -134,12 +139,12 @@ function FailureRecoveryActions({
             size="small"
             variant="ghost"
             leadingIcon={presentation.icon}
-            aria-label={presentation.label}
-            title={presentation.label}
+            aria-label={label}
+            title={label}
             onClick={() => void runRecoveryAction(action, commands)}
           >
             <span className="media-task-banner__recovery-label">
-              {presentation.label}
+              {label}
             </span>
           </Button>
         );
@@ -151,9 +156,11 @@ function FailureRecoveryActions({
 export function MediaTaskBanner({
   task,
   density = "normal",
+  queueControls,
 }: MediaTaskBannerProps) {
+  const locale = useLocale();
   const commands = useTaskCommands(task);
-  const view = useMemo(() => presentTask(task), [task]);
+  const view = useMemo(() => presentTask(task, new Date(), locale), [task, locale]);
   const [editing, setEditing] = useState(false);
   const [retryConfirmationOpen, setRetryConfirmationOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
@@ -329,7 +336,7 @@ export function MediaTaskBanner({
       onContextMenu={(event) => {
         event.preventDefault();
         void window.api
-          .showTaskContextMenu(buildTaskContextTemplate(task))
+          .showTaskContextMenu(buildTaskContextTemplate(task, locale))
           .then((picked) => {
             if (picked) {
               void dispatchTaskAction(
@@ -381,7 +388,7 @@ export function MediaTaskBanner({
           <input
             ref={editRef}
             className="media-task-banner__title-input"
-            aria-label="重命名任务"
+            aria-label={t("action.renameTask", locale)}
             value={draftTitle}
             onChange={(event) => setDraftTitle(event.target.value)}
             onBlur={() => void submitRename()}
@@ -390,7 +397,7 @@ export function MediaTaskBanner({
         ) : (
           <strong
             className="media-task-banner__title"
-            title={`${task.title || task.url}（双击重命名）`}
+            title={t("action.renameHint", locale, { title: task.title || task.url })}
             onDoubleClick={startRename}
           >
             {task.title || task.url}
@@ -425,7 +432,7 @@ export function MediaTaskBanner({
             className="media-task-banner__primary-action"
             size="small"
             onClick={() =>
-              void runPrimaryAction(
+              view.primaryAction && void runPrimaryAction(
                 view.primaryAction,
                 commands,
                 requestRetry,
@@ -442,12 +449,13 @@ export function MediaTaskBanner({
           onRename={startRename}
           onRetryRequested={requestRetry}
         />
+        {queueControls}
       </div>
       {view.showProgress ? (
         <div
           className="media-task-banner__progress"
           role="progressbar"
-          aria-label="下载进度"
+          aria-label={t("task.progress", locale)}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={view.progress}
@@ -458,9 +466,9 @@ export function MediaTaskBanner({
       </li>
       <ConfirmDialog
         open={retryConfirmationOpen}
-        title="重新下载这项内容？"
-        message="上次生成的文件未通过检查。重试会重新下载并保存为新文件，不会覆盖已有文件。"
-        confirmLabel="重新下载"
+        title={t("retry.title", locale)}
+        message={t("retry.copy", locale)}
+        confirmLabel={t("action.downloadAgain", locale)}
         onConfirm={() => void confirmRetry()}
         onCancel={() => setRetryConfirmationOpen(false)}
       />

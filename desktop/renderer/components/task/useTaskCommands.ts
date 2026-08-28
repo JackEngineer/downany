@@ -1,12 +1,14 @@
 import { useCallback, useMemo } from "react";
 
+import { t } from "../../i18n";
 import {
   openExtractWindow,
   openPath,
   openSettings as openSettingsWindow,
   request,
 } from "../../lib/api";
-import type { AppSnapshot, TaskSnapshot } from "../../lib/types";
+import { refreshQueueAfterChange } from "../../lib/refreshQueue";
+import type { TaskSnapshot } from "../../lib/types";
 import { useAppStore } from "../../store/appStore";
 
 export interface TaskCommands {
@@ -30,33 +32,28 @@ export interface TaskCommands {
 export function useTaskCommands(task: TaskSnapshot): TaskCommands {
   const pushToast = useAppStore((state) => state.pushToast);
 
-  const refresh = useCallback(async () => {
-    const snapshot = await request<AppSnapshot>("app.getSnapshot");
-    useAppStore.getState().hydrateSnapshot(snapshot);
-  }, []);
-
   const run = useCallback<TaskCommands["run"]>(
     async (method) => {
       try {
         await request(method, { taskId: task.id });
-        await refresh();
-      } catch (error) {
-        pushToast({ kind: "error", title: "操作失败", detail: String(error) });
+        await refreshQueueAfterChange();
+      } catch {
+        pushToast({ kind: "error", title: t("error.action"), detail: t("error.actionRetry") });
       }
     },
-    [pushToast, refresh, task.id],
+    [pushToast, task.id],
   );
 
   const update = useCallback<TaskCommands["update"]>(
     async (patch) => {
       try {
         await request("download.updateTask", { taskId: task.id, ...patch });
-        await refresh();
-      } catch (error) {
-        pushToast({ kind: "error", title: "更新失败", detail: String(error) });
+        await refreshQueueAfterChange();
+      } catch {
+        pushToast({ kind: "error", title: t("error.updateTask"), detail: t("error.updateTaskRetry") });
       }
     },
-    [pushToast, refresh, task.id],
+    [pushToast, task.id],
   );
 
   const exportDiagnostics = useCallback(async () => {
@@ -66,12 +63,14 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
         {},
       );
       if (!result.ok || !result.path) throw new Error("diagnostics unavailable");
-      await window.api.showItemInFolder(result.path);
-      pushToast({ kind: "success", title: "诊断包已导出" });
+      pushToast({ kind: "success", title: t("diagnostics.success") });
+      await window.api.showItemInFolder(result.path).catch(() => {
+        pushToast({ kind: "info", title: t("diagnostics.revealFailed") });
+      });
     } catch {
       pushToast({
         kind: "error",
-        title: "诊断包导出失败，请稍后重试。",
+        title: t("diagnostics.failed"),
       });
     }
   }, [pushToast]);
@@ -84,8 +83,16 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
     } catch {
       pushToast({
         kind: "error",
-        title: "暂时无法打开下载页面，请稍后重试。",
+        title: t("update.openFailed"),
       });
+    }
+  }, [pushToast]);
+
+  const safeOpen = useCallback(async (action: () => Promise<unknown>, titleKey: string) => {
+    try {
+      await action();
+    } catch {
+      pushToast({ kind: "error", title: t(titleKey) });
     }
   }, [pushToast]);
 
@@ -93,21 +100,22 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
     () => ({
       run,
       update,
-      open: async () => {
+      open: () => safeOpen(async () => {
         if (task.file_path) {
-          await openPath(task.file_path);
+          const error = await openPath(task.file_path);
+          if (error) throw new Error("open failed");
         }
-      },
-      reveal: async () => {
+      }, "error.openFile"),
+      reveal: () => safeOpen(async () => {
         if (task.file_path) {
           await window.api.showItemInFolder(task.file_path);
         }
-      },
-      recognizePage: () => openExtractWindow(task.url),
-      openSettings: () => openSettingsWindow(),
+      }, "error.openFolder"),
+      recognizePage: () => safeOpen(() => openExtractWindow(task.url), "add.recognizeFailed"),
+      openSettings: () => safeOpen(() => openSettingsWindow(), "settings.openFailed"),
       exportDiagnostics,
       openAppDownload,
     }),
-    [exportDiagnostics, openAppDownload, run, task.file_path, task.url, update],
+    [exportDiagnostics, openAppDownload, run, safeOpen, task.file_path, task.url, update],
   );
 }

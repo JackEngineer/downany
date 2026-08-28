@@ -1,5 +1,8 @@
 """DownloadManager 状态机与并发安全测试（Qt 无关）。"""
+import asyncio
+import hashlib
 import shutil
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -15,17 +18,19 @@ from src.core.download_task import (
     DownloadOptions,
     DownloadTask,
     Platform,
+    TaskRunIntent,
     TaskStatus,
     VideoInfo,
 )
 from src.core.downloader import DownloadCancelled, DownloadError
 from src.core.downloader import DownloadResult, SourceFacts
+from src.core.task_actions import TaskAction, TaskActionOutcome
 from src.core.media_verifier import MediaVerification
 from src.core.output_commit import CommittedOutput
 from src.core import error_codes as ec
 from src.data.database import HistoryDB
 from src.data.json_config import JsonConfig
-from src.data.telegram_delivery_store import TelegramDeliveryStore
+from src.data.telegram_delivery_store import DeliveryStateConflict, TelegramDeliveryStore
 from src.data.queue_store import QueueStore
 from src.sidecar.telegram_delivery_service import TelegramDeliveryService
 from src.sidecar.bin_paths import MediaToolchain
@@ -241,6 +246,50 @@ def test_youtube_progress_replaces_stale_extension_title(manager):
         assert _wait_until(lambda: task.status == TaskStatus.COMPLETED)
 
     assert observed["title_during_download"] == "当前视频真实标题"
+
+
+def test_progress_callbacks_never_open_sqlite_and_late_callbacks_preserve_completion(tmp_path, monkeypatch):
+    store = QueueStore(str(tmp_path / "queue.db"))
+    mgr = DownloadManager(config=JsonConfig(str(tmp_path / "config.json")),
+                          db=MagicMock(), queue_store=store, temp_dir=str(tmp_path / "staging"))
+    task = _make_task(url="https://www.youtube.com/watch?v=local-test", title="old title")
+    mgr.add_task(task)
+    callback_writes, progress_hook = [], []
+    real_connect = store._get_connection
+    in_callback = [False]
+
+    def connect():
+        if in_callback[0]:
+            callback_writes.append(True)
+        return real_connect()
+
+    monkeypatch.setattr(store, "_get_connection", connect)
+    with patch("src.core.download_manager.Downloader") as mock_cls:
+        instance = MagicMock()
+        instance.last_info = None
+
+        def download(_url, _plan, *, toolchain, staging_dir):
+            progress = instance.set_callbacks.call_args.kwargs["progress"]
+            progress_hook.append(progress)
+            in_callback[0] = True
+            try:
+                for value in range(100):
+                    progress({"status": "downloading", "_percent_str": f"{value}%",
+                              "downloaded_bytes": value, "total_bytes": 100,
+                              "info_dict": {"title": "current title"}})
+            finally:
+                in_callback[0] = False
+            return _download_result(instance, staging_dir, "local.mp4", info={"title": "current title"})
+
+        instance.download.side_effect = download
+        mock_cls.return_value = instance
+        mgr._download_task(task)
+    assert task.status is TaskStatus.COMPLETED
+    assert callback_writes == []
+    before = task.to_snapshot()
+    progress_hook[0]({"status": "downloading", "_percent_str": "99%", "downloaded_bytes": 99})
+    assert task.to_snapshot() == before
+    assert store.load_tasks()[0].progress == 100
 
 
 def test_download_repairs_duplicate_youtube_url_before_starting(manager):
@@ -470,6 +519,48 @@ def test_postprocessing_mp3_same_as_audio_only(manager):
     assert opts["postprocessors"][0]["key"] == "FFmpegExtractAudio"
 
 
+def test_completed_task_uses_final_output_size(manager, tmp_path):
+    source = tmp_path / "converted.mp3"
+    source.write_bytes(b"final-output-is-larger")
+    task = _make_task()
+    task.downloaded_bytes = 5
+    task.total_bytes = 9
+
+    _run_one_task(manager, task, str(source))
+
+    final_size = Path(task.file_path).stat().st_size
+    assert final_size == len(b"final-output-is-larger")
+    assert task.downloaded_bytes == final_size
+    assert task.total_bytes == final_size
+    assert task.video_info.file_size == final_size
+
+
+def test_script_completion_refreshes_size_after_script_mutates_output(
+    manager, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    source = tmp_path / "scripted.mp4"
+    source.write_bytes(b"before")
+    task = _make_task()
+    task.options.postprocessing = "script"
+    task.options.postprocess_script = "process-video {file}"
+
+    def mutate_output(*_args, **_kwargs):
+        Path(task.file_path).write_bytes(b"after-script-output")
+        return MagicMock(returncode=0, stderr="")
+
+    with patch(
+        "src.core.download_manager.subprocess.run", side_effect=mutate_output
+    ):
+        _run_one_task(manager, task, str(source))
+
+    final_size = Path(task.file_path).stat().st_size
+    assert final_size == len(b"after-script-output")
+    assert task.downloaded_bytes == final_size
+    assert task.total_bytes == final_size
+    assert task.video_info.file_size == final_size
+
+
 def test_postprocessing_mp4_adds_video_convertor(manager):
     task = _make_task()
     task.options.postprocessing = "mp4"
@@ -561,7 +652,8 @@ def test_failed_script_postprocess_does_not_mark_output_ready(manager, monkeypat
     sink.mark_ready.assert_not_called()
 
 
-def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path):
+@pytest.mark.parametrize("delivery_outcome", ["pending", "failed", "uncertain"])
+def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path, delivery_outcome):
     """真实下载管理器完成任务后，Telegram 队列应保存可发送的文件快照。"""
     HistoryDB._instance = None
     root = tmp_path / "telegram-handoff"
@@ -580,9 +672,11 @@ def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path):
         now="2026-01-01T00:00:00Z",
     )
     db = HistoryDB(db_path=str(root / "history.db"))
+    delivery_clock = ["2026-08-28T00:00:00Z"]
     delivery = TelegramDeliveryService(
         config,
         TelegramDeliveryStore(str(root / "history.db")),
+        now=lambda: delivery_clock[0],
     )
     manager = DownloadManager(
         config=config,
@@ -627,12 +721,73 @@ def test_completed_download_is_enqueued_for_telegram_delivery(tmp_path):
         assert item["accountId"] == "42"
         assert item["targetChatId"] == "-100123"
         assert item["status"] == "pending"
+        manager.stop(join_timeout=2)
+        output_path = Path(task.file_path)
+        output_hash = hashlib.sha256(output_path.read_bytes()).hexdigest()
+        before_queue = manager.queue_store.load_tasks()
+        before_history = db.get_download_record(task.id)
+        before_snapshot = manager.get_snapshot()
+        if delivery_outcome != "pending":
+            delivery_clock[0] = "2026-08-28T00:00:01Z"
+            claim = delivery.claim_next(account_id="42", now=delivery_clock[0], lease_id="delivery-lease",
+                                        lease_expires_at="2026-08-28T00:01:00Z")
+            assert claim is not None
+            delivery.mark_sending(item["id"], "delivery-lease", delivery_clock[0], "video", False, True)
+            settle = delivery.mark_failed if delivery_outcome == "failed" else delivery.mark_uncertain
+            settled = settle(item["id"], "delivery-lease", "NETWORK_ERROR", "发送结果", "2026-08-28T00:00:02Z")
+            assert settled["status"] == delivery_outcome
+        delivery_clock[0] = "2026-08-28T00:00:03Z"
+        restarted = TelegramDeliveryService(config, TelegramDeliveryStore(str(root / "history.db")),
+                                             now=lambda: delivery_clock[0])
+        restarted.recover_delivery_leases()
+        restarted.recover_output_records()
+        assert restarted.list_summaries(offset=0, limit=10, status=delivery_outcome)["total"] == 1
+        if delivery_outcome != "pending":
+            if delivery_outcome == "uncertain":
+                with pytest.raises(DeliveryStateConflict, match="duplicate"):
+                    asyncio.run(restarted.retry(item["id"], confirm_possible_duplicate=False,
+                                                confirm_interrupted_output=False))
+            retried = asyncio.run(restarted.retry(item["id"], confirm_possible_duplicate=delivery_outcome == "uncertain",
+                                                  confirm_interrupted_output=False))
+            assert retried["status"] == "pending"
+            assert retried["taskId"] == task.id
+        assert restarted.cancel_pending("42") == 1
+        assert manager.queue_store.load_tasks() == before_queue
+        assert db.get_download_record(task.id) == before_history
+        assert manager.get_snapshot() == before_snapshot
+        assert hashlib.sha256(output_path.read_bytes()).hexdigest() == output_hash
+        assert len(list(output_path.parent.glob("*.mp4"))) == 1
+        downloader.download.assert_called_once()
     finally:
         manager.stop(join_timeout=2)
         HistoryDB._instance = None
 
 
-def test_queue_order_picks_lower_first():
+def test_telegram_store_failure_cannot_undo_a_verified_download(queue_download_harness, monkeypatch):
+    harness = queue_download_harness
+    manager = harness.manager()
+    monkeypatch.setattr(HistoryDB, "_instance", None)
+    manager.db = HistoryDB(db_path=manager.queue_store.db_path)
+    manager.config.configure_telegram({
+        "accountId": "42", "targetChatId": "-100123", "targetChatType": "supergroup",
+        "targetChatTitle": "测试群", "targetVerifiedAt": "2026-01-01T00:00:00Z", "autoSendEnabled": True,
+    }, now="2026-01-01T00:00:00Z")
+    delivery_store = TelegramDeliveryStore(manager.queue_store.db_path)
+    manager.output_ready_sink = TelegramDeliveryService(manager.config, delivery_store)
+    with sqlite3.connect(manager.queue_store.db_path) as conn:
+        conn.execute("CREATE TRIGGER fail_delivery BEFORE INSERT ON telegram_delivery_queue "
+                     "BEGIN SELECT RAISE(ABORT, 'injected delivery storage failure'); END")
+    task = harness.task(manager, "delivery-store-failure")
+    manager.add_task(task)
+    manager._download_task(task)
+    assert task.status is TaskStatus.COMPLETED and task.progress == 100
+    assert manager.queue_store.load_tasks()[0].status is TaskStatus.COMPLETED
+    assert manager.db.get_download_record(task.id).status == "completed"
+    assert Path(task.file_path).read_bytes() == b"local-media:" + task.id.encode()
+    assert delivery_store.list_deliveries().total == 0
+
+
+def test_priority_takes_precedence_over_queue_order():
     config = MagicMock()
     config.get_concurrent_downloads.return_value = 1
     mgr = DownloadManager(config=config, db=MagicMock())
@@ -644,7 +799,7 @@ def test_queue_order_picks_lower_first():
         mgr.tasks[task.id] = task
     with mgr._lock:
         first = mgr._pick_next_pending_locked()
-        assert first is not None and first.id == early.id
+        assert first is not None and first.id == late.id
 
 
 def test_reorder_tasks_updates_queue_order():
@@ -1039,7 +1194,8 @@ def test_remove_group_force_and_optional_files(tmp_path):
 
     # 默认不删文件也能强制清队列（含 pending）
     removed = mgr.remove_group("g1", delete_files=False)
-    assert set(removed) == {t1.id, t2.id}
+    assert set(removed.removed) == {t1.id, t2.id}
+    assert removed.file_delete_failures == ()
     assert mgr.get_all_tasks() == {}
     assert file_a.is_file() and file_b.is_file()
 
@@ -1050,7 +1206,8 @@ def test_remove_group_force_and_optional_files(tmp_path):
     with mgr._lock:
         mgr.tasks[t3.id] = t3
     removed = mgr.remove_group("g2", delete_files=True)
-    assert removed == [t3.id]
+    assert removed.removed == (t3.id,)
+    assert removed.file_delete_failures == ()
     assert not file_a.exists()
     assert file_b.is_file()
 
@@ -1124,7 +1281,7 @@ def test_restore_same_database_preserves_outputs_and_group_delete_scope(tmp_path
     )
     first.restore_tasks()
     first_restored = first.get_all_tasks()
-    assert first_restored[downloading.id].status == TaskStatus.PAUSED
+    assert first_restored[downloading.id].status == TaskStatus.PENDING
     assert first_restored[grouped_completed.id].status == TaskStatus.COMPLETED
 
     second = DownloadManager(
@@ -1135,7 +1292,7 @@ def test_restore_same_database_preserves_outputs_and_group_delete_scope(tmp_path
     second.restore_tasks()
     restored = second.get_all_tasks()
 
-    assert restored[downloading.id].status == TaskStatus.PAUSED
+    assert restored[downloading.id].status == TaskStatus.PENDING
     assert restored[downloading.id].group_id == "group-one"
     assert restored[downloading.id].group_title == "合集"
     assert restored[downloading.id].playlist_index == 1
@@ -1155,7 +1312,8 @@ def test_restore_same_database_preserves_outputs_and_group_delete_scope(tmp_path
 
     removed = second.remove_group("group-one", delete_files=True)
 
-    assert set(removed) == {downloading.id, grouped_completed.id}
+    assert set(removed.removed) == {downloading.id, grouped_completed.id}
+    assert removed.file_delete_failures == ()
     assert not grouped_file.exists()
     assert ordinary_file.is_file()
     assert unrelated_file.is_file()
@@ -1163,3 +1321,80 @@ def test_restore_same_database_preserves_outputs_and_group_delete_scope(tmp_path
     assert snapshot(unrelated_file) == before[unrelated_file]
     remaining = QueueStore(str(database_path)).load_tasks()
     assert [task.id for task in remaining] == [ordinary_completed.id]
+
+
+def test_pending_pause_prevents_scheduler_start(tmp_path):
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 1
+    manager = DownloadManager(config=config, db=MagicMock(), queue_store=QueueStore(str(tmp_path / "q.db")))
+    task = _make_task(url="https://example.com/video.mp4")
+    entered = threading.Event()
+
+    def unexpected_download(*_args, **_kwargs):
+        entered.set()
+        raise DownloadError("unexpected worker start")
+
+    with patch("src.core.download_manager.Downloader") as factory, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None,
+    ):
+        factory.return_value.download.side_effect = unexpected_download
+        manager.add_task(task)
+        manager.pause_task(task.id)
+        manager.start()
+        try:
+            assert not entered.wait(0.75)
+            assert task.status is TaskStatus.PAUSED
+            assert task.run_intent is TaskRunIntent.PAUSE
+            assert not manager.active_tasks
+        finally:
+            manager.stop(join_timeout=2)
+
+
+@pytest.mark.parametrize("first_action,next_action", [(TaskAction.PAUSE, TaskAction.RESUME), (TaskAction.CANCEL, TaskAction.RETRY)])
+def test_requested_restart_waits_for_the_old_worker_and_is_durable(tmp_path, first_action, next_action):
+    config = MagicMock()
+    config.get_concurrent_downloads.return_value = 2
+    config.build_download_options.return_value = DownloadOptions()
+    store = QueueStore(str(tmp_path / "queue.db"))
+    manager = DownloadManager(config=config, db=MagicMock(), queue_store=store, temp_dir=str(tmp_path / "staging"))
+    task = _make_task(url="https://example.com/video.mp4")
+    entered, release = threading.Event(), threading.Event()
+    starts = []
+
+    with patch("src.core.download_manager.Downloader") as factory, patch(
+        "src.core.download_manager.VideoInfoExtractor.extract", return_value=None,
+    ):
+        instance = MagicMock()
+        factory.return_value = instance
+
+        def download(_url, _plan, *, toolchain, staging_dir):
+            starts.append(threading.get_ident())
+            if len(starts) == 1:
+                entered.set()
+                if not release.wait(5):
+                    raise AssertionError("test worker was not released")
+                raise DownloadCancelled("interrupted by user")
+            return _download_result(instance, staging_dir, "/tmp/resumed.mp4")
+
+        instance.download.side_effect = download
+        manager.add_task(task)
+        manager.start()
+        try:
+            assert entered.wait(2)
+            manager.apply_task_action(task.id, first_action)
+            result = manager.apply_task_action(task.id, next_action)
+            assert result.outcome is TaskActionOutcome.DEFERRED
+            assert (task.status, task.run_intent) == (TaskStatus.PAUSED, TaskRunIntent.RUN)
+            persisted = store.load_tasks()[0]
+            assert (persisted.status, persisted.run_intent) == (TaskStatus.PAUSED, TaskRunIntent.RUN)
+            assert len(starts) == 1 and len(manager.active_tasks) == 1
+            release.set()
+            assert _wait_until(lambda: task.status is TaskStatus.COMPLETED)
+            assert _wait_until(lambda: task.id not in manager.active_tasks)
+            assert len(starts) == 2
+            assert len(store.load_tasks()) == 1
+            assert store.load_tasks()[0].status is TaskStatus.COMPLETED
+            assert len(list(Path(task.options.output_path).glob("*.mp4"))) == 1
+        finally:
+            release.set()
+            manager.stop(join_timeout=2)

@@ -50,6 +50,19 @@
   background: color-mix(in srgb, var(--panel) 94%, transparent);
 }
 
+.queue-order-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.queue-order-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .playlist-group-header {
   display: flex;
   gap: 12px;
@@ -461,6 +474,7 @@ button.danger {
 
 .settings-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 20px;
 }

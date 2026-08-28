@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activeTaskCount, useAppStore } from "./appStore";
+import { activeTaskCount, applyProgressBatch, useAppStore } from "./appStore";
 import type { AppSnapshot, TaskSnapshot } from "../lib/types";
 
 function task(partial: Partial<TaskSnapshot> & { id: string }): TaskSnapshot {
@@ -24,6 +24,7 @@ function task(partial: Partial<TaskSnapshot> & { id: string }): TaskSnapshot {
 }
 
 describe("appStore", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     useAppStore.setState({
       connection: "connecting",
@@ -54,6 +55,64 @@ describe("appStore", () => {
     useAppStore.getState().hydrateSnapshot(snap);
     expect(useAppStore.getState().tasks).toHaveLength(1);
     expect(useAppStore.getState().settings?.concurrent_downloads).toBe(3);
+  });
+
+  it("applies 100 progress patches to 1000 tasks with one scan and one notification", () => {
+    const tasks = Array.from({ length: 1000 }, (_, index) => task({
+      id: String(index), status: index === 99 ? "completed" : "downloading",
+      progress: index === 99 ? 100 : 0,
+    }));
+    const map = vi.spyOn(tasks, "map");
+    const findIndex = vi.spyOn(tasks, "findIndex");
+    useAppStore.setState({ tasks });
+    const listener = vi.fn();
+    const unsubscribe = useAppStore.subscribe(listener);
+    try {
+      useAppStore.getState().applyEvent({ event: "task.progressBatch", payload: { updates: [
+        ...Array.from({ length: 100 }, (_, index) => ({
+          taskId: String(index), progress: 50, downloaded_bytes: 50, total_bytes: 100, speed: "1 B/s", eta: "50s",
+        })),
+        { taskId: "missing", progress: 20 },
+      ] } });
+      const result = useAppStore.getState().tasks;
+      expect(map).toHaveBeenCalledTimes(1);
+      expect(findIndex).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(1000);
+      expect(result[0]).toMatchObject({ progress: 50, downloaded_bytes: 50, speed: "1 B/s", eta: "50s" });
+      expect(result[98].progress).toBe(50);
+      expect(result[99]).toBe(tasks[99]);
+      expect(result[100]).toBe(tasks[100]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("pure progress batches preserve terminal objects, identity and order", () => {
+    const tasks = ["pending", "downloading", "paused", "completed", "failed", "cancelled"].map((status) =>
+      task({ id: status, status, progress: 80 }));
+    const updates = tasks.map(({ id }) => ({ taskId: id, progress: 90 }));
+    const result = applyProgressBatch(tasks, updates);
+    expect(result.map((item) => item.id)).toEqual(tasks.map((item) => item.id));
+    expect(result.map((item) => item.progress)).toEqual([90, 90, 90, 80, 80, 80]);
+    for (const index of [3, 4, 5]) expect(result[index]).toBe(tasks[index]);
+    expect(tasks.every((item) => item.progress === 80)).toBe(true);
+  });
+
+  it("supports single progress events but never resurrects or regresses terminal tasks", () => {
+    useAppStore.setState({ tasks: [task({ id: "active", status: "downloading" }),
+      task({ id: "done", status: "completed", progress: 100 })] });
+    useAppStore.getState().applyEvent({ event: "task.progress", payload: {
+      taskId: "active", progress: { progress: 30, downloaded_bytes: 3, total_bytes: 10, _speed_str: "1 B/s" },
+    } });
+    for (const id of ["done", "removed"]) {
+      useAppStore.getState().applyEvent({ event: "task.progress", payload: {
+        taskId: id, task: task({ id, status: "downloading", progress: 99 }),
+      } });
+    }
+    expect(useAppStore.getState().tasks).toHaveLength(2);
+    expect(useAppStore.getState().tasks[0]).toMatchObject({ progress: 30, downloaded_bytes: 3, total_bytes: 10, speed: "1 B/s" });
+    expect(useAppStore.getState().tasks[1]).toMatchObject({ status: "completed", progress: 100 });
   });
 
   it("updates task from event payload", () => {
