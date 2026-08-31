@@ -10,11 +10,16 @@ interface DownloadPanelProps {
 }
 
 export function DownloadPanel({ releaseState, platform }: DownloadPanelProps) {
+  const publicVersion = releaseState.status === "ready" ? releaseState.release.tag_name : null;
+
   return (
     <section className="download-panel section-shell" id="download">
       <div>
         <h2>{siteContent.download.title}</h2>
         <p>{siteContent.download.description}</p>
+        {publicVersion ? (
+          <p className="download-panel__version">当前公开版 {publicVersion}</p>
+        ) : null}
       </div>
       <div className="download-panel__actions">
         <DownloadActions releaseState={releaseState} platform={platform} />

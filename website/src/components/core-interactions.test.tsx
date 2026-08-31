@@ -10,12 +10,12 @@ import { SiteHeader } from "./SiteHeader";
 const readyWithoutWindows: LatestReleaseState = {
   status: "ready",
   release: {
-    tag_name: "v0.1.0",
-    html_url: "https://github.com/JackEngineer/downany/releases/tag/v0.1.0",
+    tag_name: "v0.2.1",
+    html_url: "https://github.com/JackEngineer/downany/releases/tag/v0.2.1",
     assets: [
       {
-        name: "Downany-0.1.0-mac.dmg",
-        browser_download_url: "https://downloads.example/Downany-0.1.0-mac.dmg",
+        name: "Downany-0.2.1-mac.dmg",
+        browser_download_url: "https://downloads.example/Downany-0.2.1-mac.dmg",
       },
     ],
   },
@@ -27,11 +27,17 @@ describe("download actions", () => {
 
     expect(screen.getByRole("link", { name: "下载 macOS 版" })).toHaveAttribute(
       "href",
-      "https://downloads.example/Downany-0.1.0-mac.dmg",
+      "https://downloads.example/Downany-0.2.1-mac.dmg",
     );
     const windowsLink = screen.getByRole("link", { name: /Windows 版准备中/ });
     expect(windowsLink).toHaveAttribute("href", readyWithoutWindows.release.html_url);
     expect(windowsLink).toHaveAttribute("data-download-status", "missing");
+  });
+
+  it("shows the exact public release version beside the download actions", () => {
+    render(<DownloadPanel releaseState={readyWithoutWindows} platform="macos" />);
+
+    expect(screen.getByText("当前公开版 v0.2.1")).toBeVisible();
   });
 
   it("keeps stable button labels while release data is loading", () => {

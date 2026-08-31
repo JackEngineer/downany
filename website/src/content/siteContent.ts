@@ -68,7 +68,7 @@ export const siteContent = {
       {
         id: "telegram",
         title: "Telegram 自动转发",
-        description: "随下一版本提供。",
+        description: "下载完成后，可自动发送到已绑定的聊天、群组或频道。",
         href: siteLinks.telegram,
       },
     ],

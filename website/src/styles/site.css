@@ -437,6 +437,11 @@ section[id] {
   line-height: var(--type-body-line);
 }
 
+.download-panel p.download-panel__version {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
 .download-panel__actions {
   display: grid;
   justify-items: center;

@@ -47,6 +47,10 @@ describe("App content contract", () => {
     expect(screen.getByRole("heading", { name: "下载之外，流程也替你收好" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "下载 Downany" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "常见问题" })).toBeVisible();
+    expect(
+      screen.getByText("下载完成后，可自动发送到已绑定的聊天、群组或频道。"),
+    ).toBeVisible();
+    expect(screen.queryByText("随下一版本提供。")).not.toBeInTheDocument();
 
     expect(screen.getByRole("img", { name: "Downany 界面预览" })).toHaveAttribute(
       "src",
