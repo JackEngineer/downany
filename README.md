@@ -2,7 +2,7 @@
 
 macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
-**v0.3.0 已提交并合入本地 main，Windows 已从 0.2.4 原目录升级至 0.3.0**，完整回归、安装文件核对、数据保留和隔离入队检查通过。尚未推送、打标签或公开发布；扩展独立版本为 `0.8.2`。本轮不包含 Mac 构建或人工验收。结果与边界见 [本地集成与安装记录](docs/acceptance/v0.3.0-windows-local-integration.md)。
+当前源码版本为 **v0.3.0**，面向 macOS Apple Silicon 与 Windows x64 同版本交付；Chrome 扩展独立版本为 `0.8.2`。公开安装包与版本状态以 [GitHub Releases](https://github.com/JackEngineer/downany/releases) 为准，改动与限制见 [0.3.0 发布说明](docs/RELEASE-NOTES-0.3.0.md)。
 
 ## 功能
 

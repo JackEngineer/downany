@@ -1,12 +1,16 @@
 # 发布与签名
 
-## v0.3.0 macOS 本地候选
+## v0.3.0 发行基线
 
-2026-08-31 已生成并自动核验 Apple Silicon arm64、macOS 11.0 基线的 `0.3.0` cloud-only 未签名 DMG。包内媒体、Sidecar、真实本地下载、DMG 完整性和候选 Electron 隔离启动/扩展桥入队均通过；Developer ID 签名、公证、干净 Mac 安装和远端 CI 尚未完成。完整事实、哈希与边界见 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
+桌面端与 Sidecar 版本为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。同一个 `v0.3.0` tag 必须同时交付 macOS Apple Silicon DMG、Windows x64 NSIS 和扩展 ZIP；安装包为未签名、未公证的 cloud-only 构建。公开状态与下载以 [GitHub Releases](https://github.com/JackEngineer/downany/releases) 为准。
 
-## v0.3.0 Windows 本地候选门槛
+## v0.3.0 macOS 本地候选记录
 
-本工作树的桌面与 Sidecar 为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。2026-08-28 已完成本地提交、合入 main 与 Windows 原目录覆盖安装，自动核验见 [本地集成与安装记录](acceptance/v0.3.0-windows-local-integration.md)。尚未推送、打标签或公开发布。本轮按用户范围不执行 Mac 构建或人工验收；下文双平台正式发布流程保留为独立流程。
+2026-08-31 已生成并自动核验 Apple Silicon arm64、macOS 11.0 基线的 `0.3.0` cloud-only 未签名 DMG。包内媒体、Sidecar、真实本地下载、DMG 完整性和候选 Electron 隔离启动/扩展桥入队均通过；Developer ID 签名、公证和干净 Mac 安装未完成。完整事实、哈希与候选阶段边界见 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
+
+## v0.3.0 Windows 本地候选记录
+
+2026-08-28 已完成本地提交、main 集成与 Windows 原目录覆盖安装，自动核验见 [本地集成与安装记录](acceptance/v0.3.0-windows-local-integration.md)。该文档保留当时尚未推送、打标签或公开发布的历史边界，不用于判断当前公开状态。
 
 自动门槛依次为完整测试、Main/Renderer 类型检查、真实 Electron 最小窗口检查、同源 Sidecar/NSIS、包内媒体工具、旧数据恢复和隔离 Electron 入队。打包前冻结源文件/资源清单，完成后再次核对。结果见 [候选记录](acceptance/v0.3.0-stable-baseline.md)。
 
@@ -97,11 +101,11 @@ FFmpeg 与 FFprobe；两者都会检查架构、部署基线和动态依赖，�
 
 ### GitHub Releases 发布步骤
 
-#### v0.2.1 云端模式发行版（历史发布示例）
+#### v0.3.0 云端模式发行版
 
-当前没有 Telegram 应用凭据时，`v0.2.1` 仍可发布云端模式安装包。带 `v0.2.1` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、同源 FFmpeg/FFprobe 工具对和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 仍必须同时包含 DMG、NSIS 和同次构建的 Chrome 扩展 ZIP。
+没有 Telegram 应用凭据时，`v0.3.0` 使用 cloud-only 模式。带 `v0.3.0` tag 的 CI 会在 macOS arm64 与 Windows x64 上构建 Sidecar、同源 FFmpeg/FFprobe 工具对和安装包，并通过包内运行冒烟；缺少本地 Telegram Bot API/ProcessHost 时，应用安全地使用官方云端 Bot API。该发行版不宣称本地 Bot API 的单文件 2 GB 能力，云端接口上限和视频分段规则见 [`TELEGRAM.md`](TELEGRAM.md)。最终 GitHub Release 必须同时包含 DMG、NSIS 和同一提交打包的 Chrome 扩展 ZIP。
 
-1. 确认 `desktop/package.json` 的正式版本部分与拟发 tag 一致（本历史示例为 `0.2.1`，tag 为 `v0.2.1`；不要对当前候选照抄执行）。
+1. 确认 `desktop/package.json` 的正式版本为 `0.3.0`，拟发 tag 为 `v0.3.0`。
 2. 推送含发布说明的提交到 `main`。  
 3. 打包 Chrome 扩展（版本取自 `browser-extension/manifest.json`）：
    ```bash
@@ -112,12 +116,12 @@ FFmpeg 与 FFprobe；两者都会检查架构、部署基线和动态依赖，�
 4. 创建 Release（**DMG + NSIS + 扩展 zip** 同挂一个 tag）：
    ```bash
    gh auth login   # 若尚未登录
-   gh release create v0.2.1 \
-     desktop/release/Downany-0.2.1-mac.dmg \
-     desktop/release/Downany-0.2.1-win-x64.exe \
+   gh release create v0.3.0 \
+     desktop/release/Downany-0.3.0-mac.dmg \
+     desktop/release/Downany-0.3.0-win-x64.exe \
      desktop/release/Downany-chrome-extension-0.8.2.zip \
-     --title "Downany 0.2.1" \
-     --notes-file docs/RELEASE-NOTES-0.2.1.md
+     --title "Downany 0.3.0" \
+     --notes-file docs/RELEASE-NOTES-0.3.0.md
    ```
    macOS 与 Windows 安装包可在各自平台构建后一并上传；勿只发 DMG 或只发 NSIS。
 5. 在另一台未装开发环境的机器上验证：
