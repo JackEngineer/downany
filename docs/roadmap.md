@@ -2,11 +2,11 @@
 
 ## 当前执行：v0.3.0 双平台交付（2026-08-31）
 
-本轮按已批准的 [分阶段升级规格](superpowers/specs/2026-08-26-downany-v0-3-staged-upgrade-design.md) 推进到 v0.3.0，已完成本地集成、Windows 安装回归和 macOS Apple Silicon 候选验收。公开状态与安装包以 [GitHub Releases](https://github.com/JackEngineer/downany/releases) 为准。
+本轮按已批准的 [分阶段升级规格](superpowers/specs/2026-08-26-downany-v0-3-staged-upgrade-design.md) 推进到 v0.3.0，已完成本地集成、Windows 安装回归、macOS Apple Silicon 候选验收，并于 2026-08-31 公开 [Downany 0.3.0](https://github.com/JackEngineer/downany/releases/tag/v0.3.0) 与新版官网。完整发布证据见 [公开发布验收](acceptance/v0.3.0-public-release.md)。
 
 - **v0.2.4：成品正确性基线。** 保留已完成的输出校验、解析面板修正和最终文件大小持久化改进，作为下一轮的可追溯源码快照。
 - **v0.2.5：队列与恢复稳定性，本地候选已验证。** 已实现可持久化的暂停/继续意图、原子批量操作、分组排序、进度批量更新与旧下载线程隔离；758 项 Python、410 项桌面测试通过。R2 Windows 包完成旧版数据迁移、五轮恢复、真实媒体输出及 Electron 隔离启动验证，详见 [候选验证记录](acceptance/v0.2.5-queue-recovery-stability.md)。改动已随 v0.3.0 集成本地 main，本版本未单独安装或发布。
-- **v0.3.0：稳定交付收敛。** 已统一启动/重连/操作后的队列刷新保护，补齐设置保存竞态、旧格式数据合同和中英文关键路径。Windows 0.2.4 → 0.3.0 覆盖、数据保留、真实下载与恢复回归通过；macOS Apple Silicon cloud-only DMG 完成包内媒体、真实本地下载、DMG 完整性和候选 Electron 隔离启动验证。结果见 [Windows 本地集成记录](acceptance/v0.3.0-windows-local-integration.md) 与 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
+- **v0.3.0：稳定交付收敛，已公开。** 已统一启动/重连/操作后的队列刷新保护，补齐设置保存竞态、旧格式数据合同和中英文关键路径。Windows 0.2.4 → 0.3.0 覆盖、数据保留、真实下载与恢复回归通过；macOS Apple Silicon cloud-only DMG 完成包内媒体、真实本地下载、DMG 完整性和候选 Electron 隔离启动验证。双平台标签 CI、GitHub Release、匿名下载和官网双域名验收已通过。结果见 [公开发布验收](acceptance/v0.3.0-public-release.md)、[Windows 本地集成记录](acceptance/v0.3.0-windows-local-integration.md) 与 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
 - **验收边界：** 两个平台当前均为未签名构建；Mac 尚无 Developer ID、公证和干净机器人工安装证据，Windows 尚无 Authenticode。未执行项不标为通过。
 
 ## 历史路线图（2026-08-01）
