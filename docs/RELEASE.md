@@ -2,7 +2,7 @@
 
 ## v0.3.0 macOS 本地候选
 
-2026-08-31 已生成并自动核验 Apple Silicon arm64、macOS 11.0 基线的 `0.3.0` cloud-only 未签名 DMG。包内媒体、Sidecar、真实本地下载与 DMG 完整性通过；候选 Electron 精确启动仍被本机运行中的旧版 `0.2.0` 占用固定桥端口阻断，Developer ID 签名、公证、干净 Mac 安装和远端 CI 也尚未完成。完整事实、哈希与边界见 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
+2026-08-31 已生成并自动核验 Apple Silicon arm64、macOS 11.0 基线的 `0.3.0` cloud-only 未签名 DMG。包内媒体、Sidecar、真实本地下载、DMG 完整性和候选 Electron 隔离启动/扩展桥入队均通过；Developer ID 签名、公证、干净 Mac 安装和远端 CI 尚未完成。完整事实、哈希与边界见 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
 
 ## v0.3.0 Windows 本地候选门槛
 
