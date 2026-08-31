@@ -1,5 +1,9 @@
 # 发布与签名
 
+## v0.3.0 macOS 本地候选
+
+2026-08-31 已生成并自动核验 Apple Silicon arm64、macOS 11.0 基线的 `0.3.0` cloud-only 未签名 DMG。包内媒体、Sidecar、真实本地下载与 DMG 完整性通过；候选 Electron 精确启动仍被本机运行中的旧版 `0.2.0` 占用固定桥端口阻断，Developer ID 签名、公证、干净 Mac 安装和远端 CI 也尚未完成。完整事实、哈希与边界见 [macOS 本地候选记录](acceptance/v0.3.0-macos-local-candidate.md)。
+
 ## v0.3.0 Windows 本地候选门槛
 
 本工作树的桌面与 Sidecar 为 `0.3.0`，Chrome 扩展独立版本为 `0.8.2`。2026-08-28 已完成本地提交、合入 main 与 Windows 原目录覆盖安装，自动核验见 [本地集成与安装记录](acceptance/v0.3.0-windows-local-integration.md)。尚未推送、打标签或公开发布。本轮按用户范围不执行 Mac 构建或人工验收；下文双平台正式发布流程保留为独立流程。
