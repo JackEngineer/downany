@@ -53,6 +53,20 @@ export function prepareSmokeData(dataRoot) {
   const dataDir = path.join(root, "downany-data");
   assertInsideSmokeRoot(root, dataDir);
   fs.mkdirSync(dataDir, { recursive: true });
+  for (const markerName of [
+    ".migration_v1_done",
+    ".migration_videodownloader_done",
+  ]) {
+    const markerPath = path.join(dataDir, markerName);
+    assertInsideSmokeRoot(root, markerPath);
+    if (fs.existsSync(markerPath)) {
+      if (!fs.lstatSync(markerPath).isFile()) {
+        throw new Error("Smoke migration marker must be a regular file");
+      }
+    } else {
+      fs.writeFileSync(markerPath, "ok\n", { flag: "wx" });
+    }
+  }
   const configPath = path.join(dataDir, "config.json");
   assertInsideSmokeRoot(root, configPath);
   let outputDir = path.join(root, "output");

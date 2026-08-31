@@ -52,6 +52,23 @@ test("creates first-use configuration with output inside its isolated data root"
   assert.ok(fs.statSync(prepared.outputDir).isDirectory());
 });
 
+test("marks legacy migrations complete before a packaged smoke can import user data", (t) => {
+  const root = smokeFixture(t);
+  const prepared = smokeHelpers.prepareSmokeData(root);
+
+  assert.equal(
+    fs.readFileSync(path.join(prepared.dataDir, ".migration_v1_done"), "utf8"),
+    "ok\n",
+  );
+  assert.equal(
+    fs.readFileSync(
+      path.join(prepared.dataDir, ".migration_videodownloader_done"),
+      "utf8",
+    ),
+    "ok\n",
+  );
+});
+
 test("preserves an existing safe smoke configuration byte for byte", (t) => {
   const root = smokeFixture(t);
   const dataDir = path.join(root, "downany-data");
