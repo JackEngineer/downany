@@ -20,20 +20,29 @@
 #   - YTDLP_VERSION / YTDLP_URL / YTDLP_SHA256
 #       默认 URL: https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp.exe
 #   - FFMPEG_WIN_URL / FFMPEG_WIN_SHA256
-#       固定源（BtbN/FFmpeg-Builds 静态构建，win64-gpl，选用已归档的日期化 tag 而非
-#       浮动的 `latest`，以保证长期可复现）：
-#         Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-16-13-00
-#         资产:    ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip（ffmpeg 7.1.5，与
-#                  macOS 端 install_ffmpeg.sh 默认的 7.1.1 同一大版本线）
-#         SHA256:  907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860
-#                  （核对自该 Release 附带的 checksums.sha256）
+#       默认读取 packaging/ffmpeg-windows/source.lock.json。锁定 BtbN 每月最后一次构建
+#       （上游保留两年），而不是只保留 14 份的普通日构建或浮动的 `latest`。
+#       FFmpeg 7.1.5 与 macOS 端锁定的 7.1.1 保持同一大版本线；URL 与 SHA-256
+#       在打包前由 scripts/windows_media_lock.mjs 对 GitHub Release 元数据再次核验。
 #       zip 内层结构为 <asset-basename>/bin/ffmpeg.exe + ffprobe.exe；本脚本要求
 #       两者恰好各一份且来自同一 bin 目录，再将这对工具一并落盘。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${ROOT}/desktop/resources/bin"
+WINDOWS_MEDIA_LOCK="${ROOT}/packaging/ffmpeg-windows/source.lock.json"
 mkdir -p "${DEST}"
+
+read_windows_media_lock() {
+  local key="$1"
+  node -e '
+    const fs = require("node:fs");
+    const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const value = lock[process.argv[2]];
+    if (typeof value !== "string" || !value.trim()) process.exit(2);
+    process.stdout.write(value.trim());
+  ' "${WINDOWS_MEDIA_LOCK}" "${key}"
+}
 
 detect_target_os() {
   local uname_s
@@ -92,8 +101,8 @@ fetch_yt_dlp_windows() {
 }
 
 fetch_ffmpeg_windows() {
-  local url="${FFMPEG_WIN_URL:-https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-16-13-00/ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip}"
-  local sha="${FFMPEG_WIN_SHA256:-907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860}"
+  local url="${FFMPEG_WIN_URL:-$(read_windows_media_lock url)}"
+  local sha="${FFMPEG_WIN_SHA256:-$(read_windows_media_lock sha256)}"
   echo "==> 下载 ffmpeg + ffprobe (Windows, BtbN static win64-gpl)"
   echo "    ${url}"
   local tmp_zip="${DEST}/ffmpeg-win.zip"

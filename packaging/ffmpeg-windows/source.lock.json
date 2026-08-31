@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "repository": "BtbN/FFmpeg-Builds",
+  "tag": "autobuild-2026-07-31-14-10",
+  "retentionClass": "monthly-final",
+  "asset": "ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-7.1.zip",
+  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-7.1.zip",
+  "sha256": "c067a1ca58f4fc4449f4bab0890fbcd65cbb3e5f46e066cf9c768e06c0c1d4d9",
+  "version": "7.1.5-12-g1fdbca85aa",
+  "license": "GPL-3.0-or-later",
+  "target": {
+    "platform": "windows",
+    "architecture": "x64",
+    "variant": "gpl",
+    "releaseBranch": "7.1"
+  }
+}

@@ -17,13 +17,11 @@
     默认 URL: https://github.com/yt-dlp/yt-dlp/releases/download/<YTDLP_VERSION>/yt-dlp.exe
     可用环境变量 YTDLP_VERSION / YTDLP_URL / YTDLP_SHA256 覆盖。
 
-  ffmpeg.exe + ffprobe.exe（BtbN/FFmpeg-Builds 静态构建，win64-gpl，选用已归档的日期化 tag
-  而非浮动的 `latest`，保证长期可复现）：
-    Release: https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-16-13-00
-    资产:    ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip（ffmpeg 7.1.5，与 macOS 端
-             source.lock.json 固定的 FFmpeg 7.1.1 同一大版本线）
-    SHA256:  907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860
-             （核对自该 Release 附带的 checksums.sha256）
+  ffmpeg.exe + ffprobe.exe（BtbN/FFmpeg-Builds 静态构建，win64-gpl）：
+    默认读取 packaging/ffmpeg-windows/source.lock.json。该锁只接受 BtbN 每月最后一次
+    构建（上游保留两年），不使用只保留 14 份的普通日构建或浮动的 `latest`。
+    FFmpeg 7.1.5 与 macOS 端锁定的 7.1.1 保持同一大版本线；CI 会在下载前核对
+    GitHub Release 资产与官方 SHA-256 digest。
     可用环境变量 FFMPEG_WIN_URL / FFMPEG_WIN_SHA256 覆盖。
     zip 内层结构为 <asset-basename>\bin\ffmpeg.exe + ffprobe.exe；本脚本要求两者
     恰好各一份且来自同一 bin 目录，再将这对工具一并落盘。
@@ -32,7 +30,7 @@
   .\scripts\fetch_release_binaries.ps1
 
 .EXAMPLE
-  $env:FFMPEG_WIN_SHA256 = "907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860"
+  $env:FFMPEG_WIN_SHA256 = "c067a1ca58f4fc4449f4bab0890fbcd65cbb3e5f46e066cf9c768e06c0c1d4d9"
   .\scripts\fetch_release_binaries.ps1
 #>
 
@@ -53,8 +51,10 @@ $YtdlpVersion = if ($env:YTDLP_VERSION) { $env:YTDLP_VERSION } else { "2026.02.0
 $YtdlpUrl = if ($env:YTDLP_URL) { $env:YTDLP_URL } else { "https://github.com/yt-dlp/yt-dlp/releases/download/$YtdlpVersion/yt-dlp.exe" }
 $YtdlpSha256 = $env:YTDLP_SHA256
 
-$FfmpegUrl = if ($env:FFMPEG_WIN_URL) { $env:FFMPEG_WIN_URL } else { "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-16-13-00/ffmpeg-n7.1.5-16-g9a4bb2c579-win64-gpl-7.1.zip" }
-$FfmpegSha256 = if ($env:FFMPEG_WIN_SHA256) { $env:FFMPEG_WIN_SHA256 } else { "907ae59ae94d39561b9e03f6d5b0ec4a2778df1e75c763c9a0ddbae266415860" }
+$FfmpegLockPath = Join-Path $RepoRoot "packaging\ffmpeg-windows\source.lock.json"
+$FfmpegLock = Get-Content -LiteralPath $FfmpegLockPath -Raw | ConvertFrom-Json
+$FfmpegUrl = if ($env:FFMPEG_WIN_URL) { $env:FFMPEG_WIN_URL } else { [string]$FfmpegLock.url }
+$FfmpegSha256 = if ($env:FFMPEG_WIN_SHA256) { $env:FFMPEG_WIN_SHA256 } else { [string]$FfmpegLock.sha256 }
 
 function Get-FileSha256 {
     param([string]$Path)
