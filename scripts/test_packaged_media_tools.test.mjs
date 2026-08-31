@@ -153,7 +153,37 @@ test("rejects malformed ffprobe JSON and removes its temporary directory", () =>
   assert.equal(fs.existsSync(path.dirname(generatedPath)), false);
 });
 
-test("generates and probes a deterministic video and audio sample", () => {
+test("rejects media tools without PNG cover encoding support", () => {
+  const { directory } = createToolDirectory("darwin");
+  const result = smokeMediaTools({
+    binDir: directory,
+    platform: "darwin",
+    run: (command, args) => {
+      if (args[0] === "-version") return { status: 0, stdout: "version", stderr: "" };
+      if (path.basename(command) === "ffmpeg") {
+        if (args.includes("png")) {
+          return { status: 69, stdout: "", stderr: "Encoder not found" };
+        }
+        fs.writeFileSync(args.at(-1), "generated-media");
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          format: { format_name: "mp4" },
+          streams: [{ codec_type: "video" }, { codec_type: "audio" }],
+          chapters: [],
+        }),
+        stderr: "",
+      };
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.productMessage, /PNG/);
+});
+
+test("generates a PNG cover and probes a deterministic video and audio sample", () => {
   const { directory } = createToolDirectory("win32");
   const calls = [];
   const result = smokeMediaTools({
@@ -163,7 +193,7 @@ test("generates and probes a deterministic video and audio sample", () => {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.deepEqual(calls[0].args, ["-version"]);
   assert.deepEqual(calls[1].args, ["-version"]);
   assert.deepEqual(calls[2].args.slice(0, -1), [
@@ -173,7 +203,23 @@ test("generates and probes a deterministic video and audio sample", () => {
     "-f",
     "lavfi",
     "-i",
-    "color=size=160x90:rate=10:duration=0.5",
+    "color=size=160x90:duration=0.1",
+    "-frames:v",
+    "1",
+    "-c:v",
+    "png",
+  ]);
+  const coverPath = calls[2].args.at(-1);
+  assert.deepEqual(calls[3].args.slice(0, -1), [
+    "-v",
+    "error",
+    "-y",
+    "-loop",
+    "1",
+    "-framerate",
+    "10",
+    "-i",
+    coverPath,
     "-f",
     "lavfi",
     "-i",
@@ -182,9 +228,11 @@ test("generates and probes a deterministic video and audio sample", () => {
     "mpeg4",
     "-c:a",
     "aac",
+    "-t",
+    "0.5",
     "-shortest",
   ]);
-  assert.deepEqual(calls[3].args.slice(0, -1), [
+  assert.deepEqual(calls[4].args.slice(0, -1), [
     "-v",
     "error",
     "-print_format",

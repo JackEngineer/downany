@@ -134,9 +134,10 @@ export function smokeMediaTools({
   const temporaryDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "downany-media-tools-"),
   );
+  const coverPath = path.join(temporaryDirectory, "cover.png");
   const samplePath = path.join(temporaryDirectory, "sample.mp4");
   try {
-    const generation = runCommand(
+    const coverGeneration = runCommand(
       run,
       ffmpeg,
       [
@@ -146,7 +147,37 @@ export function smokeMediaTools({
         "-f",
         "lavfi",
         "-i",
-        "color=size=160x90:rate=10:duration=0.5",
+        "color=size=160x90:duration=0.1",
+        "-frames:v",
+        "1",
+        "-c:v",
+        "png",
+        coverPath,
+      ],
+      "ffmpeg PNG 封面生成",
+    );
+    if (!coverGeneration.ok) return coverGeneration;
+    try {
+      if (!fs.statSync(coverPath).isFile() || fs.statSync(coverPath).size <= 0) {
+        return failed("ffmpeg 未生成有效 PNG 封面");
+      }
+    } catch {
+      return failed("ffmpeg 未生成有效 PNG 封面");
+    }
+
+    const generation = runCommand(
+      run,
+      ffmpeg,
+      [
+        "-v",
+        "error",
+        "-y",
+        "-loop",
+        "1",
+        "-framerate",
+        "10",
+        "-i",
+        coverPath,
         "-f",
         "lavfi",
         "-i",
@@ -155,6 +186,8 @@ export function smokeMediaTools({
         "mpeg4",
         "-c:a",
         "aac",
+        "-t",
+        "0.5",
         "-shortest",
         samplePath,
       ],

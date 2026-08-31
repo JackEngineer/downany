@@ -187,10 +187,13 @@ if ! (
         --disable-gpl \
         --disable-nonfree \
         --disable-autodetect \
+        --enable-zlib \
         --enable-securetransport \
         --enable-videotoolbox \
         --enable-audiotoolbox \
         --enable-libmp3lame \
+        --enable-decoder=png \
+        --enable-encoder=png \
         --extra-cflags="${TARGET_CFLAGS} -I${LAME_STAGE}/include" \
         --extra-ldflags="${TARGET_LDFLAGS} -L${LAME_STAGE}/lib" \
         --pkg-config-flags=--static
@@ -260,6 +263,16 @@ MIN_OS="$(otool -l "${FFMPEG_BIN}" | awk '$1 == "minos" && !found { print $2; fo
 ENCODERS_OUTPUT="$("${FFMPEG_BIN}" -hide_banner -encoders 2>/dev/null)"
 if ! grep -q 'libmp3lame' <<< "${ENCODERS_OUTPUT}"; then
     echo "FFmpeg 未包含 libmp3lame 编码器。" >&2
+    exit 1
+fi
+if ! grep -Eq '[[:space:]]png[[:space:]]' <<< "${ENCODERS_OUTPUT}"; then
+    echo "FFmpeg 未包含 PNG 编码器。" >&2
+    exit 1
+fi
+
+DECODERS_OUTPUT="$("${FFMPEG_BIN}" -hide_banner -decoders 2>/dev/null)"
+if ! grep -Eq '[[:space:]]png[[:space:]]' <<< "${DECODERS_OUTPUT}"; then
+    echo "FFmpeg 未包含 PNG 解码器。" >&2
     exit 1
 fi
 
