@@ -21,6 +21,29 @@ const readyWithoutWindows: LatestReleaseState = {
   },
 };
 
+const readyRelease: LatestReleaseState = {
+  status: "ready",
+  release: {
+    tag_name: "v0.3.0",
+    html_url: "https://github.com/JackEngineer/downany/releases/tag/v0.3.0",
+    assets: [
+      {
+        name: "Downany-0.3.0-mac.dmg",
+        browser_download_url: "https://downloads.example/Downany-0.3.0-mac.dmg",
+      },
+      {
+        name: "Downany-0.3.0-win-x64.exe",
+        browser_download_url: "https://downloads.example/Downany-0.3.0-win-x64.exe",
+      },
+      {
+        name: "Downany-chrome-extension-0.8.2.zip",
+        browser_download_url:
+          "https://downloads.example/Downany-chrome-extension-0.8.2.zip",
+      },
+    ],
+  },
+};
+
 describe("download actions", () => {
   it("links the available macOS build and labels a missing Windows build honestly", () => {
     render(<Hero releaseState={readyWithoutWindows} platform="macos" />);
@@ -32,6 +55,25 @@ describe("download actions", () => {
     const windowsLink = screen.getByRole("link", { name: /Windows 版准备中/ });
     expect(windowsLink).toHaveAttribute("href", readyWithoutWindows.release.html_url);
     expect(windowsLink).toHaveAttribute("data-download-status", "missing");
+  });
+
+  it("links the public Chrome extension archive directly", () => {
+    render(<Hero releaseState={readyRelease} platform="macos" />);
+
+    const extensionLink = screen.getByRole("link", { name: "下载 Chrome 扩展" });
+    expect(extensionLink).toHaveAttribute(
+      "href",
+      "https://downloads.example/Downany-chrome-extension-0.8.2.zip",
+    );
+    expect(extensionLink).toHaveAttribute("data-download-status", "ready");
+  });
+
+  it("labels the Chrome extension honestly when the archive is unavailable", () => {
+    render(<Hero releaseState={readyWithoutWindows} platform="macos" />);
+
+    const extensionLink = screen.getByRole("link", { name: "Chrome 扩展准备中" });
+    expect(extensionLink).toHaveAttribute("href", readyWithoutWindows.release.html_url);
+    expect(extensionLink).toHaveAttribute("data-download-status", "missing");
   });
 
   it("shows the exact public release version beside the download actions", () => {
