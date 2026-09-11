@@ -1,0 +1,30 @@
+[
+  {
+    "target": "macos-arm64",
+    "id": "youtube-01",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "9d72cec435be8909e67bd80eb83ae52d9f5bd6aaaac4bc9b6c249ac013ba7039",
+    "artifactBytes": 47276180,
+    "recordedAt": "2026-09-11T15:37:50.688Z"
+  },
+  {
+    "target": "macos-arm64",
+    "id": "bilibili-01",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "d83b55d6204772a8c248eb0ec6bc5c2a718a11863823e78e82b1091ca41d4767",
+    "artifactBytes": 14460146,
+    "recordedAt": "2026-09-11T15:36:27.051Z"
+  },
+  {
+    "target": "macos-arm64",
+    "id": "douyin-01",
+    "outcome": "failed",
+    "errorCode": "need_login",
+    "artifactPlayable": false,
+    "recordedAt": "2026-09-11T15:38:12.532Z"
+  }
+]
