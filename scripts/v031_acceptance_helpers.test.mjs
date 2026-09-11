@@ -23,6 +23,16 @@ function matrix() {
   return rows;
 }
 
+function passingResults(rows, targets = ["macos-arm64", "windows-x64"]) {
+  return targets.flatMap((target) => rows.map((row) => ({
+    id: row.id,
+    target,
+    outcome: row.expectation === "error" ? "expected_error" : "completed",
+    errorCode: row.expectedError,
+    artifactPlayable: row.expectation === "downloadable",
+  })));
+}
+
 test("accepts a 30-case matrix balanced across three priority platforms and required scenarios", () => {
   assert.deepEqual(validateReliabilityMatrix(matrix()), {
     total: 30,
@@ -39,32 +49,31 @@ test("rejects a matrix that cannot prove one priority platform", () => {
 
 test("passes only when downloadable cases reach 90 percent per platform and errors match", () => {
   const rows = matrix();
-  const results = rows.map((row) => ({
-    id: row.id,
-    outcome: row.expectation === "error" ? "expected_error" : "completed",
-    errorCode: row.expectedError,
-    artifactPlayable: row.expectation === "downloadable",
-  }));
+  const results = passingResults(rows);
 
   const report = evaluateReliabilityResults(rows, results);
 
   assert.equal(report.passed, true);
   assert.deepEqual(
-    Object.fromEntries(Object.entries(report.platforms).map(([key, value]) => [key, value.successRate])),
+    Object.fromEntries(Object.entries(report.targets["macos-arm64"].platforms).map(([key, value]) => [key, value.successRate])),
     { youtube: 1, bilibili: 1, douyin: 1 },
   );
+  assert.equal(report.targets["windows-x64"].platforms.youtube.successRate, 1);
+});
+
+test("does not accept macOS evidence as Windows evidence", () => {
+  const rows = matrix();
+  const report = evaluateReliabilityResults(rows, passingResults(rows, ["macos-arm64"]));
+
+  assert.equal(report.passed, false);
+  assert.match(report.failures.join("\n"), /windows-x64.*missing/i);
 });
 
 test("fails the release gate when one platform drops below 90 percent", () => {
   const rows = matrix();
-  const results = rows.map((row) => ({
-    id: row.id,
-    outcome: row.expectation === "error" ? "expected_error" : "completed",
-    errorCode: row.expectedError,
-    artifactPlayable: row.expectation === "downloadable",
-  }));
+  const results = passingResults(rows);
   for (const id of ["youtube-01", "youtube-02"]) {
-    const result = results.find((item) => item.id === id);
+    const result = results.find((item) => item.id === id && item.target === "windows-x64");
     result.outcome = "failed";
     result.artifactPlayable = false;
   }
@@ -72,22 +81,28 @@ test("fails the release gate when one platform drops below 90 percent", () => {
   const report = evaluateReliabilityResults(rows, results);
 
   assert.equal(report.passed, false);
-  assert.equal(report.platforms.youtube.successRate, 7 / 9);
-  assert.match(report.failures.join("\n"), /youtube.*90%/i);
+  assert.equal(report.targets["windows-x64"].platforms.youtube.successRate, 7 / 9);
+  assert.match(report.failures.join("\n"), /windows-x64.*youtube.*90%/i);
 });
 
 test("does not count an incorrect error classification as a successful negative case", () => {
   const rows = matrix();
-  const results = rows.map((row) => ({
-    id: row.id,
-    outcome: row.expectation === "error" ? "expected_error" : "completed",
-    errorCode: row.expectedError,
-    artifactPlayable: row.expectation === "downloadable",
-  }));
-  results.find((item) => item.id === "bilibili-10").errorCode = "network";
+  const results = passingResults(rows);
+  results.find((item) => item.id === "bilibili-10" && item.target === "macos-arm64").errorCode = "network";
 
   const report = evaluateReliabilityResults(rows, results);
 
   assert.equal(report.passed, false);
-  assert.match(report.failures.join("\n"), /bilibili-10.*removed/);
+  assert.match(report.failures.join("\n"), /macos-arm64.*bilibili-10.*removed/);
+});
+
+test("rejects duplicate case evidence for the same target", () => {
+  const rows = matrix();
+  const results = passingResults(rows);
+  results.push({ ...results[0] });
+
+  const report = evaluateReliabilityResults(rows, results);
+
+  assert.equal(report.passed, false);
+  assert.match(report.failures.join("\n"), /duplicate.*macos-arm64.*youtube-01/i);
 });

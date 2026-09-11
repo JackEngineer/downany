@@ -1,5 +1,6 @@
 const PLATFORMS = ["youtube", "bilibili", "douyin"];
 const REQUIRED_SCENARIOS = ["ordinary", "login", "collection", "invalid"];
+const TARGETS = ["macos-arm64", "windows-x64"];
 
 export function validateReliabilityMatrix(rows) {
   if (!Array.isArray(rows) || rows.length !== 30) {
@@ -35,34 +36,57 @@ export function validateReliabilityMatrix(rows) {
 
 export function evaluateReliabilityResults(rows, results) {
   validateReliabilityMatrix(rows);
-  const byId = new Map(results.map((result) => [result.id, result]));
   const failures = [];
-  const platforms = {};
-
-  for (const row of rows.filter((item) => item.expectation === "error")) {
-    const result = byId.get(row.id);
-    if (result?.outcome !== "expected_error" || result.errorCode !== row.expectedError) {
-      failures.push(`${row.id} must return ${row.expectedError}`);
+  const rowIds = new Set(rows.map((row) => row.id));
+  const byTargetAndId = new Map();
+  for (const result of Array.isArray(results) ? results : []) {
+    if (!TARGETS.includes(result?.target)) {
+      failures.push(`Unknown result target: ${result?.target || "<missing>"}`);
+      continue;
     }
+    if (!rowIds.has(result?.id)) {
+      failures.push(`Unknown result id: ${result?.id || "<missing>"}`);
+      continue;
+    }
+    const key = `${result.target}:${result.id}`;
+    if (byTargetAndId.has(key)) {
+      failures.push(`Duplicate result for ${result.target} ${result.id}`);
+      continue;
+    }
+    byTargetAndId.set(key, result);
   }
 
-  for (const platform of PLATFORMS) {
-    const downloadable = rows.filter(
-      (row) => row.platform === platform && row.expectation === "downloadable",
-    );
-    const completed = downloadable.filter((row) => {
-      const result = byId.get(row.id);
-      return result?.outcome === "completed" && result.artifactPlayable === true;
-    }).length;
-    const successRate = downloadable.length === 0 ? 0 : completed / downloadable.length;
-    platforms[platform] = { completed, total: downloadable.length, successRate };
-    if (successRate < 0.9) {
-      failures.push(`${platform} downloadable success rate must reach 90%`);
+  const targets = {};
+  for (const target of TARGETS) {
+    const missing = rows.filter((row) => !byTargetAndId.has(`${target}:${row.id}`));
+    if (missing.length) {
+      failures.push(`${target} missing evidence for: ${missing.map((row) => row.id).join(", ")}`);
     }
+
+    for (const row of rows.filter((item) => item.expectation === "error")) {
+      const result = byTargetAndId.get(`${target}:${row.id}`);
+      if (result?.outcome !== "expected_error" || result.errorCode !== row.expectedError) {
+        failures.push(`${target} ${row.id} must return ${row.expectedError}`);
+      }
+    }
+
+    const platforms = {};
+    for (const platform of PLATFORMS) {
+      const downloadable = rows.filter(
+        (row) => row.platform === platform && row.expectation === "downloadable",
+      );
+      const completed = downloadable.filter((row) => {
+        const result = byTargetAndId.get(`${target}:${row.id}`);
+        return result?.outcome === "completed" && result.artifactPlayable === true;
+      }).length;
+      const successRate = downloadable.length === 0 ? 0 : completed / downloadable.length;
+      platforms[platform] = { completed, total: downloadable.length, successRate };
+      if (successRate < 0.9) {
+        failures.push(`${target} ${platform} downloadable success rate must reach 90%`);
+      }
+    }
+    targets[target] = { platforms };
   }
 
-  const unknownResults = results.filter((result) => !rows.some((row) => row.id === result.id));
-  if (unknownResults.length) failures.push(`Unknown result ids: ${unknownResults.map((item) => item.id).join(", ")}`);
-
-  return { passed: failures.length === 0, platforms, failures };
+  return { passed: failures.length === 0, targets, failures };
 }
