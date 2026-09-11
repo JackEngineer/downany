@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -7,6 +7,30 @@ afterEach(() => {
 });
 
 describe("App content contract", () => {
+  it("keeps the Windows installer available when GitHub rate limits releases", async () => {
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response("rate limited", {
+          status: 403,
+        }),
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      const windowsLinks = screen.getAllByRole("link", { name: "下载 Windows 版" });
+      expect(windowsLinks).toHaveLength(2);
+      for (const link of windowsLinks) {
+        expect(link).toHaveAttribute(
+          "href",
+          "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe",
+        );
+        expect(link).toHaveAttribute("data-download-status", "ready");
+      }
+    });
+  });
+
   it("renders one direct product promise without unsupported marketing claims", () => {
     vi.stubGlobal(
       "fetch",

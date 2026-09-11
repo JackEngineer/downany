@@ -13,6 +13,28 @@ const releasePayload = {
   ],
 };
 
+const publicReleaseFallback = {
+  tag_name: "v0.3.0",
+  html_url: "https://github.com/JackEngineer/downany/releases/tag/v0.3.0",
+  assets: [
+    {
+      name: "Downany-0.3.0-mac.dmg",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-mac.dmg",
+    },
+    {
+      name: "Downany-0.3.0-win-x64.exe",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe",
+    },
+    {
+      name: "Downany-chrome-extension-0.8.2.zip",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-chrome-extension-0.8.2.zip",
+    },
+  ],
+};
+
 describe("useLatestRelease", () => {
   it("starts loading and exposes the parsed release after a successful response", async () => {
     const fetcher: typeof fetch = async () =>
@@ -30,25 +52,25 @@ describe("useLatestRelease", () => {
     });
   });
 
-  it("reports an error for an unsuccessful HTTP response", async () => {
+  it("uses the public fallback after a rate-limited response", async () => {
     const fetcher: typeof fetch = async () => new Response("rate limited", { status: 403 });
 
     const { result } = renderHook(() => useLatestRelease(fetcher));
 
     await waitFor(() => {
-      expect(result.current).toEqual({ status: "error", release: null });
+      expect(result.current).toEqual({ status: "ready", release: publicReleaseFallback });
     });
   });
 
   it.each([
     ["malformed JSON", async () => new Response("not json", { status: 200 })],
     ["network failure", async () => Promise.reject(new TypeError("network unavailable"))],
-  ] as const)("reports an error for %s", async (_caseName, request) => {
+  ] as const)("uses the public fallback after %s", async (_caseName, request) => {
     const fetcher = request as typeof fetch;
     const { result } = renderHook(() => useLatestRelease(fetcher));
 
     await waitFor(() => {
-      expect(result.current.status).toBe("error");
+      expect(result.current).toEqual({ status: "ready", release: publicReleaseFallback });
     });
   });
 

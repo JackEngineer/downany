@@ -11,6 +11,29 @@ export interface GithubRelease {
   assets: GithubReleaseAsset[];
 }
 
+/** Last verified public release, used when the browser cannot query GitHub's API. */
+export const PUBLIC_RELEASE_FALLBACK: GithubRelease = {
+  tag_name: "v0.3.0",
+  html_url: "https://github.com/JackEngineer/downany/releases/tag/v0.3.0",
+  assets: [
+    {
+      name: "Downany-0.3.0-mac.dmg",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-mac.dmg",
+    },
+    {
+      name: "Downany-0.3.0-win-x64.exe",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe",
+    },
+    {
+      name: "Downany-chrome-extension-0.8.2.zip",
+      browser_download_url:
+        "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-chrome-extension-0.8.2.zip",
+    },
+  ],
+};
+
 export interface DownloadTarget {
   status: "ready" | "missing";
   url: string;

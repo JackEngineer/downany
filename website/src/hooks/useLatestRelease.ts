@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GithubRelease } from "../lib/releases";
+import { PUBLIC_RELEASE_FALLBACK, type GithubRelease } from "../lib/releases";
 
 export const LATEST_RELEASE_API =
   "https://api.github.com/repos/JackEngineer/downany/releases/latest";
@@ -36,7 +36,7 @@ export function useLatestRelease(fetcher: typeof fetch = globalThis.fetch): Late
       })
       .catch(() => {
         if (active) {
-          setState({ status: "error", release: null });
+          setState({ status: "ready", release: PUBLIC_RELEASE_FALLBACK });
         }
       });
 
