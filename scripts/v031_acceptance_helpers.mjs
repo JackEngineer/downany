@@ -58,6 +58,15 @@ export function evaluateReliabilityResults(rows, results) {
 
   const targets = {};
   for (const target of TARGETS) {
+    const candidateHashes = new Set(
+      [...byTargetAndId.values()]
+        .filter((result) => result.target === target && /^[a-f0-9]{64}$/.test(result.candidateSha256 || ""))
+        .map((result) => result.candidateSha256),
+    );
+    const targetResults = [...byTargetAndId.values()].filter((result) => result.target === target);
+    if (targetResults.some((result) => !/^[a-f0-9]{64}$/.test(result.candidateSha256 || "")) || candidateHashes.size !== 1) {
+      failures.push(`${target} evidence must identify exactly one candidate package`);
+    }
     const missing = rows.filter((row) => !byTargetAndId.has(`${target}:${row.id}`));
     if (missing.length) {
       failures.push(`${target} missing evidence for: ${missing.map((row) => row.id).join(", ")}`);

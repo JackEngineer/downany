@@ -1,6 +1,7 @@
 /** 在隔离的最终候选包中执行 v0.3.1 真实网站矩阵；结果文件不记录 URL、路径或原始错误。 */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -26,6 +27,10 @@ import {
 } from "./v031_matrix_run_helpers.mjs";
 
 const runFile = promisify(execFile);
+
+function fileSha256(filePath) {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
 
 function expectedRuntimeTarget() {
   if (process.platform === "darwin" && process.arch === "arm64") return "macos-arm64";
@@ -151,6 +156,8 @@ async function verifyArtifact(task, outputDir, binDir) {
 async function runMatrix(options) {
   assert.equal(options.target, expectedRuntimeTarget(), "Target does not match this operating system and architecture");
   assert.ok(fs.statSync(options.executable).isFile(), "Candidate executable is missing");
+  assert.ok(fs.statSync(options.candidateArtifact).isFile(), "Candidate artifact is missing");
+  const candidateSha256 = fileSha256(options.candidateArtifact);
   const matrix = JSON.parse(fs.readFileSync(options.matrixPath, "utf8"));
   validateReliabilityMatrix(matrix);
   const selectedRows = options.caseId ? matrix.filter((row) => row.id === options.caseId) : matrix;
@@ -202,6 +209,7 @@ async function runMatrix(options) {
       if (task.status === "completed") artifact = await verifyArtifact(task, directories.outputDir, binDir);
       const result = buildSanitizedCaseResult({
         target: options.target,
+        candidateSha256,
         row,
         task,
         artifact,
@@ -225,7 +233,7 @@ async function runMatrix(options) {
 
 async function main() {
   if (process.argv.includes("--help")) {
-    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--case=<case id>] [--timeout-minutes=15]");
+    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --candidate-artifact=<absolute DMG or NSIS installer> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--case=<case id>] [--timeout-minutes=15]");
     return;
   }
   const options = parseMatrixRunArguments(process.argv.slice(2));

@@ -14,6 +14,7 @@ const absolute = (name) => path.resolve("/tmp", name);
 test("requires explicit candidate, target, matrix and evidence paths", () => {
   const parsed = parseMatrixRunArguments([
     `--executable=${absolute("Downany")}`,
+    `--candidate-artifact=${absolute("Downany.dmg")}`,
     `--playwright-module=${absolute("playwright")}`,
     `--matrix=${absolute("matrix.json")}`,
     `--results=${absolute("results.json")}`,
@@ -22,10 +23,12 @@ test("requires explicit candidate, target, matrix and evidence paths", () => {
   ]);
   assert.equal(parsed.target, "macos-arm64");
   assert.equal(parsed.expectedVersion, "0.3.1");
+  assert.equal(parsed.candidateArtifact, absolute("Downany.dmg"));
   assert.equal(parsed.timeoutMs, 15 * 60_000);
   assert.throws(() => parseMatrixRunArguments([]), /required/i);
   assert.throws(() => parseMatrixRunArguments([
     `--executable=${absolute("Downany")}`,
+    `--candidate-artifact=${absolute("Downany.dmg")}`,
     `--playwright-module=${absolute("playwright")}`,
     `--matrix=${absolute("matrix.json")}`,
     `--results=${absolute("results.json")}`,
@@ -47,6 +50,7 @@ test("resolves URLs only in memory and reports missing environment keys", () => 
 test("case evidence excludes URLs, private paths and raw errors", () => {
   const result = buildSanitizedCaseResult({
     target: "windows-x64",
+    candidateSha256: "b".repeat(64),
     row: { id: "youtube-01", expectation: "downloadable" },
     task: {
       status: "completed",
@@ -59,6 +63,7 @@ test("case evidence excludes URLs, private paths and raw errors", () => {
   });
   assert.deepEqual(result, {
     target: "windows-x64",
+    candidateSha256: "b".repeat(64),
     id: "youtube-01",
     outcome: "completed",
     errorCode: "",
@@ -72,15 +77,16 @@ test("case evidence excludes URLs, private paths and raw errors", () => {
 
 test("merges resumable target evidence without duplicates", () => {
   const existing = [
-    { target: "macos-arm64", id: "youtube-01", outcome: "failed", url: "https://secret.invalid", rawError: "Cookie: private" },
-    { target: "windows-x64", id: "youtube-01", outcome: "completed" },
+    { target: "macos-arm64", id: "youtube-01", outcome: "failed", candidateSha256: "a".repeat(64), url: "https://secret.invalid", rawError: "Cookie: private" },
+    { target: "windows-x64", id: "youtube-01", outcome: "completed", candidateSha256: "c".repeat(64) },
   ];
   const merged = mergeTargetResults(existing, [
-    { target: "macos-arm64", id: "youtube-01", outcome: "completed" },
-    { target: "macos-arm64", id: "youtube-02", outcome: "completed" },
+    { target: "macos-arm64", id: "youtube-01", outcome: "completed", candidateSha256: "b".repeat(64) },
+    { target: "macos-arm64", id: "youtube-02", outcome: "completed", candidateSha256: "b".repeat(64) },
   ]);
   assert.equal(merged.length, 3);
   assert.equal(merged.find((item) => item.target === "macos-arm64" && item.id === "youtube-01").outcome, "completed");
   assert.equal(merged.find((item) => item.target === "windows-x64").outcome, "completed");
+  assert.ok(merged.filter((item) => item.target === "macos-arm64").every((item) => item.candidateSha256 === "b".repeat(64)));
   assert.doesNotMatch(JSON.stringify(merged), /secret|Cookie|rawError/i);
 });

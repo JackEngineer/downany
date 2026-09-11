@@ -5,7 +5,7 @@ const TARGETS = new Set(["macos-arm64", "windows-x64"]);
 
 export function parseMatrixRunArguments(rawArguments) {
   const allowed = new Set([
-    "--executable", "--playwright-module", "--matrix", "--results", "--target",
+    "--executable", "--candidate-artifact", "--playwright-module", "--matrix", "--results", "--target",
     "--expected-version", "--cookiefile", "--case", "--timeout-minutes",
   ]);
   const args = new Map();
@@ -17,11 +17,11 @@ export function parseMatrixRunArguments(rawArguments) {
     assert.ok(allowed.has(name) && !args.has(name) && value, `Unknown, duplicate or empty argument: ${name}`);
     args.set(name, value);
   }
-  const required = ["--executable", "--playwright-module", "--matrix", "--results", "--target"];
+  const required = ["--executable", "--candidate-artifact", "--playwright-module", "--matrix", "--results", "--target"];
   assert.ok(required.every((name) => args.has(name)), "Candidate, Playwright, matrix, results and target are required");
   const target = args.get("--target");
   assert.ok(TARGETS.has(target), "Target must be macos-arm64 or windows-x64");
-  for (const name of ["--executable", "--playwright-module", "--matrix", "--results", "--cookiefile"]) {
+  for (const name of ["--executable", "--candidate-artifact", "--playwright-module", "--matrix", "--results", "--cookiefile"]) {
     if (args.has(name)) assert.ok(path.isAbsolute(args.get(name)), `${name} must be absolute`);
   }
   const expectedVersion = args.get("--expected-version") || "0.3.1";
@@ -30,6 +30,7 @@ export function parseMatrixRunArguments(rawArguments) {
   assert.ok(Number.isFinite(timeoutMinutes) && timeoutMinutes >= 1 && timeoutMinutes <= 120, "Timeout must be 1-120 minutes");
   return {
     executable: args.get("--executable"),
+    candidateArtifact: args.get("--candidate-artifact"),
     playwrightModule: args.get("--playwright-module"),
     matrixPath: args.get("--matrix"),
     resultsPath: args.get("--results"),
@@ -52,11 +53,12 @@ export function resolveMatrixCases(rows, environment) {
   return { cases, missing };
 }
 
-export function buildSanitizedCaseResult({ target, row, task, artifact, recordedAt }) {
+export function buildSanitizedCaseResult({ target, candidateSha256, row, task, artifact, recordedAt }) {
   const completed = task?.status === "completed" && artifact?.playable === true;
   const expectedError = row.expectation === "error" && task?.status === "failed";
   return {
     target,
+    candidateSha256,
     id: row.id,
     outcome: completed ? "completed" : expectedError ? "expected_error" : "failed",
     errorCode: String(task?.error_code || ""),
@@ -70,10 +72,22 @@ export function buildSanitizedCaseResult({ target, row, task, artifact, recorded
 }
 
 export function mergeTargetResults(existing, updates) {
+  const candidateByTarget = new Map();
+  for (const item of updates) {
+    assert.match(item.candidateSha256 || "", /^[a-f0-9]{64}$/, "Updated evidence requires candidate SHA-256");
+    const previous = candidateByTarget.get(item.target);
+    assert.ok(!previous || previous === item.candidateSha256, "Updates cannot mix candidate packages for one target");
+    candidateByTarget.set(item.target, item.candidateSha256);
+  }
   const merged = new Map();
-  for (const item of [...existing, ...updates]) {
+  const compatibleExisting = existing.filter((item) => {
+    const current = candidateByTarget.get(item.target);
+    return !current || item.candidateSha256 === current;
+  });
+  for (const item of [...compatibleExisting, ...updates]) {
     const safe = {
       target: item.target,
+      candidateSha256: item.candidateSha256,
       id: item.id,
       outcome: item.outcome,
       errorCode: String(item.errorCode || ""),

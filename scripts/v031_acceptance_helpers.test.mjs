@@ -30,6 +30,7 @@ function passingResults(rows, targets = ["macos-arm64", "windows-x64"]) {
     outcome: row.expectation === "error" ? "expected_error" : "completed",
     errorCode: row.expectedError,
     artifactPlayable: row.expectation === "downloadable",
+    candidateSha256: (target === "macos-arm64" ? "a" : "b").repeat(64),
   })));
 }
 
@@ -105,4 +106,15 @@ test("rejects duplicate case evidence for the same target", () => {
 
   assert.equal(report.passed, false);
   assert.match(report.failures.join("\n"), /duplicate.*macos-arm64.*youtube-01/i);
+});
+
+test("rejects evidence that mixes candidate packages for one target", () => {
+  const rows = matrix();
+  const results = passingResults(rows);
+  results.find((item) => item.target === "macos-arm64").candidateSha256 = "c".repeat(64);
+
+  const report = evaluateReliabilityResults(rows, results);
+
+  assert.equal(report.passed, false);
+  assert.match(report.failures.join("\n"), /macos-arm64.*candidate/i);
 });
