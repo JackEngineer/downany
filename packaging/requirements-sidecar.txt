@@ -3,5 +3,5 @@
 # default：把与本版本严格匹配的 yt-dlp-ejs 求解脚本打进 Sidecar，
 # 避免 Windows 客户端每次依赖 GitHub 临时下载 YouTube challenge 脚本。
 # curl-cffi：部分视频站点需要浏览器 TLS 指纹，否则网页拉取可能返回 410 Gone。
-yt-dlp[default,curl-cffi]==2026.7.4
+yt-dlp[default,curl-cffi]==2026.8.19
 pyinstaller>=6.3.0

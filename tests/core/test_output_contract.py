@@ -345,7 +345,7 @@ def test_pinned_ytdlp_blank_language_selects_one_subtitle_in_product_order(
     automatic,
     expected,
 ):
-    assert yt_dlp.version.__version__ == "2026.07.04"
+    assert yt_dlp.version.__version__ == "2026.08.19"
     ydl = yt_dlp.YoutubeDL(
         {
             "writesubtitles": True,

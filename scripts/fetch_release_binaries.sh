@@ -61,11 +61,13 @@ case "${RAW_TARGET_OS}" in
   *) TARGET_OS="${RAW_TARGET_OS}" ;;
 esac
 
-YTDLP_VERSION="${YTDLP_VERSION:-2026.02.04}"
+YTDLP_VERSION="${YTDLP_VERSION:-2026.08.19}"
+YTDLP_MACOS_SHA256="${YTDLP_SHA256:-0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202}"
+YTDLP_WINDOWS_SHA256="${YTDLP_SHA256:-66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a}"
 
 fetch_yt_dlp_darwin() {
   local url="${YTDLP_URL:-https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_macos}"
-  local sha="${YTDLP_SHA256:-}"
+  local sha="${YTDLP_MACOS_SHA256}"
   echo "==> 下载 yt-dlp ${YTDLP_VERSION} (macOS)"
   local tmp="${DEST}/yt-dlp.download"
   curl -fL --retry 3 --retry-delay 2 -o "${tmp}" "${url}"
@@ -84,7 +86,7 @@ fetch_yt_dlp_darwin() {
 
 fetch_yt_dlp_windows() {
   local url="${YTDLP_URL:-https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp.exe}"
-  local sha="${YTDLP_SHA256:-}"
+  local sha="${YTDLP_WINDOWS_SHA256}"
   echo "==> 下载 yt-dlp ${YTDLP_VERSION} (Windows)"
   local tmp="${DEST}/yt-dlp.exe.download"
   curl -fL --retry 3 --retry-delay 2 -o "${tmp}" "${url}"

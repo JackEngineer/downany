@@ -47,9 +47,9 @@ if ([string]::IsNullOrWhiteSpace($Dest)) {
 }
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 
-$YtdlpVersion = if ($env:YTDLP_VERSION) { $env:YTDLP_VERSION } else { "2026.02.04" }
+$YtdlpVersion = if ($env:YTDLP_VERSION) { $env:YTDLP_VERSION } else { "2026.08.19" }
 $YtdlpUrl = if ($env:YTDLP_URL) { $env:YTDLP_URL } else { "https://github.com/yt-dlp/yt-dlp/releases/download/$YtdlpVersion/yt-dlp.exe" }
-$YtdlpSha256 = $env:YTDLP_SHA256
+$YtdlpSha256 = if ($env:YTDLP_SHA256) { $env:YTDLP_SHA256 } else { "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a" }
 
 $FfmpegLockPath = Join-Path $RepoRoot "packaging\ffmpeg-windows\source.lock.json"
 $FfmpegLock = Get-Content -LiteralPath $FfmpegLockPath -Raw | ConvertFrom-Json
