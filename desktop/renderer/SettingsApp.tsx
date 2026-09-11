@@ -36,14 +36,14 @@ const SETTINGS_FOCUS_IDS: Record<SettingsFocus, string> = {
   download: "settings-focus-download",
 };
 
-function focusSettingsControl(focus: SettingsFocus): void {
-  queueMicrotask(() => {
-    const control = document.getElementById(SETTINGS_FOCUS_IDS[focus]);
-    if (typeof control?.scrollIntoView === "function") {
-      control.scrollIntoView({ block: "center" });
-    }
-    control?.focus();
-  });
+function focusSettingsControl(focus: SettingsFocus): boolean {
+  const control = document.getElementById(SETTINGS_FOCUS_IDS[focus]);
+  if (!control) return false;
+  if (typeof control.scrollIntoView === "function") {
+    control.scrollIntoView({ block: "center" });
+  }
+  control.focus();
+  return true;
 }
 
 const TABS: { key: TabKey; labelKey: string }[] = [
@@ -410,6 +410,7 @@ export function SettingsApp() {
   const draftRef = useRef(draft);
   const editVersion = useRef(0);
   const savedVersion = useRef(0);
+  const pendingFocus = useRef<SettingsFocus | null>(null);
 
   const [ytInfo, setYtInfo] = useState<YtDlpInfo | null>(null);
   const [ytBusy, setYtBusy] = useState(false);
@@ -442,13 +443,20 @@ export function SettingsApp() {
 
   useEffect(() => {
     const navigate = (focus: SettingsFocus) => {
+      pendingFocus.current = focus;
       setTab("general");
-      focusSettingsControl(focus);
+      if (focusSettingsControl(focus)) pendingFocus.current = null;
     };
     const initial = new URLSearchParams(window.location.search).get("focus");
     if (initial && initial in SETTINGS_FOCUS_IDS) navigate(initial as SettingsFocus);
     return window.api.onSettingsFocus(navigate);
   }, []);
+
+  useEffect(() => {
+    const focus = pendingFocus.current;
+    if (!draft || tab !== "general" || !focus) return;
+    if (focusSettingsControl(focus)) pendingFocus.current = null;
+  }, [draft, tab]);
 
   useEffect(() => {
     if (connection !== "connected") return;

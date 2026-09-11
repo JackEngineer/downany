@@ -14,6 +14,7 @@ let settingsFocusHandler:
   | undefined;
 beforeEach(() => {
   localStorage.clear();
+  window.history.replaceState({}, "", "/");
   setLocale("zh-CN");
   request.mockReset().mockImplementation(async (method) => {
     if (method === "settings.get") return settingsFixture();
@@ -61,6 +62,25 @@ describe("settings language and safe results", () => {
       );
     },
   );
+
+  it("retains initial recovery focus until settings finish loading", async () => {
+    let resolveSettings: ((value: ReturnType<typeof settingsFixture>) => void) | undefined;
+    request.mockImplementation((method) => {
+      if (method === "settings.get") {
+        return new Promise((resolve) => { resolveSettings = resolve; });
+      }
+      if (method === "app.runMigration") return Promise.resolve({ status: "skipped" });
+      return Promise.resolve({});
+    });
+    useAppStore.setState({ settings: null, connection: "connected", toasts: [] });
+    window.history.replaceState({}, "", "/?focus=network");
+
+    render(<SettingsApp />);
+    expect(screen.queryByLabelText("启用代理")).not.toBeInTheDocument();
+    await act(async () => { resolveSettings?.(settingsFixture()); });
+
+    await waitFor(() => expect(screen.getByLabelText("启用代理")).toHaveFocus());
+  });
 
   it("updates the mounted settings window from another window's language selection", async () => {
     await mount();
