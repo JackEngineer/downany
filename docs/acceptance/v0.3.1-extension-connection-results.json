@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-12",
+  "candidate": {
+    "extensionVersion": "0.8.3",
+    "extensionSha256": "d716144098911872c58f81313df7d3793c01e14aa369d75bc6bc08d7609241d3",
+    "extensionBytes": 62035,
+    "browser": "Chrome for Testing 153.0.8010.12",
+    "loadedFromCandidateZip": true
+  },
+  "desktop": {
+    "version": "0.3.1",
+    "bridgeHealthy": true,
+    "sidecarReady": true,
+    "candidateCoreFilesMatched": true,
+    "mainExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+    "appAsarSha256": "3e45e39eb25001810065b78265c91d9845f2e89aa3efaf5e0923dfcdcb90b0dc",
+    "sidecarExecutableSha256": "5332d255bd14ebf32860ace68e07764a4a64339a771d3153664be0a308f0f4d2"
+  },
+  "headlessBrowserCheck": {
+    "localNetworkPermissionState": "prompt",
+    "connected": false,
+    "actionablePermissionGuidanceVisible": true,
+    "recheckActionVisible": true,
+    "candidateDisconnectedPresentationVerified": true
+  },
+  "diagnostic": {
+    "attemptedToBypassPermissionPrompt": true,
+    "bypassSucceeded": false,
+    "countedAsManualPermissionApproval": false
+  },
+  "manualAcceptance": {
+    "passed": false,
+    "reason": "需要在有界面 Chrome 中由用户允许本地网络访问后复验连接状态"
+  }
+}

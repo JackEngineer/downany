@@ -993,7 +993,7 @@ async function probeBridgeHealth() {
 }
 
 const APP_MISSING_ERROR =
-  "未检测到百纳桌面端。已打开安装说明；请安装并运行后再回来点下载。";
+  "暂未连接百纳。请确认桌面端正在运行，并允许浏览器访问本地网络后重试。";
 
 /**
  * 打开扩展内安装引导页（内含官网下载链接）。
@@ -1280,7 +1280,7 @@ async function sendItemsToDownloader(
     void openInstallGuide();
   }
   // 页内 silent 也要提示：否则用户以为点了没反应
-  notify("需要安装百纳", error);
+  notify("需要连接百纳", error);
   return {
     ok: false,
     error,
