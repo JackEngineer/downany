@@ -18,7 +18,7 @@
   {"id":"bilibili-07","platform":"bilibili","scenario":"login","expectation":"downloadable","urlSource":"DOWNANY_BILIBILI_07"},
   {"id":"bilibili-08","platform":"bilibili","scenario":"collection","expectation":"downloadable","urlSource":"DOWNANY_BILIBILI_08"},
   {"id":"bilibili-09","platform":"bilibili","scenario":"collection","expectation":"downloadable","urlSource":"DOWNANY_BILIBILI_09"},
-  {"id":"bilibili-10","platform":"bilibili","scenario":"invalid","expectation":"error","expectedError":"removed","urlSource":"DOWNANY_BILIBILI_10"},
+  {"id":"bilibili-10","platform":"bilibili","scenario":"invalid","expectation":"error","expectedError":"unsupported","urlSource":"DOWNANY_BILIBILI_10"},
   {"id":"douyin-01","platform":"douyin","scenario":"ordinary","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_01"},
   {"id":"douyin-02","platform":"douyin","scenario":"ordinary","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_02"},
   {"id":"douyin-03","platform":"douyin","scenario":"ordinary","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_03"},
@@ -28,5 +28,5 @@
   {"id":"douyin-07","platform":"douyin","scenario":"login","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_07"},
   {"id":"douyin-08","platform":"douyin","scenario":"collection","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_08"},
   {"id":"douyin-09","platform":"douyin","scenario":"collection","expectation":"downloadable","urlSource":"DOWNANY_DOUYIN_09"},
-  {"id":"douyin-10","platform":"douyin","scenario":"invalid","expectation":"error","expectedError":"removed","urlSource":"DOWNANY_DOUYIN_10"}
+  {"id":"douyin-10","platform":"douyin","scenario":"invalid","expectation":"error","expectedError":"unsupported","urlSource":"DOWNANY_DOUYIN_10"}
 ]
