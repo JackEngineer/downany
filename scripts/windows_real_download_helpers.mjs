@@ -76,6 +76,11 @@ export function prepareDownloadGateRoot(root) {
     theme_mode: "light",
     embed_metadata: true,
   }, null, 2) + "\n", { flag: "wx" });
+  // A gate must never import settings or history from the operator's real
+  // profile. Mark both legacy migrations complete before Sidecar starts.
+  for (const marker of [".migration_v1_done", ".migration_videodownloader_done"]) {
+    fs.writeFileSync(path.join(dataDir, marker), "acceptance-isolation\n", { flag: "wx" });
+  }
   return { dataDir, outputDir, profileDir };
 }
 

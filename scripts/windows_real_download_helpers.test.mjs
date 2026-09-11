@@ -35,6 +35,8 @@ test("gate setup isolates every output and disables accounts and side effects", 
   assert.equal(settings.telemetry_enabled, false);
   assert.equal(settings.auto_start_downloads, true);
   assert.equal(settings.embed_metadata, true);
+  assert.equal(fs.readFileSync(path.join(result.dataDir, ".migration_v1_done"), "utf8"), "acceptance-isolation\n");
+  assert.equal(fs.readFileSync(path.join(result.dataDir, ".migration_videodownloader_done"), "utf8"), "acceptance-isolation\n");
   assert.equal(result.profileDir, path.join(root, "electron-profile"));
   for (const directory of [result.dataDir, result.outputDir, result.profileDir]) {
     assert.ok(fs.statSync(directory).isDirectory());
@@ -86,7 +88,7 @@ test("completion validation ties the task to a nonempty isolated file and exact 
   assert.equal(typeof gate.assertCompletedDownload, "function");
   const { output, task } = outputFixture(t);
   const result = gate.assertCompletedDownload(task, output);
-  assert.equal(result.path, task.file_path);
+  assert.equal(result.path, fs.realpathSync(task.file_path));
   assert.equal(result.bytes, 4);
   assert.equal(result.sha256, "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a");
 });
