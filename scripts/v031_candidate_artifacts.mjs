@@ -1,6 +1,13 @@
+import path from "node:path";
+
 const INSTALLER_TARGETS = ["macos-arm64", "windows-x64"];
 const REQUIRED_VERSION = "0.3.1";
 const REQUIRED_EXTENSION_VERSION = "0.8.3";
+const ARTIFACT_FILENAMES = Object.freeze({
+  "macos-arm64": `Downany-${REQUIRED_VERSION}-mac.dmg`,
+  "windows-x64": `Downany-${REQUIRED_VERSION}-win-x64.exe`,
+  extension: `Downany-chrome-extension-${REQUIRED_EXTENSION_VERSION}.zip`,
+});
 
 function isSha256(value) {
   return /^[a-f0-9]{64}$/.test(value || "");
@@ -22,6 +29,9 @@ function validateDeclaration(label, declaration, failures) {
   }
   if (!isSafeRelativePath(declaration.path)) {
     failures.push(`${label} path must be repository-relative`);
+  }
+  if (ARTIFACT_FILENAMES[label] && path.posix.basename(declaration.path || "") !== ARTIFACT_FILENAMES[label]) {
+    failures.push(`${label} filename must be ${ARTIFACT_FILENAMES[label]}`);
   }
   if (!isSha256(declaration.sha256)) failures.push(`${label} SHA-256 is invalid`);
   if (!Number.isInteger(declaration.bytes) || declaration.bytes <= 0) {
@@ -88,8 +98,43 @@ export function evaluateCandidateArtifacts(manifest, inspections = {}) {
   };
 }
 
+export function recordCandidateArtifact(manifest, record) {
+  const target = record?.target;
+  if (![...INSTALLER_TARGETS, "extension"].includes(target)) {
+    throw new Error("Candidate artifact target is invalid");
+  }
+  if (manifest?.version !== REQUIRED_VERSION || manifest?.extensionVersion !== REQUIRED_EXTENSION_VERSION) {
+    throw new Error("Candidate manifest versions do not match the v0.3.1 contract");
+  }
+  if (!manifest.installers || typeof manifest.installers !== "object" || Array.isArray(manifest.installers)) {
+    throw new Error("Candidate manifest installers are invalid");
+  }
+  if (!isSha256(record?.sha256) || !Number.isInteger(record?.bytes) || record.bytes <= 0) {
+    throw new Error("Candidate artifact digest or byte size is invalid");
+  }
+  const repositoryRoot = path.resolve(record.repositoryRoot || "");
+  const artifactPath = path.resolve(record.artifactPath || "");
+  const relativePath = path.relative(repositoryRoot, artifactPath);
+  if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Candidate artifact must be inside the repository");
+  }
+  if (path.basename(artifactPath) !== ARTIFACT_FILENAMES[target]) {
+    throw new Error(`Candidate artifact filename must be ${ARTIFACT_FILENAMES[target]}`);
+  }
+  const declaration = {
+    path: relativePath.split(path.sep).join("/"),
+    sha256: record.sha256,
+    bytes: record.bytes,
+  };
+  const updated = structuredClone(manifest);
+  if (target === "extension") updated.extension = declaration;
+  else updated.installers[target] = declaration;
+  return updated;
+}
+
 export const candidateArtifactContract = Object.freeze({
   installerTargets: INSTALLER_TARGETS,
   version: REQUIRED_VERSION,
   extensionVersion: REQUIRED_EXTENSION_VERSION,
+  artifactFilenames: ARTIFACT_FILENAMES,
 });

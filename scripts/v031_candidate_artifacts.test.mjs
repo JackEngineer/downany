@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { evaluateCandidateArtifacts } from "./v031_candidate_artifacts.mjs";
+import {
+  evaluateCandidateArtifacts,
+  recordCandidateArtifact,
+} from "./v031_candidate_artifacts.mjs";
 
 const MAC_HASH = "a".repeat(64);
 const WIN_HASH = "b".repeat(64);
@@ -17,10 +20,10 @@ function completeManifest() {
     version: "0.3.1",
     extensionVersion: "0.8.3",
     installers: {
-      "macos-arm64": artifact("mac.dmg", MAC_HASH, 100),
-      "windows-x64": artifact("win.exe", WIN_HASH, 200),
+      "macos-arm64": artifact("artifacts/Downany-0.3.1-mac.dmg", MAC_HASH, 100),
+      "windows-x64": artifact("artifacts/Downany-0.3.1-win-x64.exe", WIN_HASH, 200),
     },
-    extension: artifact("extension.zip", EXT_HASH, 300),
+    extension: artifact("artifacts/Downany-chrome-extension-0.8.3.zip", EXT_HASH, 300),
   };
 }
 
@@ -93,4 +96,40 @@ test("repository candidate manifest verifies available files but remains blocked
   assert.equal(report.integrityPassed, true);
   assert.equal(report.releaseReady, false);
   assert.deepEqual(report.releaseBlockers, ["windows-x64 installer is not available"]);
+});
+
+test("records a Windows artifact using a repository-relative path without mutating the input", () => {
+  const manifest = completeManifest();
+  manifest.installers["windows-x64"] = null;
+  const updated = recordCandidateArtifact(manifest, {
+    target: "windows-x64",
+    repositoryRoot: "/repo",
+    artifactPath: "/repo/desktop/release/Downany-0.3.1-win-x64.exe",
+    sha256: WIN_HASH,
+    bytes: 200,
+  });
+
+  assert.equal(manifest.installers["windows-x64"], null);
+  assert.deepEqual(updated.installers["windows-x64"], {
+    path: "desktop/release/Downany-0.3.1-win-x64.exe",
+    sha256: WIN_HASH,
+    bytes: 200,
+  });
+});
+
+test("refuses unknown targets and artifacts outside the repository", () => {
+  assert.throws(() => recordCandidateArtifact(completeManifest(), {
+    target: "linux-x64",
+    repositoryRoot: "/repo",
+    artifactPath: "/repo/linux.tar.gz",
+    sha256: WIN_HASH,
+    bytes: 200,
+  }), /target/i);
+  assert.throws(() => recordCandidateArtifact(completeManifest(), {
+    target: "windows-x64",
+    repositoryRoot: "/repo",
+    artifactPath: "/tmp/Downany-0.3.1-win-x64.exe",
+    sha256: WIN_HASH,
+    bytes: 200,
+  }), /inside the repository/i);
 });
