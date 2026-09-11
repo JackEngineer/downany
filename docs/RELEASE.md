@@ -136,6 +136,14 @@ FFmpeg 与 FFprobe；两者都会检查架构、部署基线和动态依赖，�
 
 ### Chrome 扩展安装（未上架商店）
 
+扩展候选包统一使用仓库脚本生成。脚本从 `manifest.json` 读取版本，排除测试与隐藏文件，统一文件时间和权限，并验证 ZIP 完整性和包内版本：
+
+```bash
+./scripts/build_chrome_extension_zip.sh
+```
+
+产物默认写入 `desktop/release/Downany-chrome-extension-<version>.zip`。CI 的 `browser-extension` 任务执行三组扩展测试后运行同一脚本，并单独上传经验证的扩展候选包。
+
 1. 从 Release 下载 `Downany-chrome-extension-*.zip` 并解压  
 2. Chrome → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选解压目录  
 3. 先启动桌面端，再使用扩展（HTTP 桥 `127.0.0.1:17888`）

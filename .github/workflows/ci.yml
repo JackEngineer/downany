@@ -88,6 +88,21 @@ jobs:
         run: |
           node shared.test.js
           node sniff-core.test.js
+          node bridge-timeout.test.js
+      - name: Package verified extension
+        id: extension_package
+        shell: bash
+        run: |
+          version="$(node -p "require('./browser-extension/manifest.json').version")"
+          ./scripts/build_chrome_extension_zip.sh "$RUNNER_TEMP"
+          echo "artifact=$RUNNER_TEMP/Downany-chrome-extension-$version.zip" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Upload verified extension
+        uses: actions/upload-artifact@v7
+        with:
+          name: downany-chrome-extension-${{ steps.extension_package.outputs.version }}
+          if-no-files-found: error
+          path: ${{ steps.extension_package.outputs.artifact }}
 
   # Native resources are expensive and require platform-specific toolchains.
   # A release tag always produces a usable cloud-only package; native mode is
