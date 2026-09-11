@@ -244,6 +244,33 @@ def test_download_accepts_real_ytdlp_single_postprocessed_download_record(tmp_pa
     assert result.rendered_leaf == "A title [youtube-abc].mp3"
 
 
+def test_download_accepts_exactly_one_selected_playlist_entry(tmp_path):
+    staging = tmp_path / "task-1"
+    final = staging / "media.mp4"
+    final.parent.mkdir()
+    final.write_bytes(b"verified selected entry")
+    selected = _info(final, id="selected", title="Selected branch")
+
+    result, downloader, _ = _download(
+        tmp_path,
+        FakeYDLFactory({"_type": "playlist", "entries": [selected]}),
+    )
+
+    assert result.main_file == final.resolve()
+    assert downloader.last_ydl_info["id"] == "selected"
+
+
+def test_download_rejects_ambiguous_playlist_result(tmp_path):
+    with pytest.raises(OutputVerificationFailed, match="成品无法验证"):
+        _download(
+            tmp_path,
+            FakeYDLFactory({
+                "_type": "playlist",
+                "entries": [{"id": "first"}, {"id": "second"}],
+            }),
+        )
+
+
 def test_path_toolchain_does_not_set_ffmpeg_location(tmp_path):
     staging = tmp_path / "task-1"
     final = staging / "media.mp4"

@@ -10,7 +10,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
-from src.core.download_task import DownloadTask
+from src.core.download_task import DownloadTask, Platform
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.output_paths import (
     safe_component,
@@ -280,6 +280,15 @@ def compile_output_plan(task: DownloadTask) -> OutputPlan:
     cookiefile = str(options.cookiefile or "").strip()
     if cookiefile:
         ydl_options["cookiefile"] = cookiefile
+
+    if (
+        task.video_info.platform == Platform.BILIBILI
+        and int(task.playlist_index or 0) > 0
+        and bool(task.group_id or task.group_title)
+    ):
+        # Bilibili interactive and multi-P pages ignore noplaylist and return a
+        # playlist wrapper even when a client-expanded task represents one row.
+        ydl_options["playlist_items"] = str(int(task.playlist_index))
 
     final_leaf_template, source_key_template, playlist_folder = _compile_final_names(task)
     return OutputPlan(

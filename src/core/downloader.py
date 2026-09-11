@@ -190,6 +190,19 @@ def _postprocessed_info(info: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _selected_media_info(info: object) -> object:
+    """Unwrap one explicitly selected playlist item and reject ambiguity."""
+    if not isinstance(info, dict) or info.get("_type") not in {"playlist", "multi_video"}:
+        return info
+    entries = info.get("entries")
+    if not isinstance(entries, (list, tuple)) or len(entries) != 1:
+        raise _output_failure("yt-dlp 返回的播放列表未收敛为唯一条目")
+    selected = entries[0]
+    if not isinstance(selected, dict):
+        raise _output_failure("yt-dlp 返回的唯一播放列表条目无效")
+    return selected
+
+
 def _subtitle_candidate(raw_path: object, staging: Path) -> Optional[Path]:
     if not isinstance(raw_path, (str, os.PathLike)) or not str(raw_path).strip():
         return None
@@ -432,6 +445,7 @@ class Downloader:
         staging: Path,
         preexisting_files: frozenset[Path],
     ) -> DownloadResult:
+        info = _selected_media_info(info)
         if not isinstance(info, dict):
             raise _output_failure("yt-dlp 未返回单条媒体信息")
         info = _postprocessed_info(info)

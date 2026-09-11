@@ -270,6 +270,28 @@ def test_page_direct_custom_and_playlist_names_keep_stable_keys():
     assert hex_playlist.playlist_folder.endswith(" [abcdef01]")
 
 
+def test_grouped_bilibili_plan_selects_the_source_playlist_item():
+    plan = compile_output_plan(
+        make_task(
+            url="https://www.bilibili.com/video/BV1AB6bBHEM4",
+            platform=Platform.BILIBILI,
+            group_id="interactive-branch",
+            group_title="互动合集",
+            playlist_index=2,
+        )
+    )
+    youtube = compile_output_plan(
+        make_task(
+            group_id="youtube-playlist",
+            group_title="视频列表",
+            playlist_index=2,
+        )
+    )
+
+    assert plan.ydl_options["playlist_items"] == "2"
+    assert "playlist_items" not in youtube.ydl_options
+
+
 def test_network_and_download_settings_are_compiled_without_io(tmp_path):
     cookiefile = tmp_path / "not-created-yet.txt"
     task = make_task(
