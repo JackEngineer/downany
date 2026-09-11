@@ -1,0 +1,94 @@
+{
+  "version": "0.3.1",
+  "firstUseTrials": [
+    {
+      "participantId": "P1",
+      "firstTimeUser": true,
+      "target": null,
+      "candidateSha256": null,
+      "observedAt": null,
+      "completedWithoutGuidance": null,
+      "completedSteps": [],
+      "blockedStep": null,
+      "notes": ""
+    },
+    {
+      "participantId": "P2",
+      "firstTimeUser": true,
+      "target": null,
+      "candidateSha256": null,
+      "observedAt": null,
+      "completedWithoutGuidance": null,
+      "completedSteps": [],
+      "blockedStep": null,
+      "notes": ""
+    },
+    {
+      "participantId": "P3",
+      "firstTimeUser": true,
+      "target": null,
+      "candidateSha256": null,
+      "observedAt": null,
+      "completedWithoutGuidance": null,
+      "completedSteps": [],
+      "blockedStep": null,
+      "notes": ""
+    },
+    {
+      "participantId": "P4",
+      "firstTimeUser": true,
+      "target": null,
+      "candidateSha256": null,
+      "observedAt": null,
+      "completedWithoutGuidance": null,
+      "completedSteps": [],
+      "blockedStep": null,
+      "notes": ""
+    },
+    {
+      "participantId": "P5",
+      "firstTimeUser": true,
+      "target": null,
+      "candidateSha256": null,
+      "observedAt": null,
+      "completedWithoutGuidance": null,
+      "completedSteps": [],
+      "blockedStep": null,
+      "notes": ""
+    }
+  ],
+  "packageRecords": [
+    {
+      "target": "macos-arm64",
+      "candidateSha256": null,
+      "recordedAt": null,
+      "manual": false,
+      "checks": {
+        "firstInstall": false,
+        "upgradeFrom030": false,
+        "settingsPreserved": false,
+        "queuePreserved": false,
+        "pauseResume": false,
+        "playback": false,
+        "noOverwrite": false
+      },
+      "notes": ""
+    },
+    {
+      "target": "windows-x64",
+      "candidateSha256": null,
+      "recordedAt": null,
+      "manual": false,
+      "checks": {
+        "firstInstall": false,
+        "upgradeFrom030": false,
+        "settingsPreserved": false,
+        "queuePreserved": false,
+        "pauseResume": false,
+        "playback": false,
+        "noOverwrite": false
+      },
+      "notes": ""
+    }
+  ]
+}
