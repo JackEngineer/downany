@@ -1,0 +1,26 @@
+{
+  "target": "macos-arm64",
+  "result": "passed",
+  "recordedAt": "2026-09-11T16:39:12.089Z",
+  "candidateVersion": "0.3.1",
+  "candidateArtifactSha256": "837e21d67f279b348b73105bea849eb31dcf4117831681f3cdaa55067e6b1e7a",
+  "packageExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+  "installedExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+  "installMethod": "isolated-app-copy-from-package",
+  "manualInstallation": false,
+  "freshDataDirectory": true,
+  "configurationCreatedOnFirstLaunch": true,
+  "defaultOutputInsideIsolatedHome": true,
+  "firstDownloadInputVisible": true,
+  "addedLinkFeedbackVisible": true,
+  "acceptedTaskInitialStatus": "pending",
+  "completedStateVisible": true,
+  "openFileActionVisible": true,
+  "artifact": {
+    "bytes": 2007172,
+    "sha256": "1bd567b2f0c792e01f6a63a12c3c74486b3e9f020992e3f21ac71b18ad83328c",
+    "decodedSha256": "6f050a86b5b693d5db60de2af2d974e8a1996427e60a8b240186de0ee1e99f8a",
+    "videoCodec": "mpeg4",
+    "audioCodec": "aac"
+  }
+}
