@@ -88,6 +88,15 @@
   {
     "target": "macos-arm64",
     "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "id": "douyin-10",
+    "outcome": "expected_error",
+    "errorCode": "unsupported",
+    "artifactPlayable": false,
+    "recordedAt": "2026-09-11T22:44:05.040Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
     "id": "youtube-01",
     "outcome": "completed",
     "errorCode": "",
