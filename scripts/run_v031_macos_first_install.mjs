@@ -80,6 +80,59 @@ async function addFromVisibleButton(session, url) {
   return task.id;
 }
 
+async function verifyDownloadDirectoryGuard(session, url) {
+  const unavailable = path.join(session.root, "occupied-download-path");
+  fs.writeFileSync(unavailable, "not a directory\n", { flag: "wx" });
+  await session.page.evaluate((downloadDir) => window.api.request("settings.update", {
+    download_dir: downloadDir,
+  }), unavailable);
+  await waitForTask(
+    () => snapshot(session),
+    (value) => path.resolve(value?.settings?.download_dir || "") === path.resolve(unavailable),
+    { timeoutMs: 15_000, pollIntervalMs: 100 },
+  );
+  const before = await snapshot(session);
+  const input = session.page.getByRole("textbox", { name: "添加下载链接", exact: true });
+  await input.fill(url);
+  await session.page.getByRole("button", { name: "添加", exact: true }).click();
+  await session.page.getByText("下载位置不可用", { exact: true }).waitFor({
+    state: "visible", timeout: 15_000,
+  });
+  const blocked = await snapshot(session);
+  assert.deepEqual(blocked.tasks.map((task) => task.id), before.tasks.map((task) => task.id),
+    "Unavailable download directory still created a task");
+  const settingsPage = await waitForTask(
+    async () => {
+      for (const page of session.app.windows()) {
+        if (page.isClosed() || !page.url().includes("settings.html")) continue;
+        try {
+          if (await page.evaluate(() => document.activeElement?.id === "settings-focus-download")) return page;
+        } catch {
+          // The settings window can reload once while initial data arrives.
+        }
+      }
+      return null;
+    },
+    (page) => !!page,
+    { timeoutMs: 15_000, pollIntervalMs: 100 },
+  );
+  await session.page.evaluate((downloadDir) => window.api.request("settings.update", {
+    download_dir: downloadDir,
+  }), session.outputDir);
+  await waitForTask(
+    () => snapshot(session),
+    (value) => path.resolve(value?.settings?.download_dir || "") === path.resolve(session.outputDir),
+    { timeoutMs: 15_000, pollIntervalMs: 100 },
+  );
+  if (!settingsPage.isClosed()) await settingsPage.close();
+  return {
+    invalidPathBlocked: true,
+    taskCountUnchanged: true,
+    settingsControlFocused: true,
+    recoveryDirectoryAccepted: true,
+  };
+}
+
 export async function run(options) {
   assert.equal(process.platform, "darwin", "This gate targets macOS only");
   assert.equal(process.arch, "arm64", "This gate targets Apple Silicon only");
@@ -123,7 +176,9 @@ export async function run(options) {
     const input = session.page.getByRole("textbox", { name: "添加下载链接", exact: true });
     assert.equal(await input.isVisible(), true, "First-download input is not visible");
 
-    const taskId = await addFromVisibleButton(session, `${session.faultServer.baseUrl}/first-download.mp4`);
+    const firstDownloadUrl = `${session.faultServer.baseUrl}/first-download.mp4`;
+    const downloadDirectoryGuard = await verifyDownloadDirectoryGuard(session, firstDownloadUrl);
+    const taskId = await addFromVisibleButton(session, firstDownloadUrl);
     const taskRow = session.page.locator(`#task-${taskId}`);
     await taskRow.waitFor({ state: "visible", timeout: 15_000 });
     const acceptedSnapshot = await snapshot(session);
@@ -150,6 +205,7 @@ export async function run(options) {
       configurationCreatedOnFirstLaunch: true,
       defaultOutputInsideIsolatedHome: true,
       firstDownloadInputVisible: true,
+      downloadDirectoryGuard,
       addedLinkFeedbackVisible: true,
       acceptedTaskInitialStatus: acceptedTask.status,
       completedStateVisible: completed.visibleCompleted,
