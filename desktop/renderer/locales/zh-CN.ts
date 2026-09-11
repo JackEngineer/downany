@@ -17,6 +17,8 @@ export const zhCN = {
   "search.placeholder": "搜索任务…",
   "search.network.placeholder": "搜索网络视频",
   "add.placeholder": "粘贴视频链接，回车添加",
+  "add.downloadDirUnavailable": "下载位置不可用",
+  "add.downloadDirAction": "请选择可写入的下载目录后再试。",
   "settings.open": "设置",
   "empty.title": "添加第一个下载任务",
   "empty.copy": "粘贴视频链接，或从浏览器扩展发送当前页面。",

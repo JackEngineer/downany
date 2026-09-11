@@ -17,8 +17,22 @@ export async function createTasksAndRefresh(
     group_title?: string;
     playlist_index?: number;
   }[],
-): Promise<void> {
+): Promise<boolean> {
   const { pushToast } = useAppStore.getState();
+  const readiness = await request<{ ready?: boolean; reason?: string }>(
+    "settings.checkDownloadDir",
+    {},
+  );
+  if (readiness?.ready === false) {
+    pushToast({
+      kind: "error",
+      title: t("add.downloadDirUnavailable"),
+      detail: t("add.downloadDirAction"),
+      sticky: true,
+    });
+    await window.api.openSettings("download").catch(() => undefined);
+    return false;
+  }
   const result = await request<{ taskIds?: string[] }>("download.createTasks", {
     urls,
     items,
@@ -29,6 +43,7 @@ export async function createTasksAndRefresh(
     title: t("add.success", undefined, { count }),
   });
   await refreshQueueAfterChange();
+  return true;
 }
 
 /**
@@ -53,7 +68,8 @@ export async function submitAddText(raw: string): Promise<string[]> {
     return urls;
   }
   try {
-    await createTasksAndRefresh(urls);
+    const created = await createTasksAndRefresh(urls);
+    if (!created) return [];
   } catch {
     pushToast({
       kind: "error",

@@ -12,6 +12,7 @@ from src.core.output_paths import (
     MAX_COMPONENT_UTF16,
     MAX_WINDOWS_PATH_UTF16,
     build_final_path_plan,
+    ensure_output_directory_ready,
     safe_component,
     stable_source_key,
     truncate_utf16,
@@ -19,6 +20,24 @@ from src.core.output_paths import (
     validate_filename_template,
 )
 from src.core.url_normalizer import normalize_download_url
+
+
+def test_output_directory_preflight_creates_and_probes_a_new_location(tmp_path):
+    target = tmp_path / "new" / "downloads"
+
+    ready = ensure_output_directory_ready(str(target))
+
+    assert ready == target.resolve()
+    assert target.is_dir()
+    assert list(target.iterdir()) == []
+
+
+def test_output_directory_preflight_rejects_a_file(tmp_path):
+    target = tmp_path / "not-a-directory"
+    target.write_text("occupied", encoding="utf-8")
+
+    with pytest.raises(OutputPathInvalid, match="下载位置不可用"):
+        ensure_output_directory_ready(str(target))
 
 
 @pytest.mark.parametrize(

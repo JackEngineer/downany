@@ -23,9 +23,14 @@ const settings: AppSettings = {
 describe("submitAddText playlist candidates", () => {
   beforeEach(() => {
     requestMock.mockReset();
-    requestMock.mockResolvedValue({ taskIds: ["task-1"] });
+    requestMock.mockImplementation(async (method) =>
+      method === "settings.checkDownloadDir"
+        ? { ready: true }
+        : { taskIds: ["task-1"] },
+    );
     (window as unknown as { api: Record<string, unknown> }).api = {
       request: requestMock,
+      openSettings: vi.fn().mockResolvedValue(undefined),
     };
     useAppStore.setState({
       pendingAddUrls: null,
@@ -48,9 +53,36 @@ describe("submitAddText playlist candidates", () => {
     expect(requestMock).not.toHaveBeenCalled();
   });
 
+  it("opens download settings instead of creating a task when the save location is unavailable", async () => {
+    requestMock.mockImplementation(async (method) =>
+      method === "settings.checkDownloadDir"
+        ? { ready: false, reason: "output_path_invalid" }
+        : { taskIds: ["unexpected"] },
+    );
+
+    await expect(
+      createTasksAndRefresh(["https://example.com/video.mp4"]),
+    ).resolves.toBe(false);
+
+    expect(requestMock).toHaveBeenCalledTimes(1);
+    expect(requestMock).toHaveBeenCalledWith("settings.checkDownloadDir", {});
+    expect(window.api.openSettings).toHaveBeenCalledWith("download");
+    expect(useAppStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        kind: "error",
+        title: "下载位置不可用",
+        detail: "请选择可写入的下载目录后再试。",
+        sticky: true,
+      }),
+    ]);
+  });
+
   it("does not roll back a task completed while the post-create refresh was pending", async () => {
     const reply = deferred<AppSnapshot>();
-    requestMock.mockResolvedValueOnce({ taskIds: ["task-1"] }).mockReturnValueOnce(reply.promise);
+    requestMock
+      .mockResolvedValueOnce({ ready: true })
+      .mockResolvedValueOnce({ taskIds: ["task-1"] })
+      .mockReturnValueOnce(reply.promise);
     const created = createTasksAndRefresh(["https://example.com/video.mp4"]);
     await vi.waitFor(() => expect(requestMock).toHaveBeenCalledWith("app.getSnapshot", {}));
     const done = taskFixture({ status: "completed", progress: 100 });
@@ -61,7 +93,10 @@ describe("submitAddText playlist candidates", () => {
   });
 
   it("does not report successful creation as failed or create again when refresh fails", async () => {
-    requestMock.mockResolvedValueOnce({ taskIds: ["task-1"] }).mockRejectedValueOnce(new Error("snapshot offline"));
+    requestMock
+      .mockResolvedValueOnce({ ready: true })
+      .mockResolvedValueOnce({ taskIds: ["task-1"] })
+      .mockRejectedValueOnce(new Error("snapshot offline"));
     await submitAddText("https://example.com/video.mp4");
     expect(requestMock.mock.calls.filter(([method]) => method === "download.createTasks")).toHaveLength(1);
     expect(useAppStore.getState().toasts.map(({ kind }) => kind)).toEqual(["success", "info"]);

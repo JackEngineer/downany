@@ -42,6 +42,7 @@ class Method(str, Enum):
     HISTORY_CLEAR = "history.clear"
     SETTINGS_GET = "settings.get"
     SETTINGS_UPDATE = "settings.update"
+    SETTINGS_CHECK_DOWNLOAD_DIR = "settings.checkDownloadDir"
     UPDATER_CHECK_YTDLP = "updater.checkYtDlp"
     UPDATER_CHECK_HEALTH = "updater.checkHealth"
     UPDATER_UPDATE_YTDLP = "updater.updateYtDlp"
@@ -94,3 +95,4 @@ class ErrorCode(str, Enum):
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
     INVALID_PARAMS = "INVALID_PARAMS"
     INTERNAL = "INTERNAL"
+    OUTPUT_PATH_INVALID = "OUTPUT_PATH_INVALID"

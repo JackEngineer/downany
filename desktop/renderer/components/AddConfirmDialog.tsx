@@ -253,7 +253,7 @@ export function AddConfirmDialog() {
     setSubmitting(true);
     try {
       const groupIds = new Map<string, string>();
-      await createTasksAndRefresh(
+      const created = await createTasksAndRefresh(
         selected.map((r) => r.url),
         selected.map((r) => {
           let group_id: string | undefined;
@@ -279,7 +279,7 @@ export function AddConfirmDialog() {
           };
         }),
       );
-      setPendingAddUrls(null);
+      if (created) setPendingAddUrls(null);
     } catch {
       pushToast({ kind: "error", title: t("add.failed"), detail: t("add.retry") });
     } finally {

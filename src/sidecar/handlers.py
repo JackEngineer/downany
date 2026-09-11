@@ -20,6 +20,8 @@ from src.core.download_task import (
     VideoInfo,
 )
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
+from src.core.error_codes import OutputPathInvalid
+from src.core.output_paths import ensure_output_directory_ready
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
 from src.core.task_actions import TaskAction, TaskActionOutcome
@@ -151,6 +153,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.APP_EXPORT_DIAGNOSTICS.value: _export_diagnostics,
         Method.SETTINGS_GET.value: _settings_get,
         Method.SETTINGS_UPDATE.value: _settings_update,
+        Method.SETTINGS_CHECK_DOWNLOAD_DIR.value: _check_download_dir,
         Method.DOWNLOAD_CREATE_TASKS.value: _create_tasks,
         Method.DOWNLOAD_PAUSE.value: _pause,
         Method.DOWNLOAD_PAUSE_ALL.value: _pause_all,
@@ -252,6 +255,14 @@ def _settings_update(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, 
         raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from exc
     ctx.emit_event(EventName.SETTINGS_CHANGED.value, {"settings": updated})
     return updated
+
+
+def _check_download_dir(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        ensure_output_directory_ready(ctx.config.get_download_dir())
+    except OutputPathInvalid:
+        return {"ready": False, "reason": "output_path_invalid"}
+    return {"ready": True}
 
 
 def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> DownloadOptions:
@@ -388,6 +399,14 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     if not isinstance(urls, list) or not urls:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "urls 必须是非空数组")
     options = ctx.config.build_download_options()
+    try:
+        ensure_output_directory_ready(options.output_path)
+    except OutputPathInvalid as exc:
+        raise HandlerError(
+            ErrorCode.OUTPUT_PATH_INVALID,
+            "下载位置不可用，请重新选择",
+            details={"reason": "output_path_invalid"},
+        ) from exc
     proxy = ctx.config.get_proxy_for_download()
     items = payload.get("items")
     expand_playlists = payload.get("expand_playlists")

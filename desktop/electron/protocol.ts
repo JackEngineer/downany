@@ -27,6 +27,7 @@ export const Methods = [
   "history.clear",
   "settings.get",
   "settings.update",
+  "settings.checkDownloadDir",
   "updater.checkYtDlp",
   "updater.updateYtDlp",
 ] as const;

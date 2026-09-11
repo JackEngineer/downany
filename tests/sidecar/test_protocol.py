@@ -62,6 +62,7 @@ def test_required_methods_exist():
         "history.clear",
         "settings.get",
         "settings.update",
+        "settings.checkDownloadDir",
         "updater.checkYtDlp",
         "updater.checkHealth",
         "updater.updateYtDlp",

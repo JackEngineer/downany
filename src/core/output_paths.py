@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,29 @@ class FinalPathPlan:
     directory: Path
     main_file: Path
     subtitle_files: tuple[Path, ...]
+
+
+def ensure_output_directory_ready(path: str) -> Path:
+    """创建并实际探测下载目录，避免任务入队后才发现无法写入。"""
+    text = str(path or "").strip()
+    if not text:
+        raise OutputPathInvalid("下载位置不可用，请选择其他目录")
+    target = _resolve_path(Path(text).expanduser(), "下载位置不可用，请选择其他目录")
+    try:
+        if target.exists() and not target.is_dir():
+            raise OutputPathInvalid("下载位置不可用，请选择其他目录")
+        target.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            prefix=".downany-write-check-",
+            dir=target,
+            delete=True,
+        ):
+            pass
+    except OutputPathInvalid:
+        raise
+    except OSError as exc:
+        raise OutputPathInvalid("下载位置不可用，请选择其他目录") from exc
+    return target
 
 
 def utf16_units(value: str) -> int:

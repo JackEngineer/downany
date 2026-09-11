@@ -19,6 +19,8 @@ export const en = {
   "search.placeholder": "Search tasks…",
   "search.network.placeholder": "Search online videos",
   "add.placeholder": "Paste a video URL and press Enter",
+  "add.downloadDirUnavailable": "Download location unavailable",
+  "add.downloadDirAction": "Choose a writable download folder and try again.",
   "settings.open": "Settings",
   "empty.title": "Add your first download",
   "empty.copy": "Paste a video URL, or send the current page from the browser extension.",

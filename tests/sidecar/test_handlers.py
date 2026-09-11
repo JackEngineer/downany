@@ -17,6 +17,7 @@ def _ctx(tmp_path):
     HistoryDB._instance = None
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs").ensure()
     cfg = JsonConfig(str(paths.config_path))
+    cfg.set_download_dir(str(tmp_path / "downloads"))
     db = HistoryDB(db_path=str(paths.history_db_path))
     store = QueueStore(str(paths.history_db_path))
     manager = DownloadManager(config=cfg, db=db, queue_store=store)
@@ -60,6 +61,28 @@ def test_get_snapshot_and_create_tasks(tmp_path):
     snap = dispatch(ctx, Method.APP_GET_SNAPSHOT.value, {})
     assert len(snap["tasks"]) == 2
     assert "settings" in snap
+
+
+def test_download_directory_check_blocks_task_creation_before_enqueue(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    unavailable = tmp_path / "occupied"
+    unavailable.write_text("not a directory", encoding="utf-8")
+    ctx.config.set_download_dir(str(unavailable))
+
+    assert dispatch(ctx, Method.SETTINGS_CHECK_DOWNLOAD_DIR.value, {}) == {
+        "ready": False,
+        "reason": "output_path_invalid",
+    }
+    with pytest.raises(HandlerError) as exc_info:
+        dispatch(
+            ctx,
+            Method.DOWNLOAD_CREATE_TASKS.value,
+            {"urls": ["https://example.com/video.mp4"]},
+        )
+
+    assert exc_info.value.code is ErrorCode.OUTPUT_PATH_INVALID
+    assert exc_info.value.message == "下载位置不可用，请重新选择"
+    assert ctx.manager.get_snapshot() == []
 
 
 def test_create_tasks_repairs_duplicate_youtube_url(tmp_path):
