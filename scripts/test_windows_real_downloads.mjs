@@ -14,7 +14,7 @@ import { assertBridgeUnused, stopChildProcessTree } from "./package_smoke_helper
 import { createMediaFaultServer } from "./windows_media_fault_server.mjs";
 import {
   assertCompletedDownload, assertGateCoverage, buildDownloadGateEnvironment, captureAudit, parseGateArguments,
-  prepareDownloadGateRoot, sha256File, validateMediaProbe, waitForTask,
+  packagedMediaBin, prepareDownloadGateRoot, sha256File, validateMediaProbe, waitForTask,
 } from "./windows_real_download_helpers.mjs";
 
 const runFile = promisify(execFile);
@@ -66,7 +66,7 @@ function installedIdentity(executable) {
 }
 
 export async function launchGateApp(session) {
-  await assertBridgeUnused();
+  if (session.environment.DOWNANY_BRIDGE_PORT !== "0") await assertBridgeUnused();
   session.app = await session.playwright._electron.launch({
     executablePath: session.executable,
     args: [`--user-data-dir=${session.profileDir}`],
@@ -87,7 +87,7 @@ export async function launchGateApp(session) {
     bounds: BrowserWindow.getAllWindows()[0].getBounds(),
   }));
   assert.equal(identity.version, session.expectedVersion);
-  assert.equal(path.resolve(identity.userData), path.resolve(session.profileDir));
+  assert.equal(fs.realpathSync(identity.userData), fs.realpathSync(session.profileDir));
   session.launches.push({ ...identity, pid: session.app.process().pid });
   return session.page;
 }
@@ -144,12 +144,13 @@ export async function taskState(session, taskId, state, options = {}) {
 export async function verifyCompletedMedia(session, taskId, label) {
   const task = await taskState(session, taskId, "completed", { timeoutMs: 240_000 });
   const file = assertCompletedDownload(task, session.outputDir);
-  const bin = path.join(path.dirname(session.executable), "resources", "bin");
-  const result = await runFile(path.join(bin, "ffprobe.exe"), [
+  const bin = packagedMediaBin(session.executable);
+  const executableName = (name) => path.join(bin, process.platform === "win32" ? `${name}.exe` : name);
+  const result = await runFile(executableName("ffprobe"), [
     "-v", "error", "-show_streams", "-show_format", "-of", "json", file.path,
   ], { windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 });
   const media = validateMediaProbe(JSON.parse(result.stdout));
-  const decoded = await runFile(path.join(bin, "ffmpeg.exe"), [
+  const decoded = await runFile(executableName("ffmpeg"), [
     "-hide_banner", "-v", "error", "-nostdin", "-xerror", "-err_detect", "explode",
     "-i", file.path, "-map", "0:v:0", "-map", "0:a:0", "-f", "hash", "-hash", "sha256", "-",
   ], { windowsHide: true, timeout: 120_000, maxBuffer: 1024 * 1024 });
@@ -169,6 +170,21 @@ export async function verifyCompletedMedia(session, taskId, label) {
 export async function verifyPublicDirect(session) {
   const id = await addFromInput(session, PUBLIC_SAMPLE.url);
   return verifyCompletedMedia(session, id, "public-direct");
+}
+
+export async function verifyNoOverwrite(session, source) {
+  const originalSha256 = sha256File(source.path);
+  const id = await addFromInput(session, PUBLIC_SAMPLE.url);
+  const duplicate = await verifyCompletedMedia(session, id, "duplicate-name-no-overwrite");
+  assert.notEqual(fs.realpathSync(duplicate.path), fs.realpathSync(source.path), "Repeated download overwrote the original path");
+  assert.equal(sha256File(source.path), originalSha256, "Repeated download changed the original file");
+  assert.equal(duplicate.decodedSHA256, source.decodedSHA256);
+  duplicate.recovery = {
+    originalFileUnchanged: true,
+    distinctOutputPath: true,
+    decodedMatchesSource: true,
+  };
+  return duplicate;
 }
 
 export async function openExtensionSession(session, { browserExecutable, extensionDir }) {
@@ -258,18 +274,36 @@ export async function verifyFaultRecovery(session, source) {
   const completedBefore = session.cases.map((item) => ({ path: item.path, sha256: item.sha256 }));
 
   const retryPath = "/failed-then-retry.mp4";
-  server.setMode(retryPath, "missing");
+  server.setMode(retryPath, "service-unavailable");
   const retryId = await addFromInput(session, server.baseUrl + retryPath);
   const failure = await taskState(session, retryId, "failed", { timeoutMs: 60_000 });
-  assert.ok(server.requests.some((item) => item.pathname === retryPath && item.status === 404));
+  assert.equal(failure.error_code, "network");
+  assert.ok(server.requests.some((item) => item.pathname === retryPath && item.status === 503));
+  const selectionsBeforeRetry = {
+    quality: failure.quality,
+    formatId: failure.format_id,
+    audioOnly: failure.audio_only,
+    postprocessing: failure.postprocessing,
+  };
   await session.page.locator(`#task-${retryId}`).getByText("下载失败", { exact: true }).waitFor();
   await session.page.screenshot({ path: path.join(session.root, "retry-before.png") });
   server.setMode(retryPath, "healthy");
   await session.page.locator(`#task-${retryId}`).getByRole("button", { name: "重试", exact: true }).click();
   const retried = await verifyCompletedMedia(session, retryId, "failed-task-retry");
+  const completedRetry = (await snapshot(session)).tasks.find((item) => item.id === retryId);
+  assert.deepEqual({
+    quality: completedRetry.quality,
+    formatId: completedRetry.format_id,
+    audioOnly: completedRetry.audio_only,
+    postprocessing: completedRetry.postprocessing,
+  }, selectionsBeforeRetry);
   assert.equal(retried.decodedSHA256, source.decodedSHA256);
+  const outputDirectoryRetained = fs.realpathSync(path.dirname(retried.path)) === fs.realpathSync(session.outputDir);
+  assert.equal(outputDirectoryRetained, true, "Retry changed the selected output directory");
   retried.recovery = { initialStatus: failure.status, initialErrorCode: failure.error_code,
-    sameTaskId: true, uiAction: "retry", decodedMatchesSource: true };
+    sameTaskId: true, uiAction: "retry", decodedMatchesSource: true,
+    outputDirectoryRetained,
+    retainedSelections: selectionsBeforeRetry };
 
   const pausePath = "/pause-restart-resume.mp4";
   const pauseId = await addFromInput(session, server.baseUrl + pausePath);

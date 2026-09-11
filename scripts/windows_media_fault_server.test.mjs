@@ -253,6 +253,20 @@ test('a missing route can become healthy without replacing the server', async ()
   });
 });
 
+test('a service-unavailable route can become healthy for an explicit network retry', async () => {
+  await withMediaServer(async (server) => {
+    server.setMode('/retry.mp4', 'service-unavailable');
+    const unavailable = await httpGet(server.baseUrl, '/retry.mp4');
+    server.setMode('/retry.mp4', 'healthy');
+    const recovered = await httpGet(server.baseUrl, '/retry.mp4');
+
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.body.toString('utf8'), 'temporarily unavailable');
+    assert.equal(recovered.status, 200);
+    assert.deepEqual(recovered.body, mediaBytes);
+  });
+});
+
 test('disconnect-once preserves a usable partial response for a byte-range retry', async () => {
   await withMediaServer(async (server) => {
     server.setMode('/interrupt.mp4', 'disconnect-once');

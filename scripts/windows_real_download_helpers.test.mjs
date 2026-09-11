@@ -77,6 +77,18 @@ test("gate environment cannot inherit development tools or protocol registration
   assert.equal(inherited.DOWNANY_SKIP_PROTOCOL_REGISTRATION, "0");
 });
 
+test("resolves packaged media tools for Windows and macOS layouts", () => {
+  assert.equal(
+    gate.packagedMediaBin(path.resolve("C:/Downany/Downany.exe"), "win32"),
+    path.resolve("C:/Downany/resources/bin"),
+  );
+  assert.equal(
+    gate.packagedMediaBin(path.resolve("/Applications/Downany.app/Contents/MacOS/Downany"), "darwin"),
+    path.resolve("/Applications/Downany.app/Contents/Resources/bin"),
+  );
+  assert.throws(() => gate.packagedMediaBin(path.resolve("/tmp/Downany"), "linux"), /platform/i);
+});
+
 function outputFixture(t) {
   const output = temporaryRoot(t);
   const file = path.join(output, "movie.mp4");

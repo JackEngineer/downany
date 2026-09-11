@@ -107,6 +107,12 @@ export function sha256File(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
+export function packagedMediaBin(executable, platform = process.platform) {
+  if (platform === "win32") return path.join(path.dirname(executable), "resources", "bin");
+  if (platform === "darwin") return path.resolve(path.dirname(executable), "../Resources/bin");
+  throw new Error(`Unsupported packaged media platform: ${platform}`);
+}
+
 export function assertCompletedDownload(task, outputDir) {
   assert.equal(task?.status, "completed", "Task is not completed");
   assert.equal(task.progress, 100, "Task progress is not complete");
