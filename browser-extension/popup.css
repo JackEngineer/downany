@@ -50,6 +50,40 @@ body {
   color: var(--muted);
 }
 
+.top-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.connection::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.connection.online {
+  color: var(--ok);
+}
+
+.connection.starting {
+  color: var(--badge-hls);
+}
+
+.connection.offline {
+  color: var(--danger);
+}
+
 .page-meta {
   display: flex;
   gap: 10px;

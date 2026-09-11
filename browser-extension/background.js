@@ -27,7 +27,7 @@ const {
 } = globalThis.VideoDlSniffCore;
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
-/** 官网下载页（占位，见 docs/COMMERCIAL.md） */
+/** 桌面端官网下载页。 */
 const DOWNLOAD_SITE_URL = "https://downany.app/download";
 const INSTALL_GUIDE_OPEN_KEY = "installGuideOpenedAt";
 const INSTALL_GUIDE_COOLDOWN_MS = 60_000;
@@ -993,10 +993,10 @@ async function probeBridgeHealth() {
 }
 
 const APP_MISSING_ERROR =
-  "未检测到百纳桌面端。已打开安装说明；请安装并运行后再回来点下载（开发可用：npm run desktop）。";
+  "未检测到百纳桌面端。已打开安装说明；请安装并运行后再回来点下载。";
 
 /**
- * 打开扩展内安装引导页（内含官网下载链接占位）。
+ * 打开扩展内安装引导页（内含官网下载链接）。
  * 冷却期内不重复弹页，避免连点刷标签。
  */
 async function openInstallGuide({ force = false } = {}) {
@@ -1017,7 +1017,7 @@ async function openInstallGuide({ force = false } = {}) {
     });
     return { ok: true };
   } catch (err) {
-    // 退而求其次：直接打开官网占位地址
+    // 退而求其次：直接打开官网下载页
     try {
       await chrome.tabs.create({ url: DOWNLOAD_SITE_URL, active: true });
       return { ok: true, via: "site" };
@@ -1427,6 +1427,11 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
+
+  if (message.type === "getBridgeHealth") {
+    void probeBridgeHealth().then((health) => sendResponse(health));
+    return true;
+  }
 
   if (message.type === "domMedia") {
     const tabId =

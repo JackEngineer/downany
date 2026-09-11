@@ -1,4 +1,4 @@
-/** 安装引导页：检测本机桥，并链到官网下载占位页。 */
+/** 安装引导页：检测本机桥，并链到官网下载页。 */
 
 const BRIDGE_BASE = "http://127.0.0.1:17888";
 const DOWNLOAD_URL = "https://downany.app/download";
@@ -6,6 +6,9 @@ const DOWNLOAD_URL = "https://downany.app/download";
 const statusEl = document.getElementById("status");
 const recheckBtn = document.getElementById("recheck");
 const downloadLink = document.getElementById("downloadLink");
+const guideTitle = document.getElementById("guideTitle");
+const guideLead = document.getElementById("guideLead");
+const { installGuidePresentation } = globalThis.VideoDlShared;
 
 if (downloadLink) {
   downloadLink.href = DOWNLOAD_URL;
@@ -48,17 +51,14 @@ async function recheck() {
   setStatus("", "");
   try {
     const ok = await probeBridge();
-    if (ok) {
-      setStatus("ok", "已检测到百纳，可以关闭本页，回到原网站重新点下载。");
-      return;
-    }
-    setStatus(
-      "err",
-      "仍未检测到桌面端。请先安装或运行百纳，再点「重新检测」。",
-    );
+    const presentation = installGuidePresentation(ok);
+    if (guideTitle) guideTitle.textContent = presentation.title;
+    if (guideLead) guideLead.textContent = presentation.lead;
+    if (downloadLink) downloadLink.hidden = !presentation.showDownload;
+    setStatus(presentation.statusKind, presentation.statusText);
+    recheckBtn.textContent = presentation.buttonText;
   } finally {
     recheckBtn.disabled = false;
-    recheckBtn.textContent = "我已打开，重新检测";
   }
 }
 

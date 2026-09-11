@@ -9,7 +9,38 @@ const {
   extractDouyinVideoId,
   normalizeYtdlpPageUrl,
   isYtdlpPreferredPage,
+  bridgeConnectionPresentation,
+  installGuidePresentation,
 } = globalThis.VideoDlShared;
+
+assert.deepStrictEqual(
+  bridgeConnectionPresentation({ ok: true, sidecarReady: true }),
+  { kind: "online", text: "百纳已连接" },
+);
+assert.deepStrictEqual(
+  bridgeConnectionPresentation({ ok: true, sidecarReady: false }),
+  { kind: "starting", text: "百纳正在启动" },
+);
+assert.deepStrictEqual(bridgeConnectionPresentation({ ok: false }), {
+  kind: "offline",
+  text: "百纳未连接",
+});
+assert.deepStrictEqual(installGuidePresentation(true), {
+  title: "桌面端已连接",
+  lead: "百纳已就绪，可以回到原网站开始下载。",
+  statusKind: "ok",
+  statusText: "连接正常，可以关闭本页。",
+  buttonText: "重新检测",
+  showDownload: false,
+});
+assert.deepStrictEqual(installGuidePresentation(false), {
+  title: "需要先安装桌面端",
+  lead: "浏览器扩展只负责识别与入队，真正下载由本机「百纳」完成。",
+  statusKind: "err",
+  statusText: "仍未检测到桌面端。请先安装或运行百纳，再重新检测。",
+  buttonText: "我已打开，重新检测",
+  showDownload: true,
+});
 
 assert.strictEqual(
   extractDouyinVideoId(

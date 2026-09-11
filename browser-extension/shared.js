@@ -652,6 +652,37 @@
     return { pageUrl, title: title.slice(0, 160) };
   }
 
+  function bridgeConnectionPresentation(health) {
+    if (health && health.ok && health.sidecarReady !== false) {
+      return { kind: "online", text: "百纳已连接" };
+    }
+    if (health && health.ok) {
+      return { kind: "starting", text: "百纳正在启动" };
+    }
+    return { kind: "offline", text: "百纳未连接" };
+  }
+
+  function installGuidePresentation(connected) {
+    if (connected) {
+      return {
+        title: "桌面端已连接",
+        lead: "百纳已就绪，可以回到原网站开始下载。",
+        statusKind: "ok",
+        statusText: "连接正常，可以关闭本页。",
+        buttonText: "重新检测",
+        showDownload: false,
+      };
+    }
+    return {
+      title: "需要先安装桌面端",
+      lead: "浏览器扩展只负责识别与入队，真正下载由本机「百纳」完成。",
+      statusKind: "err",
+      statusText: "仍未检测到桌面端。请先安装或运行百纳，再重新检测。",
+      buttonText: "我已打开，重新检测",
+      showDownload: true,
+    };
+  }
+
   globalThis.VideoDlShared = {
     YTDLP_PAGE_RES,
     YTDLP_FRIENDLY_HOST_RE,
@@ -675,5 +706,7 @@
     scanDom,
     pickPageThumbnail,
     findVideoCard,
+    bridgeConnectionPresentation,
+    installGuidePresentation,
   };
 })();

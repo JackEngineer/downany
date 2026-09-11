@@ -7,6 +7,7 @@ const {
   YTDLP_FRIENDLY_HOST_RE,
   isWeakPageTitle,
   collapsePreferredPageSelection,
+  bridgeConnectionPresentation,
 } = globalThis.VideoDlShared;
 
 const HTTP_RE = /^https?:\/\/\S+/i;
@@ -16,6 +17,7 @@ const urlEl = document.getElementById("url");
 const thumbEl = document.getElementById("thumb");
 const statusEl = document.getElementById("status");
 const countEl = document.getElementById("count");
+const connectionEl = document.getElementById("connection");
 const mediaListEl = document.getElementById("mediaList");
 const emptyEl = document.getElementById("empty");
 const toolbarEl = document.getElementById("toolbar");
@@ -31,6 +33,19 @@ let currentTabId = null;
 let mediaItems = [];
 /** @type {Set<string>} */
 const selected = new Set();
+
+async function refreshBridgeConnection() {
+  if (!connectionEl) return;
+  let health = { ok: false };
+  try {
+    health = (await chrome.runtime.sendMessage({ type: "getBridgeHealth" })) || health;
+  } catch {
+    // Service Worker 不可达时按未连接展示。
+  }
+  const presentation = bridgeConnectionPresentation(health);
+  connectionEl.className = `connection ${presentation.kind}`;
+  connectionEl.textContent = presentation.text;
+}
 
 function isHttpUrl(value) {
   return typeof value === "string" && HTTP_RE.test(value.trim());
@@ -542,6 +557,7 @@ enqueueBtn.addEventListener("click", async () => {
         "ok",
         `已发送 ${result.count ?? items.length} 个任务到下载器${expiredNote}${wokeNote}`,
       );
+      void refreshBridgeConnection();
       void refreshRecent();
       return;
     }
@@ -613,6 +629,7 @@ enqueuePageBtn.addEventListener("click", async () => {
           ? "已打开百纳并发送页面链接"
           : "已发送页面链接到下载器",
       );
+      void refreshBridgeConnection();
       void refreshRecent();
       return;
     }
@@ -785,6 +802,7 @@ async function retryRecentTask(task, button) {
     });
     if (result && result.ok) {
       setStatus("ok", "已重新发送到下载器");
+      void refreshBridgeConnection();
       await refreshRecent();
       return;
     }
@@ -844,4 +862,5 @@ if (inpageButtonToggle) {
 }
 
 startRecentPolling();
+void refreshBridgeConnection();
 void loadActiveTab();
