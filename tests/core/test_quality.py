@@ -21,9 +21,15 @@ def test_normalize_quality():
 
 def test_build_format_selector():
     assert build_format_selector("best") == (
+        "bestvideo[vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
+        "best[vcodec^=avc][ext=mp4]/"
         "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
         "bestvideo+bestaudio/best[ext=mp4]/best"
     )
     limited = build_format_selector("1080p")
     assert all("height<=1080" in branch for branch in limited.split("/"))
+    assert limited.split("/")[0] == (
+        "bestvideo[height<=1080][vcodec^=avc][ext=mp4]+"
+        "bestaudio[ext=m4a]"
+    )
     assert build_format_selector("best", format_id="22") == "22"

@@ -4,6 +4,8 @@ from typing import Optional
 
 VALID_QUALITIES = frozenset({"best", "1080p", "720p", "480p", "360p"})
 DEFAULT_VIDEO_FORMAT_SELECTOR = (
+    "bestvideo[vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
+    "best[vcodec^=avc][ext=mp4]/"
     "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
     "bestvideo+bestaudio/best[ext=mp4]/best"
 )
@@ -46,6 +48,8 @@ def build_format_selector(quality: str, format_id: Optional[str] = None) -> str:
         return DEFAULT_VIDEO_FORMAT_SELECTOR
     return "/".join(
         [
+            f"bestvideo[height<={height}][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]",
+            f"best[height<={height}][vcodec^=avc][ext=mp4]",
             f"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]",
             f"bestvideo[height<={height}]+bestaudio",
             f"best[height<={height}][ext=mp4]",

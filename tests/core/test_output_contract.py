@@ -210,6 +210,8 @@ def test_video_selectors_are_mp4_first_and_direct_media_stays_permissive():
     )
 
     assert best.ydl_options["format"] == (
+        "bestvideo[vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
+        "best[vcodec^=avc][ext=mp4]/"
         "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
         "bestvideo+bestaudio/best[ext=mp4]/best"
     )
