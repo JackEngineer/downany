@@ -1,9 +1,9 @@
 {
   "target": "macos-arm64",
   "result": "passed",
-  "recordedAt": "2026-09-11T16:39:12.089Z",
+  "recordedAt": "2026-09-11T17:07:57.232Z",
   "candidateVersion": "0.3.1",
-  "candidateArtifactSha256": "837e21d67f279b348b73105bea849eb31dcf4117831681f3cdaa55067e6b1e7a",
+  "candidateArtifactSha256": "81a05a2f1712499c4ddb4bc24f1aca5515ccde76fdc16bb88dca957599b7eff9",
   "packageExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
   "installedExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
   "installMethod": "isolated-app-copy-from-package",
@@ -18,7 +18,7 @@
   "openFileActionVisible": true,
   "artifact": {
     "bytes": 2007172,
-    "sha256": "1bd567b2f0c792e01f6a63a12c3c74486b3e9f020992e3f21ac71b18ad83328c",
+    "sha256": "6a2580fb729a3dfd76710deb5f897c8f7a49dc678f5f43c6c73eadb4e92f18bd",
     "decodedSha256": "6f050a86b5b693d5db60de2af2d974e8a1996427e60a8b240186de0ee1e99f8a",
     "videoCodec": "mpeg4",
     "audioCodec": "aac"

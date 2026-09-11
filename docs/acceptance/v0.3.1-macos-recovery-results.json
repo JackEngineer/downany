@@ -1,8 +1,8 @@
 {
   "target": "macos-arm64",
-  "candidateSha256": "837e21d67f279b348b73105bea849eb31dcf4117831681f3cdaa55067e6b1e7a",
+  "candidateSha256": "81a05a2f1712499c4ddb4bc24f1aca5515ccde76fdc16bb88dca957599b7eff9",
   "expectedVersion": "0.3.1",
-  "recordedAt": "2026-09-11T16:20:36.179Z",
+  "recordedAt": "2026-09-11T17:24:33.591Z",
   "sampleLicense": "CC0 1.0",
   "result": "passed",
   "launchCount": 3,
@@ -10,7 +10,7 @@
   "cases": [
     {
       "label": "public-direct",
-      "taskId": "ea270880-19ad-42e9-99fd-bd468a5b92e2",
+      "taskId": "9c4abf76-6d13-4fac-b328-24d53cf6ce97",
       "artifactBytes": 1131116,
       "artifactSha256": "797e880d38a800b1a54b3ec4a16159c7cd20a15e4ea7676a84d2793d8bdbf6f3",
       "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
@@ -30,7 +30,7 @@
     },
     {
       "label": "duplicate-name-no-overwrite",
-      "taskId": "69ef034c-dcda-4626-9ad5-75da68827d17",
+      "taskId": "3360b95f-3a8b-4847-bd71-1ebc892b19b0",
       "artifactBytes": 1131116,
       "artifactSha256": "797e880d38a800b1a54b3ec4a16159c7cd20a15e4ea7676a84d2793d8bdbf6f3",
       "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
@@ -55,9 +55,9 @@
     },
     {
       "label": "failed-task-retry",
-      "taskId": "fb89f0d8-840f-44d0-9220-cb13faa5122e",
+      "taskId": "d2eb5a48-1af4-44d1-8794-cb27699a319f",
       "artifactBytes": 1131099,
-      "artifactSha256": "861190aa944bf41fb79828fbfc860aa02e0f3b7a10998ae4959fd5764d6fa31c",
+      "artifactSha256": "b5402654fd23b34e608e4a928b8fd09418803c48abea7df6fe5f10e77e0b68ee",
       "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
       "durationSeconds": 5.055,
       "container": "mov,mp4,m4a,3gp,3g2,mj2",
@@ -89,9 +89,9 @@
     },
     {
       "label": "pause-restart-resume",
-      "taskId": "42f13c14-4b83-4768-ae28-8d64c418e4cc",
+      "taskId": "ff70d36d-d73d-4c1e-8ff5-18c62a78c396",
       "artifactBytes": 1131105,
-      "artifactSha256": "7662760c8769dfe4c1ea789986432929c224154576509bbd1a194a23f32ceee3",
+      "artifactSha256": "993176172fe45a7fba416d86bd3b93e81c4b9bf049e9f1e382fc070f941b4239",
       "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
       "durationSeconds": 5.055,
       "container": "mov,mp4,m4a,3gp,3g2,mj2",
@@ -107,23 +107,23 @@
       },
       "visibleCompleted": true,
       "recovery": {
-        "activeBytes": 7168,
-        "pausedBytes": 7168,
+        "activeBytes": 15360,
+        "pausedBytes": 15360,
         "restoredStatus": "paused",
         "sameTaskId": true,
         "uiActions": [
           "pause",
           "continue"
         ],
-        "rangeStart": 15360,
+        "rangeStart": 31744,
         "decodedMatchesSource": true
       }
     },
     {
       "label": "network-interruption-recovery",
-      "taskId": "70bea932-c654-4967-9f10-f2e4a87298ea",
+      "taskId": "06489fa0-ff75-412f-9ef8-146ebd8a1721",
       "artifactBytes": 1131095,
-      "artifactSha256": "bef6ee26379a0f525f1df0375877df1115fac61305d6f6f10a459ceeb070cff0",
+      "artifactSha256": "a4afae1157adffe833d35c99e1808aed792d19b4ddf8928715ba1da177362f8d",
       "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
       "durationSeconds": 5.055,
       "container": "mov,mp4,m4a,3gp,3g2,mj2",
@@ -141,7 +141,7 @@
       "recovery": {
         "faultInjected": true,
         "interruptedBytes": 262144,
-        "rangeStart": 237507,
+        "rangeStart": 236137,
         "decodedMatchesSource": true
       }
     }
