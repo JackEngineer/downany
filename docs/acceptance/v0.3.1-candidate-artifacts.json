@@ -1,0 +1,17 @@
+{
+  "version": "0.3.1",
+  "extensionVersion": "0.8.3",
+  "installers": {
+    "macos-arm64": {
+      "path": ".build/v031-macos-candidate-bili/Downany-0.3.1-mac.dmg",
+      "sha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+      "bytes": 181555423
+    },
+    "windows-x64": null
+  },
+  "extension": {
+    "path": ".build/v031-macos-candidate-bili/Downany-chrome-extension-0.8.3.zip",
+    "sha256": "b08e594e8146545f56155b5d66fd2ee7d6329c219454dc0d7b551df4aace2bc3",
+    "bytes": 63183
+  }
+}
