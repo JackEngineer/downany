@@ -4,7 +4,22 @@ import {
   parseEnqueueBody,
   parseTaskIdsQuery,
   BRIDGE_TASKS_MAX_IDS,
+  resolveBridgePort,
 } from "./bridgeServer";
+
+describe("resolveBridgePort", () => {
+  it("keeps the product bridge on 17888 by default", () => {
+    expect(resolveBridgePort({})).toBe(17888);
+  });
+
+  it("allows an isolated acceptance instance to request an ephemeral port", () => {
+    expect(resolveBridgePort({ DOWNANY_BRIDGE_PORT: "0" })).toBe(0);
+  });
+
+  it.each(["-1", "65536", "abc", "1.5"])("rejects invalid port %s", (value) => {
+    expect(() => resolveBridgePort({ DOWNANY_BRIDGE_PORT: value })).toThrow(/DOWNANY_BRIDGE_PORT/);
+  });
+});
 
 describe("parseEnqueueBody", () => {
   it("parses single url", () => {

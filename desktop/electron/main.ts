@@ -370,7 +370,7 @@ async function flushPendingEnqueue(): Promise<void> {
   function startBridge(): void {
   if (bridgeServer) return;
   try {
-    bridgeServer = startBridgeServer({
+    const server = startBridgeServer({
       enqueue: enqueueFromBridge,
       getStatus: () => ({
         sidecarReady:
@@ -380,9 +380,18 @@ async function flushPendingEnqueue(): Promise<void> {
       }),
       getTasks: (ids) => taskTracker.getByIds(ids).map(trackedToBridgeStatus),
     });
-    process.stderr.write(
-      `扩展桥已监听 http://${BRIDGE_HOST}:${BRIDGE_PORT}/enqueue\n`,
-    );
+    bridgeServer = server;
+    server.once("listening", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : BRIDGE_PORT;
+      process.stderr.write(
+        `扩展桥已监听 http://${BRIDGE_HOST}:${port}/enqueue\n`,
+      );
+    });
+    server.once("error", (err) => {
+      if (bridgeServer === server) bridgeServer = null;
+      process.stderr.write(`扩展桥启动失败: ${String(err)}\n`);
+    });
   } catch (err) {
     process.stderr.write(`扩展桥启动失败: ${String(err)}\n`);
   }

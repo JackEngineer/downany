@@ -93,6 +93,7 @@ export function buildDownloadGateEnvironment(inherited, dataDir) {
   env.DOWNANY_DATA_DIR = dataDir;
   env.DOWNANY_UPDATE_DISABLED = "1";
   env.DOWNANY_SKIP_PROTOCOL_REGISTRATION = "1";
+  env.DOWNANY_BRIDGE_PORT = "0";
   env.PYTHONUNBUFFERED = "1";
   env.NO_PROXY = [...new Set([
     ...(env.NO_PROXY || env.no_proxy || "").split(",").filter(Boolean),

@@ -2,7 +2,21 @@
 
 import * as http from "node:http";
 
-export const BRIDGE_PORT = 17888;
+const DEFAULT_BRIDGE_PORT = 17888;
+
+export function resolveBridgePort(
+  env: Record<string, string | undefined>,
+): number {
+  const raw = (env.DOWNANY_BRIDGE_PORT || "").trim();
+  if (!raw) return DEFAULT_BRIDGE_PORT;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error("DOWNANY_BRIDGE_PORT must be an integer from 0 to 65535");
+  }
+  return port;
+}
+
+export const BRIDGE_PORT = resolveBridgePort(process.env);
 export const BRIDGE_HOST = "127.0.0.1";
 
 /** 单次 /tasks 查询最多接受的 ids 数量。 */
@@ -178,11 +192,14 @@ export function parseTaskIdsQuery(raw: string | null): string[] {
   return out;
 }
 
-export function startBridgeServer(handlers: BridgeHandlers): http.Server {
+export function startBridgeServer(
+  handlers: BridgeHandlers,
+  port = BRIDGE_PORT,
+): http.Server {
   const server = http.createServer((req, res) => {
     void (async () => {
       const method = req.method || "GET";
-      const url = new URL(req.url || "/", `http://${BRIDGE_HOST}:${BRIDGE_PORT}`);
+      const url = new URL(req.url || "/", `http://${BRIDGE_HOST}:${port}`);
 
       if (method === "OPTIONS") {
         res.writeHead(204, {
@@ -237,6 +254,6 @@ export function startBridgeServer(handlers: BridgeHandlers): http.Server {
     });
   });
 
-  server.listen(BRIDGE_PORT, BRIDGE_HOST);
+  server.listen(port, BRIDGE_HOST);
   return server;
 }

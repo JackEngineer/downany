@@ -67,6 +67,7 @@ test("gate environment cannot inherit development tools or protocol registration
   assert.equal(env.DOWNANY_DATA_DIR, path.resolve("isolated"));
   assert.equal(env.DOWNANY_UPDATE_DISABLED, "1");
   assert.equal(env.DOWNANY_SKIP_PROTOCOL_REGISTRATION, "1");
+  assert.equal(env.DOWNANY_BRIDGE_PORT, "0");
   for (const key of ["NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "DOWNANY_BIN_DIR", "VIDEODL_DATA_DIR", "VITE_DEV_SERVER_URL"]) {
     assert.equal(env[key], undefined);
   }
