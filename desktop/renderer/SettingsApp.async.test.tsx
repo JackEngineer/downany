@@ -32,6 +32,7 @@ beforeEach(() => {
     onEvent: (handler: (value: ProtocolEvent) => void) => { event = handler; return () => undefined; },
     onState: () => () => undefined,
     onMigration: () => () => undefined,
+    onSettingsFocus: () => () => undefined,
     setThemeSource: vi.fn().mockResolvedValue(undefined),
   } as unknown as DesktopApi;
   useAppStore.setState({ settings, connection: "connected", toasts: [] });

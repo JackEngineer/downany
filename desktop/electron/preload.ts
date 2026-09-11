@@ -9,6 +9,7 @@ import type {
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 export type NativeThemeMode = "light" | "dark";
+export type SettingsFocus = "cookies" | "network" | "downloadTool" | "download";
 
 export type MigrationResult = {
   status: "skipped" | "migrated" | "failed";
@@ -84,8 +85,13 @@ const api = {
   setThemeSource(mode: "system" | NativeThemeMode): Promise<void> {
     return ipcRenderer.invoke("app:setThemeSource", mode);
   },
-  openSettings(): Promise<void> {
-    return ipcRenderer.invoke("app:openSettings");
+  openSettings(focus?: SettingsFocus): Promise<void> {
+    return ipcRenderer.invoke("app:openSettings", focus);
+  },
+  onSettingsFocus(handler: (focus: SettingsFocus) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, focus: SettingsFocus) => handler(focus);
+    ipcRenderer.on("app:settingsFocus", listener);
+    return () => ipcRenderer.removeListener("app:settingsFocus", listener);
   },
   readClipboardText(): Promise<string> {
     return ipcRenderer.invoke("app:readClipboard");

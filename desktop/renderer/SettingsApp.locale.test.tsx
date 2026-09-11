@@ -9,6 +9,9 @@ import { settingsFixture } from "./test/settingsFixture";
 
 const request = vi.fn();
 const privateError = "Cookie: fake-secret https://example.com/private C:\\private\\data";
+let settingsFocusHandler:
+  | ((focus: "cookies" | "network" | "downloadTool" | "download") => void)
+  | undefined;
 beforeEach(() => {
   localStorage.clear();
   setLocale("zh-CN");
@@ -21,6 +24,10 @@ beforeEach(() => {
     platform: "win32", request,
     getConnectionState: vi.fn().mockResolvedValue("connected"),
     onEvent: () => () => undefined, onState: () => () => undefined, onMigration: () => () => undefined,
+    onSettingsFocus: (handler: typeof settingsFocusHandler) => {
+      settingsFocusHandler = handler;
+      return () => { settingsFocusHandler = undefined; };
+    },
     setThemeSource: vi.fn().mockResolvedValue(undefined),
     checkAppUpdate: vi.fn().mockResolvedValue({ status: "not-available", currentVersion: "0.3.0", message: "raw" }),
     showItemInFolder: vi.fn().mockResolvedValue(undefined),
@@ -33,6 +40,28 @@ afterEach(() => { cleanup(); setLocale("zh-CN"); });
 async function mount() { render(<SettingsApp />); await act(async () => { await Promise.resolve(); }); }
 
 describe("settings language and safe results", () => {
+  it.each([
+    ["cookies", "从浏览器导入 Cookie"],
+    ["network", "启用代理"],
+    ["download", "下载目录"],
+    ["downloadTool", "检查更新"],
+  ] as const)(
+    "moves recovery navigation to %s",
+    async (focus, accessibleName) => {
+      await mount();
+
+      act(() => settingsFocusHandler?.(focus));
+
+      await waitFor(() =>
+        expect(
+          focus === "downloadTool"
+            ? screen.getByRole("button", { name: accessibleName })
+            : screen.getByLabelText(accessibleName),
+        ).toHaveFocus(),
+      );
+    },
+  );
+
   it("updates the mounted settings window from another window's language selection", async () => {
     await mount();
     act(() => {

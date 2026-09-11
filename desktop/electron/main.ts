@@ -532,8 +532,10 @@ function broadcastAll(channel: string, ...args: unknown[]): void {
   }
 }
 
-function showSettingsWindow(): void {
-  openSettingsWindow(path.join(__dirname, "preload.js"));
+function showSettingsWindow(
+  focus?: "cookies" | "network" | "downloadTool" | "download",
+): void {
+  openSettingsWindow(path.join(__dirname, "preload.js"), focus);
 }
 
 function isWindowFocused(): boolean {
@@ -825,8 +827,9 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle("app:openSettings", async () => {
-    showSettingsWindow();
+  ipcMain.handle("app:openSettings", async (_evt, focus?: string) => {
+    const allowed = ["cookies", "network", "downloadTool", "download"] as const;
+    showSettingsWindow(allowed.find((item) => item === focus));
   });
 
   ipcMain.handle("app:readClipboard", async () => {

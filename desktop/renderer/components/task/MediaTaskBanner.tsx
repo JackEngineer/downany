@@ -96,13 +96,15 @@ function runRecoveryAction(
 ): Promise<void> {
   switch (action) {
     case "login":
+      return commands.openSettings("cookies");
     case "network":
+      return commands.openSettings("network");
     case "updateTool":
-      return commands.openSettings();
+      return commands.openSettings("downloadTool");
     case "recognize":
       return commands.recognizePage();
     case "downloadSettings":
-      return commands.openSettings();
+      return commands.openSettings("download");
     case "appDownload":
       return commands.openAppDownload();
     case "diagnostics":

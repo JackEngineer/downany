@@ -1,6 +1,12 @@
 # 产品路线图：从 yt-dlp GUI 到专业下载器
 
-## 当前执行：v0.3.0 双平台交付（2026-08-31）
+## 当前执行：v0.3.1 下载成功与失败恢复（2026-09-11）
+
+v0.3.1 以真实用户完成第一条下载为版本目标，覆盖 YouTube、Bilibili、抖音三个平台的 30 条固定场景、失败后的定向恢复、5 人首次使用试用，以及 macOS Apple Silicon / Windows x64 最终候选包回归。详细范围和发布门槛见 [v0.3.1 升级规格](superpowers/specs/2026-09-11-downany-v0-3-1-reliability-design.md)，执行证据见 [v0.3.1 验收记录](acceptance/v0.3.1-acceptance.md)。
+
+当前已实现失败任务到登录状态、代理、下载工具和下载位置的定向入口，并建立可机器判定的 30 条场景矩阵。真实网站、真人试用和最终候选包尚未执行，不能标为通过。
+
+## 已完成：v0.3.0 双平台交付（2026-08-31）
 
 本轮按已批准的 [分阶段升级规格](superpowers/specs/2026-08-26-downany-v0-3-staged-upgrade-design.md) 推进到 v0.3.0，已完成本地集成、Windows 安装回归、macOS Apple Silicon 候选验收，并于 2026-08-31 公开 [Downany 0.3.0](https://github.com/JackEngineer/downany/releases/tag/v0.3.0) 与新版官网。完整发布证据见 [公开发布验收](acceptance/v0.3.0-public-release.md)。
 

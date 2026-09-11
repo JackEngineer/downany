@@ -27,8 +27,10 @@ export async function openPath(target: string): Promise<string> {
   return window.api.openPath(target);
 }
 
-export async function openSettings(): Promise<void> {
-  return window.api.openSettings();
+export async function openSettings(
+  focus?: "cookies" | "network" | "downloadTool" | "download",
+): Promise<void> {
+  return window.api.openSettings(focus);
 }
 
 export async function openExtractWindow(url: string): Promise<void> {

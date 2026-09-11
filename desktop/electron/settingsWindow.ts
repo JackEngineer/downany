@@ -6,12 +6,17 @@ import {
   windowChromeOptions,
   type WindowThemeSource,
 } from "./windowChrome";
+import type { SettingsFocus } from "./preload";
 
 let settingsWindow: BrowserWindow | null = null;
 
-export function openSettingsWindow(preloadPath: string): BrowserWindow {
+export function openSettingsWindow(
+  preloadPath: string,
+  focus?: SettingsFocus,
+): BrowserWindow {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.focus();
+    if (focus) settingsWindow.webContents.send("app:settingsFocus", focus);
     return settingsWindow;
   }
 
@@ -44,9 +49,13 @@ export function openSettingsWindow(preloadPath: string): BrowserWindow {
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    void settingsWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}settings.html`);
+    const url = new URL("settings.html", process.env.VITE_DEV_SERVER_URL);
+    if (focus) url.searchParams.set("focus", focus);
+    void settingsWindow.loadURL(url.toString());
   } else {
-    void settingsWindow.loadFile(path.join(__dirname, "../dist/settings.html"));
+    void settingsWindow.loadFile(path.join(__dirname, "../dist/settings.html"), {
+      query: focus ? { focus } : undefined,
+    });
   }
 
   settingsWindow.on("closed", () => {

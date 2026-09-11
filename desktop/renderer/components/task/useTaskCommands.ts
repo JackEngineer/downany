@@ -24,10 +24,12 @@ export interface TaskCommands {
   open: () => Promise<void>;
   reveal: () => Promise<void>;
   recognizePage: () => Promise<void>;
-  openSettings: () => Promise<void>;
+  openSettings: (focus?: SettingsFocus) => Promise<void>;
   exportDiagnostics: () => Promise<void>;
   openAppDownload: () => Promise<void>;
 }
+
+export type SettingsFocus = "cookies" | "network" | "downloadTool" | "download";
 
 export function useTaskCommands(task: TaskSnapshot): TaskCommands {
   const pushToast = useAppStore((state) => state.pushToast);
@@ -112,7 +114,8 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
         }
       }, "error.openFolder"),
       recognizePage: () => safeOpen(() => openExtractWindow(task.url), "add.recognizeFailed"),
-      openSettings: () => safeOpen(() => openSettingsWindow(), "settings.openFailed"),
+      openSettings: (focus) =>
+        safeOpen(() => openSettingsWindow(focus), "settings.openFailed"),
       exportDiagnostics,
       openAppDownload,
     }),

@@ -766,7 +766,7 @@ describe("MediaTaskBanner", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "选择登录状态" }),
     );
-    expect(openSettingsMock).toHaveBeenCalledWith();
+    expect(openSettingsMock).toHaveBeenCalledWith("cookies");
 
     fireEvent.click(screen.getByRole("button", { name: "网页识别" }));
     expect(openExtractWindowMock).toHaveBeenCalledWith(
@@ -851,8 +851,26 @@ describe("MediaTaskBanner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查下载设置" }));
 
-    expect(openSettingsMock).toHaveBeenCalledTimes(1);
+    expect(openSettingsMock).toHaveBeenCalledWith("download");
   });
+
+  it.each([
+    ["network", "检查网络设置", "network"],
+    ["ytdlp_outdated", "更新下载工具", "downloadTool"],
+  ] as const)(
+    "opens the relevant settings control for %s",
+    (errorCode, actionLabel, settingsFocus) => {
+      render(
+        <MediaTaskBanner
+          task={taskFixture({ status: "failed", error_code: errorCode })}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: actionLabel }));
+
+      expect(openSettingsMock).toHaveBeenCalledWith(settingsFocus);
+    },
+  );
 
   it("opens the app download page for missing media tools", async () => {
     checkAppUpdateMock.mockResolvedValueOnce({

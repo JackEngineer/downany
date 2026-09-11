@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { MigrationResult } from "../electron/preload";
+import type { MigrationResult, SettingsFocus } from "../electron/preload";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { SitesPanel } from "./components/SitesPanel";
 import { TelegramSettingsTab } from "./components/TelegramSettingsTab";
@@ -28,6 +28,23 @@ type YtDlpInfo = {
 };
 
 type TabKey = "general" | "quality" | "postprocess" | "appearance" | "telegram";
+
+const SETTINGS_FOCUS_IDS: Record<SettingsFocus, string> = {
+  cookies: "settings-focus-cookies",
+  network: "settings-focus-network",
+  downloadTool: "settings-focus-download-tool",
+  download: "settings-focus-download",
+};
+
+function focusSettingsControl(focus: SettingsFocus): void {
+  queueMicrotask(() => {
+    const control = document.getElementById(SETTINGS_FOCUS_IDS[focus]);
+    if (typeof control?.scrollIntoView === "function") {
+      control.scrollIntoView({ block: "center" });
+    }
+    control?.focus();
+  });
+}
 
 const TABS: { key: TabKey; labelKey: string }[] = [
   { key: "general", labelKey: "settings.general" },
@@ -61,6 +78,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
         <span>{t("settings.downloadDir", locale)}</span>
         <div className="settings-control">
           <input
+            id="settings-focus-download"
             value={draft.download_dir}
             disabled={disabled}
             onChange={(e) => update({ download_dir: e.target.value })}
@@ -97,6 +115,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       <label className="settings-row">
         <span>{t("settings.cookies", locale)}</span>
         <select
+          id="settings-focus-cookies"
           value={draft.cookies_from_browser || ""}
           disabled={disabled}
           onChange={(e) => update({ cookies_from_browser: e.target.value })}
@@ -171,6 +190,7 @@ function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
       <label className="settings-row">
         <span>{t("settings.proxyEnabled", locale)}</span>
         <input
+          id="settings-focus-network"
           type="checkbox"
           checked={Boolean(draft.proxy_enabled)}
           disabled={disabled}
@@ -421,6 +441,16 @@ export function SettingsApp() {
   }, []);
 
   useEffect(() => {
+    const navigate = (focus: SettingsFocus) => {
+      setTab("general");
+      focusSettingsControl(focus);
+    };
+    const initial = new URLSearchParams(window.location.search).get("focus");
+    if (initial && initial in SETTINGS_FOCUS_IDS) navigate(initial as SettingsFocus);
+    return window.api.onSettingsFocus(navigate);
+  }, []);
+
+  useEffect(() => {
     if (connection !== "connected") return;
     void request<MigrationResult>("app.runMigration", {})
       .then((r) => setMigration(r))
@@ -636,6 +666,7 @@ export function SettingsApp() {
             {ytError && <p className="field-error">{ytError}</p>}
             <div className="settings-control">
               <button
+                id="settings-focus-download-tool"
                 type="button"
                 disabled={disabled || ytBusy}
                 onClick={() => void checkYtDlp()}
