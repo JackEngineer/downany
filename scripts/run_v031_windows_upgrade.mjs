@@ -250,7 +250,18 @@ export async function run(options) {
       theme_mode: "dark",
       embed_metadata: false,
     }), directories.outputDir);
+    assert.equal(
+      path.resolve(sourceSettings.download_dir),
+      path.resolve(directories.outputDir),
+      "Source package did not accept the isolated output directory",
+    );
     const completedId = await addFromInput(session, `${session.faultServer.baseUrl}/completed.mp4`);
+    const completedTask = await taskState(session, completedId, "completed", { timeoutMs: 240_000 });
+    console.log(JSON.stringify({
+      phase: "source-completed-paths",
+      configuredOutput: sourceSettings.download_dir,
+      taskOutput: completedTask.file_path,
+    }));
     const completed = await verifyCompletedMedia(session, completedId, "source-completed");
     const pausedId = await addFromInput(session, `${session.faultServer.baseUrl}/paused.mp4`);
     await taskState(session, pausedId, "downloading", { progress: true, timeoutMs: 60_000 });
