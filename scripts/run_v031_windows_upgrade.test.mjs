@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   OFFICIAL_V030_WINDOWS_SHA256,
+  buildFreshInstallEnvironment,
   installerArguments,
   parseArguments,
 } from "./run_v031_windows_upgrade.mjs";
@@ -44,4 +45,20 @@ test("Windows upgrade gate rejects missing, relative and ambiguous package paths
 test("NSIS install arguments keep the owned destination last", () => {
   const installRoot = absolute("installed/Downany");
   assert.deepEqual(installerArguments(installRoot), ["/S", "/currentuser", `/D=${installRoot}`]);
+});
+
+test("fresh Windows installation uses an isolated home and dynamic bridge", () => {
+  const dataDir = absolute("fresh/downany-data");
+  const homeDir = absolute("fresh/home");
+  const environment = buildFreshInstallEnvironment({
+    PATH: "keep",
+    DOWNANY_DATA_DIR: "daily-data",
+    HOME: "daily-home",
+    USERPROFILE: "daily-profile",
+  }, dataDir, homeDir);
+  assert.equal(environment.PATH, "keep");
+  assert.equal(environment.DOWNANY_DATA_DIR, dataDir);
+  assert.equal(environment.DOWNANY_BRIDGE_PORT, "0");
+  assert.equal(environment.HOME, homeDir);
+  assert.equal(environment.USERPROFILE, homeDir);
 });

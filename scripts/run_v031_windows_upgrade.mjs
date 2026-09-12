@@ -35,6 +35,14 @@ export function installerArguments(installRoot) {
   return ["/S", "/currentuser", `/D=${installRoot}`];
 }
 
+export function buildFreshInstallEnvironment(inherited, dataDir, homeDir) {
+  const environment = buildDownloadGateEnvironment(inherited, dataDir);
+  environment.HOME = homeDir;
+  environment.USERPROFILE = homeDir;
+  environment.DOWNANY_BRIDGE_PORT = "0";
+  return environment;
+}
+
 export function parseArguments(rawArguments) {
   const allowed = new Set([
     "--source-artifact", "--candidate-artifact", "--candidate-executable",
@@ -132,6 +140,76 @@ function candidateFileMatches(installedRoot, unpackedRoot) {
   }));
 }
 
+function assertInside(root, target, label) {
+  const relative = path.relative(fs.realpathSync(root), fs.realpathSync(target));
+  assert.ok(relative && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `${label} escaped isolated root`);
+}
+
+async function verifyFreshCandidateInstall({ options, playwright, root }) {
+  const firstRoot = path.join(root, "first-install");
+  const dataDir = path.join(firstRoot, "downany-data");
+  const profileDir = path.join(firstRoot, "electron-profile");
+  const homeDir = path.join(firstRoot, "home");
+  const installRoot = path.join(firstRoot, "Applications", "Downany");
+  for (const directory of [dataDir, profileDir, homeDir, path.dirname(installRoot)]) fs.mkdirSync(directory, { recursive: true });
+  const session = {
+    playwright,
+    executable: "",
+    expectedVersion: options.candidateVersion,
+    root: firstRoot,
+    dataDir,
+    profileDir,
+    outputDir: path.join(homeDir, "Downloads", "Downany"),
+    environment: buildFreshInstallEnvironment(process.env, dataDir, homeDir),
+    pageErrors: [], stderr: "", cases: [], launches: [], app: null, browser: null,
+  };
+  try {
+    assert.deepEqual(fs.readdirSync(dataDir), [], "First-install data directory must begin empty");
+    session.executable = await installNsis(options.candidateArtifact, installRoot);
+    const candidateFiles = candidateFileMatches(installRoot, path.dirname(options.candidateExecutable));
+    const fixturePath = path.join(firstRoot, "first-download-fixture.mp4");
+    await generateMedia(session.executable, fixturePath);
+    session.faultServer = await createMediaFaultServer(fixturePath, { chunkBytes: 8_192, intervalMs: 25 });
+    await launchGateApp(session);
+    const configPath = path.join(dataDir, "config.json");
+    assert.ok(fs.statSync(configPath).isFile(), "First launch did not create configuration");
+    const firstSnapshot = await snapshot(session);
+    assert.equal(path.resolve(firstSnapshot.settings.download_dir), path.resolve(session.outputDir), "Fresh install chose an unexpected output directory");
+    assertInside(firstRoot, firstSnapshot.settings.download_dir, "Default output directory");
+    const taskId = await addFromInput(session, `${session.faultServer.baseUrl}/first-download.mp4`);
+    await session.page.locator(`#task-${taskId}`).waitFor({ state: "visible", timeout: 15_000 });
+    const completed = await verifyCompletedMedia(session, taskId, "first-download-completed");
+    await session.page.locator(`#task-${taskId}`).getByRole("button", { name: "打开", exact: true })
+      .waitFor({ state: "visible", timeout: 15_000 });
+    assertInside(firstRoot, completed.path, "Downloaded file");
+    assert.deepEqual(session.pageErrors, [], "Renderer emitted page errors during first download");
+    return {
+      installerExecutionVerified: true,
+      candidateLaunchVerified: true,
+      candidateFilesMatchUnpacked: candidateFiles,
+      freshDataDirectory: true,
+      configurationCreatedOnFirstLaunch: true,
+      defaultOutputInsideIsolatedHome: true,
+      addedLinkFeedbackVisible: true,
+      completedStateVisible: completed.visibleCompleted,
+      openFileActionVisible: true,
+      artifact: {
+        bytes: completed.bytes,
+        sha256: completed.sha256,
+        decodedSha256: completed.decodedSHA256,
+        videoCodec: completed.video.codec,
+        audioCodec: completed.audio.codec,
+      },
+    };
+  } finally {
+    try { await closeGateApp(session); } finally {
+      try { await session.faultServer?.close(); } finally {
+        await uninstallNsis(installRoot);
+      }
+    }
+  }
+}
+
 export async function run(options) {
   assert.equal(process.platform, "win32", "This gate targets Windows only");
   assert.equal(process.arch, "x64", "This gate targets Windows x64 only");
@@ -205,7 +283,7 @@ export async function run(options) {
     assert.equal(sha256File(completed.path), sourceCompletedHash, "Resume changed the earlier completed file");
     assert.deepEqual(session.pageErrors, [], "Renderer emitted page errors during upgrade");
 
-    verified = {
+    const upgradeEvidence = {
       target: "windows-x64",
       result: "passed",
       recordedAt: new Date().toISOString(),
@@ -235,6 +313,13 @@ export async function run(options) {
     session.faultServer = null;
     await uninstallNsis(installRoot);
     await assertBridgeUnused();
+    const firstInstall = await verifyFreshCandidateInstall({
+      options,
+      playwright: session.playwright,
+      root,
+    });
+    await assertBridgeUnused();
+    verified = { ...upgradeEvidence, firstInstall };
     fs.mkdirSync(path.dirname(options.resultsPath), { recursive: true });
     fs.writeFileSync(options.resultsPath, `${JSON.stringify(verified, null, 2)}\n`);
     fs.rmSync(root, { recursive: true, force: true });
