@@ -84,6 +84,16 @@ def test_telemetry_enabled_roundtrip(tmp_path):
     assert again.is_telemetry_enabled() is True
 
 
+def test_cookiefile_reaches_download_options(tmp_path):
+    cookiefile = tmp_path / "cookies.txt"
+    cookiefile.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    cfg = JsonConfig(str(tmp_path / "config.json"))
+
+    cfg.update_from_dict({"cookiefile": str(cookiefile)})
+
+    assert cfg.build_download_options().cookiefile == str(cookiefile)
+
+
 def test_update_from_dict_rejects_empty_proxy_when_enabled(tmp_path):
     cfg = JsonConfig(str(tmp_path / "c.json"))
     try:

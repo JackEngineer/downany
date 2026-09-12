@@ -328,6 +328,26 @@ def _find_item_for_url(
     return None
 
 
+def _new_parse_session(
+    url: str,
+    *,
+    proxy: Optional[str],
+    timeout: float,
+    allow_playlist: bool,
+    options: DownloadOptions,
+) -> ParseSession:
+    session_options: Dict[str, Any] = {
+        "proxy": proxy,
+        "timeout": timeout,
+        "allow_playlist": allow_playlist,
+    }
+    if options.cookies_from_browser:
+        session_options["cookies_from_browser"] = options.cookies_from_browser
+    if options.cookiefile:
+        session_options["cookiefile"] = options.cookiefile
+    return ParseSession(url, **session_options)
+
+
 def _expand_playlist_specs(
     url: str,
     *,
@@ -337,11 +357,12 @@ def _expand_playlist_specs(
 ) -> Optional[List[Dict[str, Any]]]:
     """把播放列表 URL 展成多条入队规格；失败或不足以展开时返回 None。"""
     try:
-        result = ParseSession(
+        result = _new_parse_session(
             url,
             proxy=proxy,
             timeout=90.0,
             allow_playlist=True,
+            options=base_options,
         ).run()
     except (ParseCancelled, ParseTimeout, ParseFailed, Exception) as exc:
         logger.warning("播放列表展开失败，回退单任务: %s (%s)", url, exc)
@@ -693,6 +714,7 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "urls 必须是非空数组")
     parse_id = str(uuid.uuid4())
     proxy = ctx.config.get_proxy_for_download()
+    options = ctx.config.build_download_options()
     timeout = float(payload.get("timeout") or 30)
     allow_playlist = bool(payload.get("allow_playlist") or payload.get("allowPlaylist"))
     job = _ParseJob()
@@ -717,11 +739,12 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
                         },
                     )
                     continue
-                session = ParseSession(
+                session = _new_parse_session(
                     url,
                     proxy=proxy,
                     timeout=timeout,
                     allow_playlist=allow_playlist,
+                    options=options,
                 )
                 if not job.set_session(session):
                     break

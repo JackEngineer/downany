@@ -1,6 +1,4 @@
 """Sidecar method handlers 行为测试。"""
-import types
-
 import pytest
 
 from src.core.download_manager import DownloadManager
@@ -183,6 +181,75 @@ def test_create_tasks_auto_expands_playlist_url(tmp_path, monkeypatch):
     assert {t["playlist_index"] for t in tasks} == {1, 2, 3}
     untitled = next(t for t in tasks if "5Bq0nj2RVu0" in t["url"])
     assert untitled["title"] == "a2"
+
+
+def test_create_tasks_passes_cookie_sources_to_playlist_parser(tmp_path, monkeypatch):
+    from src.core.url_parser import ParseResult
+    import src.sidecar.handlers as handlers
+
+    captured = {}
+
+    class FakeSession:
+        def __init__(self, url, **kwargs):
+            captured.update(kwargs)
+            self.url = url
+
+        def run(self):
+            return ParseResult(
+                info=VideoInfo(url=self.url, title="单集", platform=Platform.YOUTUBE),
+                entries=[],
+            )
+
+    monkeypatch.setattr(handlers, "ParseSession", FakeSession)
+    ctx, _ = _ctx(tmp_path)
+    ctx.config.update_from_dict(
+        {"cookies_from_browser": "chrome", "cookiefile": str(tmp_path / "cookies.txt")}
+    )
+
+    dispatch(
+        ctx,
+        Method.DOWNLOAD_CREATE_TASKS.value,
+        {"urls": ["https://www.youtube.com/playlist?list=PLxxx"]},
+    )
+
+    assert captured["cookies_from_browser"] == "chrome"
+    assert captured["cookiefile"] == str(tmp_path / "cookies.txt")
+
+
+def test_parse_urls_passes_cookie_sources_to_parser(tmp_path, monkeypatch):
+    from src.core.url_parser import ParseResult
+    import src.sidecar.handlers as handlers
+
+    captured = {}
+
+    class FakeSession:
+        def __init__(self, url, **kwargs):
+            captured.update(kwargs)
+            self.url = url
+
+        def run(self):
+            return ParseResult(
+                info=VideoInfo(url=self.url, title="视频", platform=Platform.DOUYIN)
+            )
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(handlers, "ParseSession", FakeSession)
+    ctx, _ = _ctx(tmp_path)
+    ctx.config.update_from_dict(
+        {"cookies_from_browser": "chrome", "cookiefile": str(tmp_path / "cookies.txt")}
+    )
+    _inline_threads(monkeypatch)
+
+    dispatch(
+        ctx,
+        Method.DOWNLOAD_PARSE_URLS.value,
+        {"urls": ["https://www.douyin.com/video/1"]},
+    )
+
+    assert captured["cookies_from_browser"] == "chrome"
+    assert captured["cookiefile"] == str(tmp_path / "cookies.txt")
 
 
 def test_create_tasks_parses_bare_bilibili_candidate_once_and_keeps_single_ungrouped(
@@ -504,9 +571,7 @@ class _InlineThread:
 
 
 def _inline_threads(monkeypatch):
-    monkeypatch.setattr(
-        "src.sidecar.handlers.threading", types.SimpleNamespace(Thread=_InlineThread)
-    )
+    monkeypatch.setattr("src.sidecar.handlers.threading.Thread", _InlineThread)
 
 
 def test_search_query_emits_result(tmp_path, monkeypatch):

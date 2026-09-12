@@ -300,6 +300,8 @@ class JsonConfig:
         next_data["cookies_from_browser"] = str(
             next_data.get("cookies_from_browser", "") or ""
         )
+        if "cookiefile" in next_data:
+            next_data["cookiefile"] = str(next_data.get("cookiefile", "") or "")
         next_data["embed_metadata"] = bool(next_data.get("embed_metadata", True))
         next_data["subtitle_langs"] = str(next_data.get("subtitle_langs", "") or "")
         next_data["embed_subs"] = bool(next_data.get("embed_subs", False))
@@ -426,6 +428,7 @@ class JsonConfig:
             filename_template=self.get_filename_template(),
             postprocess_script=self.get_postprocess_script(),
             cookies_from_browser=str(self._data.get("cookies_from_browser", "") or ""),
+            cookiefile=str(self._data.get("cookiefile", "") or ""),
             embed_metadata=bool(self._data.get("embed_metadata", True)),
             subtitle_langs=str(self._data.get("subtitle_langs", "") or ""),
             embed_subs=bool(self._data.get("embed_subs", False)),

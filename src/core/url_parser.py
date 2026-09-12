@@ -167,6 +167,8 @@ def build_parse_command(
     proxy: Optional[str] = None,
     *,
     allow_playlist: bool = False,
+    cookies_from_browser: str = "",
+    cookiefile: str = "",
 ) -> List[str]:
     bundled_ytdlp = resolve_bundled_ytdlp_path()
     executable = [str(bundled_ytdlp)] if bundled_ytdlp else [sys.executable, "-m", "yt_dlp"]
@@ -183,6 +185,12 @@ def build_parse_command(
         cmd.append("--no-playlist")
     if proxy:
         cmd += ["--proxy", proxy]
+    browser = (cookies_from_browser or "").strip()
+    if browser:
+        cmd += ["--cookies-from-browser", browser]
+    cookie_path = (cookiefile or "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        cmd += ["--cookies", cookie_path]
     cmd.append(url)
     return cmd
 
@@ -197,6 +205,8 @@ class ParseSession:
         timeout: float = DEFAULT_PARSE_TIMEOUT,
         *,
         allow_playlist: bool = False,
+        cookies_from_browser: str = "",
+        cookiefile: str = "",
     ):
         cleaned = (url or "").strip()
         if is_twitter_url(cleaned):
@@ -207,6 +217,8 @@ class ParseSession:
         self.proxy = proxy
         self.timeout = timeout
         self.allow_playlist = allow_playlist
+        self.cookies_from_browser = (cookies_from_browser or "").strip()
+        self.cookiefile = (cookiefile or "").strip()
         self._lock = threading.Lock()
         self._process: Optional[subprocess.Popen] = None
         self._cancelled = False
@@ -260,12 +272,14 @@ class ParseSession:
         with self._lock:
             if self._cancelled:
                 raise ParseCancelled(self.url)
+            command_options = {"allow_playlist": self.allow_playlist}
+            if self.cookies_from_browser or self.cookiefile:
+                command_options.update(
+                    cookies_from_browser=self.cookies_from_browser,
+                    cookiefile=self.cookiefile,
+                )
             self._process = _start_parse_process(
-                build_parse_command(
-                    self.url,
-                    self.proxy,
-                    allow_playlist=self.allow_playlist,
-                ),
+                build_parse_command(self.url, self.proxy, **command_options),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

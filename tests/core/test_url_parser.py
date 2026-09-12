@@ -47,6 +47,20 @@ def test_build_parse_command_allows_playlist_when_requested():
     assert "--flat-playlist" in cmd
 
 
+def test_build_parse_command_includes_cookie_sources(tmp_path):
+    cookiefile = tmp_path / "cookies.txt"
+    cookiefile.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    cmd = build_parse_command(
+        "https://example.com/playlist",
+        cookies_from_browser="chrome",
+        cookiefile=str(cookiefile),
+    )
+
+    assert cmd[cmd.index("--cookies-from-browser") + 1] == "chrome"
+    assert cmd[cmd.index("--cookies") + 1] == str(cookiefile)
+
+
 def test_build_parse_command_prefers_bundled_ytdlp_in_packaged_environment(
     tmp_path,
     monkeypatch,
