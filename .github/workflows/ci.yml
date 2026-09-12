@@ -295,6 +295,14 @@ jobs:
             Select-Object -First 1
           if (-not $electron) { throw "packaged Downany.exe not found" }
           node scripts/test_packaged_electron.mjs "--executable=$($electron.FullName)"
+      - name: Record v0.3.1 Windows candidate
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: >-
+          node scripts/record_v031_candidate_artifact.mjs
+          --manifest=docs/acceptance/v0.3.1-candidate-artifacts.json
+          --target=windows-x64
+          --artifact=desktop\release\Downany-0.3.1-win-x64.exe
       - name: Smoke-test packaged Electron (macOS)
         if: matrix.target == 'darwin-arm64'
         shell: bash
@@ -316,4 +324,6 @@ jobs:
         with:
           name: downany-installer-${{ matrix.target }}
           if-no-files-found: error
-          path: desktop/release/**
+          path: |
+            desktop/release/**
+            ${{ matrix.target == 'win32-x64' && 'docs/acceptance/v0.3.1-candidate-artifacts.json' || '' }}
