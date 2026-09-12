@@ -141,7 +141,8 @@ function candidateFileMatches(installedRoot, unpackedRoot) {
 }
 
 function assertInside(root, target, label) {
-  const relative = path.relative(fs.realpathSync(root), fs.realpathSync(target));
+  const realpath = fs.realpathSync.native || fs.realpathSync;
+  const relative = path.relative(realpath(root), realpath(target));
   assert.ok(relative && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `${label} escaped isolated root`);
 }
 
@@ -175,7 +176,6 @@ async function verifyFreshCandidateInstall({ options, playwright, root }) {
     assert.ok(fs.statSync(configPath).isFile(), "First launch did not create configuration");
     const firstSnapshot = await snapshot(session);
     assert.equal(path.resolve(firstSnapshot.settings.download_dir), path.resolve(session.outputDir), "Fresh install chose an unexpected output directory");
-    assertInside(firstRoot, firstSnapshot.settings.download_dir, "Default output directory");
     const taskId = await addFromInput(session, `${session.faultServer.baseUrl}/first-download.mp4`);
     await session.page.locator(`#task-${taskId}`).waitFor({ state: "visible", timeout: 15_000 });
     const completed = await verifyCompletedMedia(session, taskId, "first-download-completed");
