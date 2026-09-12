@@ -303,6 +303,37 @@ jobs:
           --manifest=docs/acceptance/v0.3.1-candidate-artifacts.json
           --target=windows-x64
           --artifact=desktop\release\Downany-0.3.1-win-x64.exe
+      - name: Install Windows upgrade gate runtime
+        id: windows_upgrade_runtime
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "v031-playwright"
+          npm.cmd install --prefix $root --no-save playwright@1.55.0
+          if ($LASTEXITCODE -ne 0) { throw "Playwright installation failed" }
+          "module=$root\node_modules\playwright" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Download official v0.3.0 Windows installer
+        id: windows_upgrade_source
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "Downany-0.3.0-win-x64.exe"
+          Invoke-WebRequest -Uri "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe" -OutFile $source
+          $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946") {
+            throw "Official v0.3.0 installer checksum mismatch"
+          }
+          "artifact=$source" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Verify v0.3.0 to v0.3.1 Windows upgrade
+        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: >-
+          node scripts/run_v031_windows_upgrade.mjs
+          "--source-artifact=${{ steps.windows_upgrade_source.outputs.artifact }}"
+          "--candidate-artifact=$env:GITHUB_WORKSPACE\desktop\release\Downany-0.3.1-win-x64.exe"
+          "--candidate-executable=$env:GITHUB_WORKSPACE\desktop\release\win-unpacked\Downany.exe"
+          "--playwright-module=${{ steps.windows_upgrade_runtime.outputs.module }}"
+          "--results=$env:GITHUB_WORKSPACE\docs\acceptance\v0.3.1-windows-upgrade-results.json"
       - name: Smoke-test packaged Electron (macOS)
         if: matrix.target == 'darwin-arm64'
         shell: bash
@@ -327,3 +358,4 @@ jobs:
           path: |
             desktop/release/**
             ${{ matrix.target == 'win32-x64' && 'docs/acceptance/v0.3.1-candidate-artifacts.json' || '' }}
+            ${{ matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && 'docs/acceptance/v0.3.1-windows-upgrade-results.json' || '' }}

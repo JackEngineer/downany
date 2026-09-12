@@ -10,3 +10,11 @@ test("Windows packaging records the exact v0.3.1 candidate before upload", () =>
   assert.match(workflow, /--artifact=desktop\\release\\Downany-0\.3\.1-win-x64\.exe/);
   assert.match(workflow, /docs\/acceptance\/v0\.3\.1-candidate-artifacts\.json/);
 });
+
+test("Windows packaging runs the v0.3.0 to v0.3.1 upgrade gate before upload", () => {
+  assert.match(workflow, /name: Download official v0\.3\.0 Windows installer/);
+  assert.match(workflow, /ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946/);
+  assert.match(workflow, /name: Verify v0\.3\.0 to v0\.3\.1 Windows upgrade/);
+  assert.match(workflow, /run_v031_windows_upgrade\.mjs/);
+  assert.match(workflow, /v0\.3\.1-windows-upgrade-results\.json/);
+});
