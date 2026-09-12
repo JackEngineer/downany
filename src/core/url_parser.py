@@ -1,6 +1,7 @@
 """可取消、带超时的 URL 解析。以子进程方式运行 yt-dlp，可被真正中断。"""
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import re
@@ -8,10 +9,13 @@ import subprocess
 import sys
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+
+from yt_dlp.cookies import extract_cookies_from_browser
 
 from src.core.download_task import VideoInfo
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
@@ -30,6 +34,10 @@ logger = setup_logger("UrlParser")
 
 DEFAULT_PARSE_TIMEOUT = 30.0
 _BVID_RE = re.compile(r"^BV[0-9A-Za-z]+$")
+_DOUYIN_COLLECTION_RE = re.compile(
+    r"^https?://(?:www\.)?douyin\.com/collection/(?P<id>\d+)(?:/\d+)?/?(?:[?#]|$)",
+    re.IGNORECASE,
+)
 _WINDOWS_DLL_DIRECTORY_LOCK = threading.Lock()
 
 
@@ -162,6 +170,156 @@ class ParseResult:
     playlist: Optional[Dict[str, object]] = None
 
 
+def parse_douyin_collection_payload(url: str, payload: dict) -> ParseResult:
+    match = _DOUYIN_COLLECTION_RE.match((url or "").strip())
+    if not match or int(payload.get("status_code") or 0) != 0:
+        raise ParseFailed("抖音合集解析失败")
+    raw_entries = payload.get("aweme_list")
+    if not isinstance(raw_entries, list) or not raw_entries:
+        raise ParseFailed("抖音合集没有可用分集")
+
+    entries: List[Dict[str, str]] = []
+    series_info: dict = {}
+    uploader = "未知"
+    for index, raw in enumerate(raw_entries, start=1):
+        if not isinstance(raw, dict):
+            continue
+        aweme_id = str(raw.get("aweme_id") or "").strip()
+        if not aweme_id.isdigit():
+            continue
+        if not series_info and isinstance(raw.get("series_info"), dict):
+            series_info = raw["series_info"]
+        author = raw.get("author") if isinstance(raw.get("author"), dict) else {}
+        if uploader == "未知" and author.get("nickname"):
+            uploader = str(author["nickname"])
+        paid_way = (
+            raw.get("entertainment_video_paid_way")
+            if isinstance(raw.get("entertainment_video_paid_way"), dict)
+            else {}
+        )
+        status = raw.get("status") if isinstance(raw.get("status"), dict) else {}
+        unavailable = bool(status.get("is_delete")) or int(paid_way.get("paid_type") or 0) != 0
+        entries.append(
+            {
+                "id": aweme_id,
+                "title": str(raw.get("desc") or raw.get("item_title") or f"第 {index} 集").strip(),
+                "url": f"https://www.douyin.com/video/{aweme_id}",
+                "index": str(index),
+                "available": "0" if unavailable else "1",
+            }
+        )
+    if not entries:
+        raise ParseFailed("抖音合集没有可用分集")
+
+    series_id = str(series_info.get("series_id") or match.group("id"))
+    title = str(series_info.get("series_name") or "抖音合集").strip() or "抖音合集"
+    return ParseResult(
+        info=VideoInfo(
+            url=url,
+            title=title,
+            uploader=uploader,
+            platform=PlatformDetector.detect(url),
+        ),
+        entries=entries,
+        playlist={"id": series_id, "title": title, "count": len(entries)},
+    )
+
+
+def _load_douyin_cookie_jar(
+    *,
+    cookies_from_browser: str,
+    cookiefile: str,
+) -> http.cookiejar.CookieJar:
+    cookie_path = (cookiefile or "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        jar = http.cookiejar.MozillaCookieJar(cookie_path)
+        jar.load(ignore_discard=True, ignore_expires=False)
+        return jar
+
+    browser_spec = (cookies_from_browser or "").strip()
+    if browser_spec:
+        browser_name, separator, profile = browser_spec.partition(":")
+        return extract_cookies_from_browser(
+            browser_name,
+            profile=profile if separator and profile else None,
+        )
+    return http.cookiejar.CookieJar()
+
+
+def fetch_douyin_collection(
+    url: str,
+    *,
+    proxy: Optional[str] = None,
+    timeout: float = DEFAULT_PARSE_TIMEOUT,
+    cookies_from_browser: str = "",
+    cookiefile: str = "",
+) -> ParseResult:
+    match = _DOUYIN_COLLECTION_RE.match((url or "").strip())
+    if not match:
+        raise ParseFailed("不是可识别的抖音合集链接")
+
+    handlers: List[urllib.request.BaseHandler] = [
+        urllib.request.HTTPCookieProcessor(
+            _load_douyin_cookie_jar(
+                cookies_from_browser=cookies_from_browser,
+                cookiefile=cookiefile,
+            )
+        )
+    ]
+    if proxy:
+        handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    opener = urllib.request.build_opener(*handlers)
+    series_id = match.group("id")
+    cursor = 0
+    combined: List[dict] = []
+    final_payload: dict = {}
+    for _page in range(10):
+        query = urllib.parse.urlencode(
+            {
+                "device_platform": "webapp",
+                "aid": "6383",
+                "channel": "channel_pc_web",
+                "series_id": series_id,
+                "pull_type": "2",
+                "cursor": str(cursor),
+                "count": "20",
+                "source": "playlet_homepage_hot",
+            }
+        )
+        request = urllib.request.Request(
+            f"https://www.douyin.com/aweme/v1/web/series/aweme/?{query}",
+            headers={
+                "User-Agent": DEFAULT_HTTP_HEADERS["User-Agent"],
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9",
+                "Referer": url,
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+        try:
+            with opener.open(request, timeout=max(1.0, timeout)) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            raise ParseFailed("抖音合集解析失败") from exc
+        if not isinstance(payload, dict) or int(payload.get("status_code") or 0) != 0:
+            raise ParseFailed("抖音合集解析失败")
+        page_entries = payload.get("aweme_list")
+        if not isinstance(page_entries, list):
+            raise ParseFailed("抖音合集解析失败")
+        combined.extend(entry for entry in page_entries if isinstance(entry, dict))
+        final_payload = payload
+        if not payload.get("has_more"):
+            break
+        next_cursor = int(payload.get("max_cursor") or 0)
+        if next_cursor <= cursor:
+            break
+        cursor = next_cursor
+    final_payload["aweme_list"] = combined
+    return parse_douyin_collection_payload(url, final_payload)
+
+
 def build_parse_command(
     url: str,
     proxy: Optional[str] = None,
@@ -238,6 +396,19 @@ class ParseSession:
         except ParseTimeout:
             raise
         except ParseFailed as primary:
+            if self.allow_playlist and _DOUYIN_COLLECTION_RE.match(self.url):
+                if self._cancelled:
+                    raise ParseCancelled(self.url)
+                try:
+                    return fetch_douyin_collection(
+                        self.url,
+                        proxy=self.proxy,
+                        timeout=self.timeout,
+                        cookies_from_browser=self.cookies_from_browser,
+                        cookiefile=self.cookiefile,
+                    )
+                except ParseFailed:
+                    raise primary
             if not is_twitter_url(self.url):
                 raise
             if self._cancelled:

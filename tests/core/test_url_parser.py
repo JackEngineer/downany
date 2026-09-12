@@ -365,6 +365,67 @@ def test_flat_playlist_empty_title_still_available_for_bilibili(monkeypatch):
     assert result.entries[0]["url"].endswith("BV1AB6bBHEM4")
 
 
+def test_douyin_collection_payload_marks_paid_entries_unavailable():
+    payload = {
+        "status_code": 0,
+        "has_more": 0,
+        "aweme_list": [
+            {
+                "aweme_id": "1001",
+                "desc": "第一集",
+                "series_info": {"series_id": "9001", "series_name": "测试短剧"},
+                "entertainment_video_paid_way": {"paid_type": 0},
+                "status": {"is_delete": False},
+            },
+            {
+                "aweme_id": "1002",
+                "desc": "第二集",
+                "series_info": {"series_id": "9001", "series_name": "测试短剧"},
+                "entertainment_video_paid_way": {"paid_type": 1},
+                "status": {"is_delete": False},
+            },
+        ],
+    }
+
+    result = url_parser.parse_douyin_collection_payload(
+        "https://www.douyin.com/collection/9001/1", payload
+    )
+
+    assert result.info.title == "测试短剧"
+    assert result.playlist == {"id": "9001", "title": "测试短剧", "count": 2}
+    assert [entry["available"] for entry in result.entries] == ["1", "0"]
+    assert result.entries[0]["url"] == "https://www.douyin.com/video/1001"
+
+
+def test_douyin_collection_falls_back_after_ytdlp_rejects_url(monkeypatch):
+    expected = url_parser.ParseResult(
+        info=url_parser.VideoInfo(
+            url="https://www.douyin.com/collection/9001/1",
+            title="测试短剧",
+            platform=Platform.DOUYIN,
+        ),
+        entries=[{"id": "1001", "title": "第一集", "url": "https://www.douyin.com/video/1001"}],
+    )
+    monkeypatch.setattr(
+        url_parser,
+        "build_parse_command",
+        lambda *args, **kwargs: [
+            sys.executable,
+            "-c",
+            "import sys; sys.stderr.write('unsupported'); sys.exit(1)",
+        ],
+    )
+    monkeypatch.setattr(url_parser, "fetch_douyin_collection", lambda *args, **kwargs: expected)
+
+    result = ParseSession(
+        "https://www.douyin.com/collection/9001/1",
+        allow_playlist=True,
+        cookiefile="/tmp/cookies.txt",
+    ).run()
+
+    assert result is expected
+
+
 def test_enrich_bilibili_skips_non_empty_titles(monkeypatch):
     called = []
 
