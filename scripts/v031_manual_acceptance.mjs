@@ -1,6 +1,8 @@
 const TARGETS = ["macos-arm64", "windows-x64"];
 const PARTICIPANTS = ["P1", "P2", "P3", "P4", "P5"];
 const FIRST_USE_STEPS = ["install", "add", "download", "open"];
+const ADD_METHODS = ["app", "extension"];
+const EXTENSION_STEP = "extensionConnect";
 const PACKAGE_CHECKS = [
   "firstInstall",
   "upgradeFrom030",
@@ -53,6 +55,8 @@ export function evaluateManualAcceptance(evidence) {
   if (trials.length !== 5) failures.push("First-use evidence must contain exactly 5 trials");
   const participantIds = new Set();
   let completedWithoutGuidance = 0;
+  let extensionTrials = 0;
+  let completedExtensionTrials = 0;
   for (const trial of trials) {
     const id = trial?.participantId;
     if (!PARTICIPANTS.includes(id)) failures.push(`Unknown participant id: ${id || "<missing>"}`);
@@ -60,6 +64,11 @@ export function evaluateManualAcceptance(evidence) {
     participantIds.add(id);
     if (trial?.firstTimeUser !== true) failures.push(`${id || "Trial"} must be a first-time user`);
     if (!TARGETS.includes(trial?.target)) failures.push(`${id || "Trial"} has an invalid target`);
+    if (!ADD_METHODS.includes(trial?.addMethod)) {
+      failures.push(`${id || "Trial"} must record addMethod as app or extension`);
+    } else if (trial.addMethod === "extension") {
+      extensionTrials += 1;
+    }
     if (!isSha256(trial?.candidateSha256)) failures.push(`${id || "Trial"} is missing a candidate SHA-256`);
     if (!isTimestamp(trial?.observedAt)) failures.push(`${id || "Trial"} is missing a valid observation time`);
     if (typeof trial?.completedWithoutGuidance !== "boolean") {
@@ -67,10 +76,16 @@ export function evaluateManualAcceptance(evidence) {
       continue;
     }
     const steps = Array.isArray(trial.completedSteps) ? trial.completedSteps : [];
+    if (trial.addMethod === "extension" && steps.includes(EXTENSION_STEP)) {
+      completedExtensionTrials += 1;
+    }
     if (trial.completedWithoutGuidance) {
       completedWithoutGuidance += 1;
       if (FIRST_USE_STEPS.some((step) => !steps.includes(step))) {
         failures.push(`${id} must complete install, add, download and open`);
+      }
+      if (trial.addMethod === "extension" && !steps.includes(EXTENSION_STEP)) {
+        failures.push(`${id} extension trial must complete ${EXTENSION_STEP}`);
       }
       if (trial.blockedStep !== null) failures.push(`${id} completed but has a blockedStep`);
     } else {
@@ -82,6 +97,8 @@ export function evaluateManualAcceptance(evidence) {
     failures.push("First-use evidence must identify anonymous participants P1 through P5 exactly once");
   }
   if (completedWithoutGuidance < 4) failures.push("At least 4 first-time users must complete without guidance");
+  if (extensionTrials < 1) failures.push("At least 1 first-time user must use the extension route");
+  if (completedExtensionTrials < 1) failures.push("At least 1 first-time user must complete the extension connection");
 
   const records = Array.isArray(evidence.packageRecords) ? evidence.packageRecords : [];
   const recordsByTarget = new Map();
@@ -128,5 +145,7 @@ export const manualAcceptanceContract = Object.freeze({
   targets: TARGETS,
   participants: PARTICIPANTS,
   firstUseSteps: FIRST_USE_STEPS,
+  addMethods: ADD_METHODS,
+  extensionStep: EXTENSION_STEP,
   packageChecks: PACKAGE_CHECKS,
 });

@@ -17,15 +17,18 @@ const REQUIRED_CHECKS = {
   noOverwrite: true,
 };
 
-function trial(participantId, completedWithoutGuidance, target = "macos-arm64") {
+function trial(participantId, completedWithoutGuidance, target = "macos-arm64", addMethod = "app") {
   return {
     participantId,
     firstTimeUser: true,
     target,
     candidateSha256: target === "macos-arm64" ? HASH_A : HASH_B,
     observedAt: "2026-09-12T09:30:00+08:00",
+    addMethod,
     completedWithoutGuidance,
-    completedSteps: completedWithoutGuidance ? REQUIRED_STEPS : ["install", "add"],
+    completedSteps: completedWithoutGuidance
+      ? [...REQUIRED_STEPS, ...(addMethod === "extension" ? ["extensionConnect"] : [])]
+      : ["install", "add"],
     blockedStep: completedWithoutGuidance ? null : "download",
     notes: completedWithoutGuidance ? "" : "下载阶段需要观察员提示",
   };
@@ -47,7 +50,7 @@ function passingEvidence() {
     version: "0.3.1",
     firstUseTrials: [
       trial("P1", true), trial("P2", true), trial("P3", true),
-      trial("P4", true, "windows-x64"), trial("P5", false, "windows-x64"),
+      trial("P4", true, "windows-x64", "extension"), trial("P5", false, "windows-x64"),
     ],
     packageRecords: [
       packageRecord("macos-arm64", HASH_A),
@@ -70,6 +73,21 @@ test("fails when fewer than four users complete the first download without guida
   const report = evaluateManualAcceptance(evidence);
   assert.equal(report.passed, false);
   assert.match(report.failures.join("\n"), /at least 4/i);
+});
+
+test("requires one real extension route and its connection step", () => {
+  const withoutExtension = passingEvidence();
+  withoutExtension.firstUseTrials[3] = trial("P4", true, "windows-x64");
+  assert.match(evaluateManualAcceptance(withoutExtension).failures.join("\n"), /extension/i);
+
+  const missingConnection = passingEvidence();
+  missingConnection.firstUseTrials[3].completedSteps = [...REQUIRED_STEPS];
+  assert.match(evaluateManualAcceptance(missingConnection).failures.join("\n"), /extensionConnect/);
+
+  const incompleteExtension = passingEvidence();
+  incompleteExtension.firstUseTrials[3] = trial("P4", true, "windows-x64");
+  incompleteExtension.firstUseTrials[4] = trial("P5", false, "windows-x64", "extension");
+  assert.match(evaluateManualAcceptance(incompleteExtension).failures.join("\n"), /complete the extension connection/i);
 });
 
 test("fails closed for missing manual package checks and mismatched candidate hashes", () => {
