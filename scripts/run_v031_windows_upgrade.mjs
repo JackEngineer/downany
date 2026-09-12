@@ -333,7 +333,9 @@ export async function run(options) {
     verified = { ...upgradeEvidence, firstInstall };
     fs.mkdirSync(path.dirname(options.resultsPath), { recursive: true });
     fs.writeFileSync(options.resultsPath, `${JSON.stringify(verified, null, 2)}\n`);
-    fs.rmSync(root, { recursive: true, force: true });
+    // NSIS can leave its self-delete helper holding the install directory for
+    // a brief moment after the uninstaller process exits on Windows.
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
     return verified;
   } catch (error) {
     console.error(`Windows upgrade evidence retained for diagnosis: ${root}`);
