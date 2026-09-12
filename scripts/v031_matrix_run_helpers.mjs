@@ -6,7 +6,7 @@ const TARGETS = new Set(["macos-arm64", "windows-x64"]);
 export function parseMatrixRunArguments(rawArguments) {
   const allowed = new Set([
     "--executable", "--candidate-artifact", "--playwright-module", "--matrix", "--results", "--target",
-    "--expected-version", "--cookiefile", "--case", "--timeout-minutes",
+    "--expected-version", "--cookiefile", "--cookies-from-browser", "--case", "--timeout-minutes",
   ]);
   const args = new Map();
   for (const argument of rawArguments) {
@@ -37,6 +37,7 @@ export function parseMatrixRunArguments(rawArguments) {
     target,
     expectedVersion,
     cookiefile: args.get("--cookiefile") || "",
+    cookiesFromBrowser: args.get("--cookies-from-browser") || "",
     caseId: args.get("--case") || "",
     timeoutMs: timeoutMinutes * 60_000,
   };

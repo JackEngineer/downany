@@ -20,10 +20,12 @@ test("requires explicit candidate, target, matrix and evidence paths", () => {
     `--results=${absolute("results.json")}`,
     "--target=macos-arm64",
     "--expected-version=0.3.1",
+    "--cookies-from-browser=chrome:Default",
   ]);
   assert.equal(parsed.target, "macos-arm64");
   assert.equal(parsed.expectedVersion, "0.3.1");
   assert.equal(parsed.candidateArtifact, absolute("Downany.dmg"));
+  assert.equal(parsed.cookiesFromBrowser, "chrome:Default");
   assert.equal(parsed.timeoutMs, 15 * 60_000);
   assert.throws(() => parseMatrixRunArguments([]), /required/i);
   assert.throws(() => parseMatrixRunArguments([

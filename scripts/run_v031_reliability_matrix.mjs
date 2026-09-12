@@ -170,11 +170,14 @@ async function runMatrix(options) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `downany-v031-${options.target}-`));
   console.log(`Owned artifact directory: ${root}`);
   const directories = prepareDownloadGateRoot(root);
-  if (options.cookiefile) {
-    assert.ok(fs.statSync(options.cookiefile).isFile(), "Cookie file is missing");
+  if (options.cookiefile || options.cookiesFromBrowser) {
     const configPath = path.join(directories.dataDir, "config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    config.cookiefile = options.cookiefile;
+    if (options.cookiefile) {
+      assert.ok(fs.statSync(options.cookiefile).isFile(), "Cookie file is missing");
+      config.cookiefile = options.cookiefile;
+    }
+    if (options.cookiesFromBrowser) config.cookies_from_browser = options.cookiesFromBrowser;
     fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   }
   const environment = buildDownloadGateEnvironment(process.env, directories.dataDir);
@@ -233,7 +236,7 @@ async function runMatrix(options) {
 
 async function main() {
   if (process.argv.includes("--help")) {
-    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --candidate-artifact=<absolute DMG or NSIS installer> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--case=<case id>] [--timeout-minutes=15]");
+    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --candidate-artifact=<absolute DMG or NSIS installer> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--cookies-from-browser=<browser[:profile]>] [--case=<case id>] [--timeout-minutes=15]");
     return;
   }
   const options = parseMatrixRunArguments(process.argv.slice(2));
