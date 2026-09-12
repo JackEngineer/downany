@@ -65,13 +65,18 @@ export function loadWindowsMediaLock(lockPath = DEFAULT_WINDOWS_MEDIA_LOCK) {
   return validateWindowsMediaLock(payload);
 }
 
-export async function verifyWindowsMediaLock(lock, { fetchImpl = globalThis.fetch } = {}) {
+export async function verifyWindowsMediaLock(lock, {
+  fetchImpl = globalThis.fetch,
+  githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "",
+} = {}) {
   const validated = validateWindowsMediaLock(lock);
   const releaseApi =
     `https://api.github.com/repos/${validated.repository}/releases/tags/` +
     encodeURIComponent(validated.tag);
+  const apiHeaders = { accept: "application/vnd.github+json" };
+  if (githubToken) apiHeaders.authorization = `Bearer ${githubToken}`;
   const response = await fetchImpl(releaseApi, {
-    headers: { accept: "application/vnd.github+json" },
+    headers: apiHeaders,
   });
   if (!response.ok) {
     throw new Error(

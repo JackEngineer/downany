@@ -131,6 +131,8 @@ jobs:
           python-version: "3.11"
       - name: Verify retained Windows media lock
         if: matrix.target == 'win32-x64'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/windows_media_lock.mjs
       - name: Fetch paired media tools (Windows)
         if: matrix.target == 'win32-x64'

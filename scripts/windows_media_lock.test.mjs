@@ -58,7 +58,7 @@ test("verifies the retained GitHub asset and its published SHA-256 digest", asyn
   const asset = githubAsset();
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
-    calls.push([String(url), init.method ?? "GET"]);
+    calls.push([String(url), init.method ?? "GET", init.headers?.authorization ?? null]);
     if (String(url).startsWith("https://api.github.com/")) {
       return new Response(
         JSON.stringify({
@@ -74,7 +74,7 @@ test("verifies the retained GitHub asset and its published SHA-256 digest", asyn
     return new Response(null, { status: 200 });
   };
 
-  const result = await verifyWindowsMediaLock(retainedLock, { fetchImpl });
+  const result = await verifyWindowsMediaLock(retainedLock, { fetchImpl, githubToken: "ci-token" });
 
   assert.deepEqual(result, {
     url: asset.browser_download_url,
@@ -85,8 +85,9 @@ test("verifies the retained GitHub asset and its published SHA-256 digest", asyn
     [
       `https://api.github.com/repos/${retainedLock.repository}/releases/tags/${retainedLock.tag}`,
       "GET",
+      "Bearer ci-token",
     ],
-    [asset.browser_download_url, "HEAD"],
+    [asset.browser_download_url, "HEAD", null],
   ]);
 });
 
