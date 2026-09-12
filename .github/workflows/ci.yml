@@ -89,6 +89,7 @@ jobs:
           node shared.test.js
           node sniff-core.test.js
           node bridge-timeout.test.js
+          node install-ui.test.js
       - name: Package verified extension
         id: extension_package
         shell: bash

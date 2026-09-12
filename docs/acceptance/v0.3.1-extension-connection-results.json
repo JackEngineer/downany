@@ -3,8 +3,8 @@
   "recordedAt": "2026-09-12",
   "candidate": {
     "extensionVersion": "0.8.3",
-    "extensionSha256": "d716144098911872c58f81313df7d3793c01e14aa369d75bc6bc08d7609241d3",
-    "extensionBytes": 62035,
+    "extensionSha256": "0ca90645c1e5b89b54304dea7562178017b488b8a770e5ba31117ce80f2285b5",
+    "extensionBytes": 62057,
     "browser": "Chrome for Testing 153.0.8010.12",
     "loadedFromCandidateZip": true
   },
@@ -24,6 +24,13 @@
     "recheckActionVisible": true,
     "candidateDisconnectedPresentationVerified": true
   },
+  "headedBrowserCheck": {
+    "connected": true,
+    "connectedTitleVisible": true,
+    "readyStatusVisible": true,
+    "downloadActionHidden": true,
+    "recheckActionVisible": true
+  },
   "diagnostic": {
     "attemptedToBypassPermissionPrompt": true,
     "bypassSucceeded": false,
@@ -31,6 +38,6 @@
   },
   "manualAcceptance": {
     "passed": false,
-    "reason": "需要在有界面 Chrome 中由用户允许本地网络访问后复验连接状态"
+    "reason": "候选包浏览器自动化已通过，仍需纳入五位真实首次用户试用"
   }
 }
