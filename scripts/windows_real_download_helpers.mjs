@@ -117,8 +117,13 @@ export function assertCompletedDownload(task, outputDir) {
   assert.equal(task?.status, "completed", "Task is not completed");
   assert.equal(task.progress, 100, "Task progress is not complete");
   assert.ok(typeof task.file_path === "string" && path.isAbsolute(task.file_path), "Output path must be absolute");
-  const file = fs.realpathSync(task.file_path);
-  const relative = path.relative(fs.realpathSync(outputDir), file);
+  // The legacy JavaScript implementation can preserve an 8.3 segment such as
+  // RUNNER~1 for the directory while the downloaded file is reported with the
+  // corresponding long segment. The native resolver returns one canonical
+  // Windows spelling for both and keeps the containment check fail-closed.
+  const realpath = fs.realpathSync.native || fs.realpathSync;
+  const file = realpath(task.file_path);
+  const relative = path.relative(realpath(outputDir), file);
   assert.ok(relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
     "Completed file is outside the isolated output directory");
   const stat = fs.statSync(file);
