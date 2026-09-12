@@ -8,9 +8,9 @@
       "bytes": 181524426
     },
     "windows-x64": {
-      "path": "desktop/release/Downany-0.3.1-win-x64.exe",
-      "sha256": "4879eacc9dfa3942d9a07876fa95c56fb98d61af7b01c6776322c798534496f2",
-      "bytes": 198637405
+      "path": ".build/v031-windows-ci-34682473616/desktop/release/Downany-0.3.1-win-x64.exe",
+      "sha256": "3bfea08c7919b75ea78c84c9e6cba3c380edb35dbb7d94349fb2b2851df3a8da",
+      "bytes": 198641522
     }
   },
   "extension": {

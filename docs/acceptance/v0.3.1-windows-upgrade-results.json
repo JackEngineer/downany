@@ -1,14 +1,14 @@
 {
   "target": "windows-x64",
   "result": "passed",
-  "recordedAt": "2026-09-12T03:54:55.991Z",
+  "recordedAt": "2026-09-12T08:13:14.009Z",
   "source": {
     "version": "0.3.0",
     "artifactSha256": "db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb"
   },
   "candidate": {
     "version": "0.3.1",
-    "artifactSha256": "4879eacc9dfa3942d9a07876fa95c56fb98d61af7b01c6776322c798534496f2"
+    "artifactSha256": "3bfea08c7919b75ea78c84c9e6cba3c380edb35dbb7d94349fb2b2851df3a8da"
   },
   "installMethod": "silent-current-user-same-directory",
   "manualInstallation": false,
@@ -35,8 +35,8 @@
     "sameTaskIds": true
   },
   "resume": {
-    "partialBytes": 7168,
-    "rangeStart": 15360,
+    "partialBytes": 15360,
+    "rangeStart": 31744,
     "completed": true
   },
   "existingCompletedFileUnchanged": true,
@@ -76,7 +76,7 @@
     "openFileActionVisible": true,
     "artifact": {
       "bytes": 2915542,
-      "sha256": "10da092fabde88df7f52ac7b81185ba49aff657ad72295ce395a71a05539ef8a",
+      "sha256": "1e496836db245dcd3070e96bc4e901eeb50ebdc9f77971f1a629a74d43b53762",
       "decodedSha256": "a4764d818dcfb57e85076e0f7936ed96cdb37ba802ff2fd411b16cba70105076",
       "videoCodec": "mpeg4",
       "audioCodec": "aac"
