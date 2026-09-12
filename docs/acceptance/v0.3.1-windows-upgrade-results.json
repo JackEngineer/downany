@@ -1,0 +1,85 @@
+{
+  "target": "windows-x64",
+  "result": "passed",
+  "recordedAt": "2026-09-12T03:54:55.991Z",
+  "source": {
+    "version": "0.3.0",
+    "artifactSha256": "db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb"
+  },
+  "candidate": {
+    "version": "0.3.1",
+    "artifactSha256": "4879eacc9dfa3942d9a07876fa95c56fb98d61af7b01c6776322c798534496f2"
+  },
+  "installMethod": "silent-current-user-same-directory",
+  "manualInstallation": false,
+  "installerExecutionVerified": true,
+  "sourceLaunchVerified": true,
+  "candidateLaunchVerified": true,
+  "candidateFilesMatchUnpacked": {
+    "Downany.exe": true,
+    "resources/app.asar": true,
+    "resources/sidecar/DownanySidecar/DownanySidecar.exe": true,
+    "resources/bin/ffmpeg.exe": true,
+    "resources/bin/ffprobe.exe": true
+  },
+  "settingsPreserved": {
+    "downloadDirRetained": true,
+    "defaultQuality": "480p",
+    "concurrentDownloads": 2,
+    "themeMode": "dark",
+    "embedMetadata": false
+  },
+  "queuePreserved": {
+    "completedTask": true,
+    "pausedTask": true,
+    "sameTaskIds": true
+  },
+  "resume": {
+    "partialBytes": 7168,
+    "rangeStart": 15360,
+    "completed": true
+  },
+  "existingCompletedFileUnchanged": true,
+  "completedArtifacts": [
+    {
+      "phase": "source-completed",
+      "bytes": 2915439,
+      "sha256": "064929a19bca811a1e9a33e5766659ce8d37872a997cfdbce5efce37577316a9",
+      "decodedSha256": "a4764d818dcfb57e85076e0f7936ed96cdb37ba802ff2fd411b16cba70105076",
+      "videoCodec": "mpeg4",
+      "audioCodec": "aac"
+    },
+    {
+      "phase": "candidate-resumed",
+      "bytes": 2915439,
+      "sha256": "064929a19bca811a1e9a33e5766659ce8d37872a997cfdbce5efce37577316a9",
+      "decodedSha256": "a4764d818dcfb57e85076e0f7936ed96cdb37ba802ff2fd411b16cba70105076",
+      "videoCodec": "mpeg4",
+      "audioCodec": "aac"
+    }
+  ],
+  "firstInstall": {
+    "installerExecutionVerified": true,
+    "candidateLaunchVerified": true,
+    "candidateFilesMatchUnpacked": {
+      "Downany.exe": true,
+      "resources/app.asar": true,
+      "resources/sidecar/DownanySidecar/DownanySidecar.exe": true,
+      "resources/bin/ffmpeg.exe": true,
+      "resources/bin/ffprobe.exe": true
+    },
+    "freshDataDirectory": true,
+    "configurationCreatedOnFirstLaunch": true,
+    "defaultOutputInsideIsolatedHome": true,
+    "addedLinkFeedbackVisible": true,
+    "completedStateVisible": true,
+    "openFileActionVisible": true,
+    "artifact": {
+      "bytes": 2915542,
+      "sha256": "10da092fabde88df7f52ac7b81185ba49aff657ad72295ce395a71a05539ef8a",
+      "decodedSha256": "a4764d818dcfb57e85076e0f7936ed96cdb37ba802ff2fd411b16cba70105076",
+      "videoCodec": "mpeg4",
+      "audioCodec": "aac"
+    }
+  }
+}
