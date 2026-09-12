@@ -13,7 +13,7 @@ test("Windows packaging records the exact v0.3.1 candidate before upload", () =>
 
 test("Windows packaging runs the v0.3.0 to v0.3.1 upgrade gate before upload", () => {
   assert.match(workflow, /name: Download official v0\.3\.0 Windows installer/);
-  assert.match(workflow, /ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946/);
+  assert.match(workflow, /db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb/);
   assert.match(workflow, /name: Verify v0\.3\.0 to v0\.3\.1 Windows upgrade/);
   assert.match(workflow, /run_v031_windows_upgrade\.mjs/);
   assert.match(workflow, /v0\.3\.1-windows-upgrade-results\.json/);

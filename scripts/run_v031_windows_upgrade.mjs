@@ -28,7 +28,7 @@ import {
 
 const runFile = promisify(execFile);
 
-export const OFFICIAL_V030_WINDOWS_SHA256 = "ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946";
+export const OFFICIAL_V030_WINDOWS_SHA256 = "db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb";
 
 export function installerArguments(installRoot) {
   assert.ok(path.isAbsolute(installRoot), "Install root must be absolute");

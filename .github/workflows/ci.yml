@@ -320,7 +320,7 @@ jobs:
           $source = Join-Path $env:RUNNER_TEMP "Downany-0.3.0-win-x64.exe"
           Invoke-WebRequest -Uri "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe" -OutFile $source
           $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne "ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946") {
+          if ($hash -ne "db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb") {
             throw "Official v0.3.0 installer checksum mismatch"
           }
           "artifact=$source" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

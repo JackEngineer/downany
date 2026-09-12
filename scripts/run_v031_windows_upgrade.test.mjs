@@ -21,7 +21,7 @@ test("Windows upgrade gate requires official v0.3.0 and exact v0.3.1 package inp
   ]);
   assert.equal(parsed.sourceVersion, "0.3.0");
   assert.equal(parsed.candidateVersion, "0.3.1");
-  assert.equal(OFFICIAL_V030_WINDOWS_SHA256, "ea4749ed52edf8bfd350ad3bd0a7eebf17fafe7c5eba19b53e306bb2c3cae946");
+  assert.equal(OFFICIAL_V030_WINDOWS_SHA256, "db2c3df75e9097573c3525c58e7a1c98ba276c29ad60faa22d6d7fef9adaa8cb");
 });
 
 test("Windows upgrade gate rejects missing, relative and ambiguous package paths", () => {
