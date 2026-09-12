@@ -1,9 +1,9 @@
 {
   "target": "macos-arm64",
   "result": "passed",
-  "recordedAt": "2026-09-11T22:42:58.955Z",
+  "recordedAt": "2026-09-12T08:04:56.872Z",
   "candidateVersion": "0.3.1",
-  "candidateArtifactSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+  "candidateArtifactSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
   "packageExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
   "installedExecutableSha256": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
   "externalSamples": {

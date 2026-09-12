@@ -1,14 +1,14 @@
 {
   "target": "macos-arm64",
   "result": "passed",
-  "recordedAt": "2026-09-12T02:49:18.965Z",
+  "recordedAt": "2026-09-12T08:06:45.493Z",
   "source": {
     "version": "0.3.0",
     "artifactSha256": "6183ae8446e11ef9fd6d7a417317c0d4009b523003bb6fba17a21580ac339623"
   },
   "candidate": {
     "version": "0.3.1",
-    "artifactSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1"
+    "artifactSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c"
   },
   "installMethod": "isolated-app-copy-replacement",
   "manualInstallation": false,

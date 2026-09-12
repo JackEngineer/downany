@@ -1,183 +1,326 @@
 [
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-01",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "b5cb9158eb129c969cfa09bf2277a4155dc47f4466eec5785df329571b2a4e08",
-    "artifactBytes": 9711135,
-    "recordedAt": "2026-09-11T22:36:24.773Z"
+    "artifactSha256": "4d1fdd4aef26a4f311de5f0ccc7961ae5a426bdf62ed339edbdbbdb65846707a",
+    "artifactBytes": 116913474,
+    "recordedAt": "2026-09-12T06:59:13.063Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-02",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "e70f1f8af460be072b16458f147853e6ea56da3a17084272a43cf915f21a8c42",
-    "artifactBytes": 12197884,
-    "recordedAt": "2026-09-11T22:36:54.849Z"
+    "artifactSha256": "d527e790452999523cdd53f8190388fa4f0e1944ae1152fa80b8351b39dcf6e6",
+    "artifactBytes": 12928794,
+    "recordedAt": "2026-09-12T06:59:46.501Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-03",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "48270751659b526cc695ce32d2dfe2053481bd725886e59fa07d3a04d4c31f14",
-    "artifactBytes": 16595493,
-    "recordedAt": "2026-09-11T22:37:11.686Z"
+    "artifactSha256": "c757eb2dbeb50c246aaef7b24885e2a92842dd9b6d252cb4c52817490583941c",
+    "artifactBytes": 116913472,
+    "recordedAt": "2026-09-12T07:02:30.798Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-04",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "af4114a9a3b8c733f7a1e051f1d80586ba39b861c47829bdc93e728c39f81b43",
-    "artifactBytes": 16196222,
-    "recordedAt": "2026-09-11T22:37:28.488Z"
+    "artifactSha256": "400f0ac91c13301c16d767ccac2f87fb6d8c9d52d01ec48a8cd5fc2c6ee2dc5b",
+    "artifactBytes": 23767744,
+    "recordedAt": "2026-09-12T07:05:44.939Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-05",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "5462e6ca11bc218e13cac572643d91c9307da5b8c7770e4abdebbb95d9caba98",
-    "artifactBytes": 1886028,
-    "recordedAt": "2026-09-11T22:37:35.134Z"
+    "artifactSha256": "122e60ec5f76454b63c5b466b645d95c323fe2e93bbaa949881d3660dcb04e81",
+    "artifactBytes": 155857090,
+    "recordedAt": "2026-09-12T07:46:06.830Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "bilibili-06",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "b9d5b2eaf7c614de0ef7ee1ffcae7a8710f33fb2cd30086b102f8dc2a7a67417",
+    "artifactBytes": 112145525,
+    "recordedAt": "2026-09-12T07:08:22.535Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "bilibili-07",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "6e5128e6403eda14b8aa84dfef1045582c07bb43bd42547b7412c3719bd8fc59",
+    "artifactBytes": 9240663,
+    "recordedAt": "2026-09-12T07:08:41.033Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-08",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "72ba88eec07f2bb5e10cf155cad009548bac6ccb4951839b5d2219d3ff2bb20c",
-    "artifactBytes": 1838016,
-    "recordedAt": "2026-09-11T22:35:02.181Z"
+    "artifactSha256": "ee50829ce29655c42be0a839ce06aa2647b28fe1244230bd4a25cd0ee59afd3f",
+    "artifactBytes": 9303687,
+    "recordedAt": "2026-09-12T07:46:51.037Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-09",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "65c8061f945de2b768011c0d824332a7619b82003d4d8d633dfd5e99d4657a9c",
-    "artifactBytes": 528165,
-    "recordedAt": "2026-09-11T22:35:51.816Z"
+    "artifactSha256": "f14167a569731039c186b4422192829386503c706b8746d89e7ac145e974f5fc",
+    "artifactBytes": 1580010,
+    "recordedAt": "2026-09-12T07:47:43.309Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "bilibili-10",
     "outcome": "expected_error",
     "errorCode": "unsupported",
     "artifactPlayable": false,
-    "recordedAt": "2026-09-11T22:37:37.286Z"
+    "recordedAt": "2026-09-12T07:47:46.569Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-01",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "b17a8ce844b139b88494ccafa48fb2b34b3aeefb49e09d076995b16ffb7c8dba",
+    "artifactBytes": 18329499,
+    "recordedAt": "2026-09-12T07:48:18.952Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-02",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "9efe1d78201e7b7e16135c904cb28a1094568fd170415e4b04d49a51eec3d288",
+    "artifactBytes": 142871168,
+    "recordedAt": "2026-09-12T07:51:17.821Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-03",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "ccbb307c1ec314495db2faea98e1df14167b4c29b00788dbfbe4773f5b5bb199",
+    "artifactBytes": 6000367,
+    "recordedAt": "2026-09-12T07:58:40.979Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-04",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "0a436305a047d0bd760645798df992764e9730a456aaf4e2c0077e6d66cdb795",
+    "artifactBytes": 3640988,
+    "recordedAt": "2026-09-12T07:58:53.955Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-05",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "3821f61c2a85beeac4433392de47bf1ac4ad2494c4ef0ca482d92a43da2f39ef",
+    "artifactBytes": 6169554,
+    "recordedAt": "2026-09-12T07:59:13.945Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-06",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "d7191080fa1ea0f0a4294bff0e4235734bda279887776430e6b48aa9abe5f5f0",
+    "artifactBytes": 4680666,
+    "recordedAt": "2026-09-12T07:59:25.272Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-07",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "0f1eb0026fd3b2b362b18b1fc6ff9217be847173719d1168e29c273fa56d7b4f",
+    "artifactBytes": 4735415,
+    "recordedAt": "2026-09-12T07:59:36.877Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-08",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "3a52b8189a4b6f7cc1019ff4287b83a35672ec295fbb45a1c9e888be5906aef5",
+    "artifactBytes": 3692170,
+    "recordedAt": "2026-09-12T06:38:34.190Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "douyin-09",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "f0d8ed951a6a3e182c2cc261e921be50594ad45d386b63f0514551c4992cc59a",
+    "artifactBytes": 10476475,
+    "recordedAt": "2026-09-12T06:39:31.271Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "douyin-10",
     "outcome": "expected_error",
     "errorCode": "unsupported",
     "artifactPlayable": false,
-    "recordedAt": "2026-09-11T22:44:05.040Z"
+    "recordedAt": "2026-09-12T07:59:40.130Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-01",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "3b19e10ae29f388a4bae237ea4c1af0b194def2db20df9a0ebd98dc361d55f07",
-    "artifactBytes": 27048,
-    "recordedAt": "2026-09-11T22:38:04.539Z"
+    "artifactSha256": "9ac8623d38497227ddafc7ba5ec54bbe5983b3ea44b5bd9de098b65f07861637",
+    "artifactBytes": 86128214,
+    "recordedAt": "2026-09-12T06:42:35.691Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-02",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "353763a0f6e6038f09f01d88d141c366b02cc8ab32693ba40b5720c1311e63f5",
-    "artifactBytes": 2988727,
-    "recordedAt": "2026-09-11T22:38:19.615Z"
+    "artifactSha256": "b08d941d2625c0eb4f09218a6b0084eae2effee223940cd00c52358b4c39e4fb",
+    "artifactBytes": 1076588,
+    "recordedAt": "2026-09-12T07:35:25.152Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-03",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "ae320d4b79adeb7b281d96de37f0c5856f08434b525bba5ec4503bf8f98fd825",
-    "artifactBytes": 63458,
-    "recordedAt": "2026-09-11T22:38:31.315Z"
+    "artifactSha256": "97560ca3fbf0d75982466f6506189dc8b1959dac9f77a92de9669337a6e5554f",
+    "artifactBytes": 22177857,
+    "recordedAt": "2026-09-12T06:43:22.637Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-04",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "9ad4fc2b200fbe86339925bb05edbd38c42b6b98f266a18c95e3fa2435297f40",
-    "artifactBytes": 44027,
-    "recordedAt": "2026-09-11T22:38:43.003Z"
+    "artifactSha256": "3bb26c89f4b39b00074c8eb4405dd8756ab046aae918095f664241731bb3a65f",
+    "artifactBytes": 69186772,
+    "recordedAt": "2026-09-12T06:45:07.658Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-05",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "954ddb8f212ee7b10cbff49bf41709cc9497e6a5e6c85fed153e48843cb3d3bb",
-    "artifactBytes": 696916,
-    "recordedAt": "2026-09-11T22:39:07.611Z"
+    "artifactSha256": "ae964c9748b1d942c8b56c029705edf83ced38b32bbe08616261cb19652cfb21",
+    "artifactBytes": 21019428,
+    "recordedAt": "2026-09-12T06:45:51.462Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "youtube-06",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "e3c587483134a855e97121b465dcc8c18b8545831acd4ce6ed47c1e2257468ac",
+    "artifactBytes": 54480628,
+    "recordedAt": "2026-09-12T06:47:01.920Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
+    "id": "youtube-07",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "141147d78d32215ab9814270fb239a9571381b466627b817a80e2f37b8732393",
+    "artifactBytes": 49882195,
+    "recordedAt": "2026-09-12T07:36:34.348Z"
+  },
+  {
+    "target": "macos-arm64",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-08",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "7f42862ea2fe6f7541b5fea1c1160524bc6f2c9444f7d7d7c92bdd9515de4a1b",
-    "artifactBytes": 62564,
-    "recordedAt": "2026-09-11T22:39:34.036Z"
+    "artifactSha256": "f21961bc2a0cf56347a18d64ca6ae2c2acb344ca6e7b02908d6475875536f861",
+    "artifactBytes": 270147427,
+    "recordedAt": "2026-09-12T06:55:30.374Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-09",
     "outcome": "completed",
     "errorCode": "",
     "artifactPlayable": true,
-    "artifactSha256": "6612851a9c4dc24ddc15ec8b77a5fe52f01d3dc999b2b6667c3460be17bb2220",
-    "artifactBytes": 2500188,
-    "recordedAt": "2026-09-11T22:40:44.232Z"
+    "artifactSha256": "f21961bc2a0cf56347a18d64ca6ae2c2acb344ca6e7b02908d6475875536f861",
+    "artifactBytes": 270147427,
+    "recordedAt": "2026-09-12T07:44:21.094Z"
   },
   {
     "target": "macos-arm64",
-    "candidateSha256": "addd6ce9366424a4c1489290c6c84567145e7517484a5339e1d92a945c80b9f1",
+    "candidateSha256": "9914b72fd9ab38f63b0fef56d7750fd221b0d63e3e221997a8e3f2421301019c",
     "id": "youtube-10",
     "outcome": "expected_error",
     "errorCode": "removed",
     "artifactPlayable": false,
-    "recordedAt": "2026-09-11T22:40:48.447Z"
+    "recordedAt": "2026-09-12T06:55:55.458Z"
   }
 ]
