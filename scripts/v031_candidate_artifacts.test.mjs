@@ -83,19 +83,20 @@ test("rejects wrong versions, invalid hashes and unsafe paths", () => {
   assert.match(report.failures.join("\n"), /repository-relative/i);
 });
 
-test("repository candidate manifest verifies available files but remains blocked on Windows", () => {
+test("repository candidate manifest verifies all three recorded artifacts", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL(
     "../docs/acceptance/v0.3.1-candidate-artifacts.json",
     import.meta.url,
   ), "utf8"));
   const inspections = {
     "macos-arm64": { exists: true, ...manifest.installers["macos-arm64"] },
+    "windows-x64": { exists: true, ...manifest.installers["windows-x64"] },
     extension: { exists: true, ...manifest.extension },
   };
   const report = evaluateCandidateArtifacts(manifest, inspections);
   assert.equal(report.integrityPassed, true);
-  assert.equal(report.releaseReady, false);
-  assert.deepEqual(report.releaseBlockers, ["windows-x64 installer is not available"]);
+  assert.equal(report.releaseReady, true);
+  assert.deepEqual(report.releaseBlockers, []);
 });
 
 test("records a Windows artifact using a repository-relative path without mutating the input", () => {
