@@ -2,7 +2,7 @@
 
 macOS / Windows 视频下载应用。产品主线为 **Electron + Python Sidecar**（`desktop/` + `src/sidecar/`）。
 
-当前公开版本与源码版本均为 **v0.3.0**，面向 macOS Apple Silicon 与 Windows x64 同版本交付；Chrome 扩展独立版本为 `0.8.2`。安装包见 [Downany 0.3.0 Release](https://github.com/JackEngineer/downany/releases/tag/v0.3.0)，改动、限制与证据见 [发布说明](docs/RELEASE-NOTES-0.3.0.md) 和 [公开发布验收](docs/acceptance/v0.3.0-public-release.md)。
+当前公开版本为 **v0.3.0**，公开 Chrome 扩展版本为 `0.8.2`，面向 macOS Apple Silicon 与 Windows x64 交付；本分支正在开发 **v0.3.1**（扩展 `0.8.3`），尚未达到发布门槛。安装包见 [Downany 0.3.0 Release](https://github.com/JackEngineer/downany/releases/tag/v0.3.0)，公开版本证据见 [发布说明](docs/RELEASE-NOTES-0.3.0.md) 和 [公开发布验收](docs/acceptance/v0.3.0-public-release.md)，开发版本进度见 [v0.3.1 验收记录](docs/acceptance/v0.3.1-acceptance.md)。
 
 ## 功能
 
@@ -48,6 +48,12 @@ python -m src.sidecar
 | Windows | `%LOCALAPPDATA%\Downany` | `%LOCALAPPDATA%\Downany\logs` |
 
 环境变量 `DOWNANY_DATA_DIR` 可覆盖数据目录。
+
+### 下载工具更新（v0.3.1 开发分支）
+
+在设置中检查下载工具版本，选择“下载并启用”。应用从官方稳定版准备更新并检查完整性；有下载、解析、搜索或 Telegram 发送尚未结束时，保留当前版本，完成后可点击“启用更新”。只有实际启用并确认版本后才提示成功。启用失败会尝试恢复原版本；若提示需要重启，请退出并重新打开应用。
+
+这是下载工具组件更新，不会替换 Downany 安装包。维护流程、故障恢复及验证边界见 [下载工具更新说明](docs/ENGINE-UPDATES.md)。
 
 ## 下载与发布
 

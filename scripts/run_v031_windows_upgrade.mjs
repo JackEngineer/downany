@@ -18,6 +18,7 @@ import {
   verifyCompletedMedia,
 } from "./test_windows_real_downloads.mjs";
 import { assertBridgeUnused } from "./package_smoke_helpers.mjs";
+import { assertWindowsNsisPreflight, collectWindowsNsisPreflight } from "./windows_nsis_preflight.mjs";
 import { createMediaFaultServer } from "./windows_media_fault_server.mjs";
 import {
   buildDownloadGateEnvironment,
@@ -210,7 +211,10 @@ async function verifyFreshCandidateInstall({ options, playwright, root }) {
   }
 }
 
-export async function run(options) {
+export async function run(options, { collectPreflight = collectWindowsNsisPreflight } = {}) {
+  // NSIS uses the real account registry/shortcuts even with a temporary /D.
+  // Refuse before installer inputs, temporary roots, or cleanup are touched.
+  assertWindowsNsisPreflight(await collectPreflight());
   assert.equal(process.platform, "win32", "This gate targets Windows only");
   assert.equal(process.arch, "x64", "This gate targets Windows x64 only");
   for (const file of [options.sourceArtifact, options.candidateArtifact, options.candidateExecutable]) {

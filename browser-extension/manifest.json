@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "百纳",
-  "version": "0.8.3",
-  "description": "识别页面媒体后一键发送到本机百纳，并可查看下载进度",
+  "version": "0.9.2",
+  "description": "区分检测媒体与网页解析，批量发送、查看任务及定位百纳",
   "minimum_chrome_version": "102",
   "permissions": [
     "activeTab",
@@ -24,8 +24,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["shared.js", "content.js", "inpage-button.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js",
+        "inpage-button.js"
+      ],
       "run_at": "document_idle"
     }
   ],

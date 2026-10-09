@@ -64,14 +64,19 @@ import { checkForAppUpdates } from "./appUpdater";
 import { resolveDownanyDataDir, resolveDownanyLogDir } from "./appDataDir";
 import { initializePrimaryInstance } from "./singleInstance";
 import {
-  buildExtractEnqueueItems,
+  getExtractWindow,
   getExtractSession,
   openExtractWindow,
+  enqueueExtractMedia,
+  locateExtractMedia,
 } from "./extractWindow";
+import { createEmbeddedDouyinRetry } from "./embeddedDouyinRetry";
 import { TelegramController } from "./telegram/controller";
 import { registerTelegramIpc } from "./telegram/ipc";
 import { createOptionalTelegramSupervisor } from "./telegram/runtimeFactory";
 import { TelegramVideoSegmenter } from "./telegram/videoSegmenter";
+import { EngineUpdater, recoverEngineActivation } from "./engineUpdater";
+import { createQuitHandler } from "./quitSequence";
 
 /** 本地抽帧封面：sidecar 写入 Downany 数据目录 thumbnails/{taskId}.jpg */
 const LOCAL_THUMB_SCHEME = "downany-thumb";
@@ -146,10 +151,11 @@ let telegramController: TelegramController | null = null;
 let saveStateTimer: NodeJS.Timeout | null = null;
 let sidecarReady = false;
 let sidecarStartup: Promise<void> | null = null;
+let engineUpdater: EngineUpdater | null = null;
+let engineActivating = false;
 let bridgeServer: http.Server | null = null;
 let menuBarMode = false;
 let isQuitting = false;
-let quitSequenceStarted = false;
 const pendingEnqueueItems: BridgeEnqueueItem[] = [];
 
 const taskTracker = new TaskTracker();
@@ -177,8 +183,8 @@ const tray = new TrayController({
     const urls = extractUrlsFromText(clipboard.readText());
     if (urls.length > 0) enqueueFromExternal(urls.map((url) => ({ url })));
   },
-  onPauseAll: () => void sidecar?.request("download.pauseAll", {}),
-  onResumeAll: () => void sidecar?.request("download.resumeAll", {}),
+  onPauseAll: () => { if (!engineActivating) void sidecar?.request("download.pauseAll", {}); },
+  onResumeAll: () => { if (!engineActivating) void sidecar?.request("download.resumeAll", {}); },
   onFocusTask: (taskId) => {
     if (!mainWindow) {
       createWindow();
@@ -200,14 +206,17 @@ function dedupeItems(items: BridgeEnqueueItem[]): BridgeEnqueueItem[] {
   const seen = new Set<string>();
   for (const item of items) {
     const url = (item.url || "").trim();
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+    const key = JSON.stringify([url,item.route,item.quality || "best",item.audio_only === true]);
+    if (!url || seen.has(key)) continue;
+    seen.add(key);
     unique.push({
       url,
+      ...(item.route ? { route: item.route } : {}),
       ...(item.title ? { title: item.title } : {}),
+      ...(item.media_title_verified === true ? { media_title_verified: true } : {}),
       ...(item.headers ? { headers: item.headers } : {}),
       ...(item.quality ? { quality: item.quality } : {}),
-      ...(item.audio_only ? { audio_only: item.audio_only } : {}),
+      ...(item.audio_only !== undefined ? { audio_only: item.audio_only } : {}),
       ...(item.download_subtitles ? { download_subtitles: item.download_subtitles } : {}),
       ...(item.pageUrl ? { pageUrl: item.pageUrl } : {}),
       ...(item.thumbnail_url ? { thumbnail_url: item.thumbnail_url } : {}),
@@ -229,8 +238,8 @@ function queuePendingItems(items: BridgeEnqueueItem[]): void {
 }
 
 function markSidecarReady(ready: boolean): void {
-  sidecarReady = ready;
-  if (ready) {
+  sidecarReady = ready && !engineActivating && !isQuitting;
+  if (sidecarReady) {
     void flushPendingEnqueue();
   }
 }
@@ -284,8 +293,9 @@ function trackedToBridgeStatus(t: {
 
 async function flushEnqueueItems(
   items: BridgeEnqueueItem[],
+  redactErrors = false,
 ): Promise<BridgeEnqueueResult> {
-  if (!sidecar || items.length === 0) {
+  if (!sidecar || engineActivating || isQuitting || items.length === 0) {
     return { ok: false, error: "下载服务未就绪" };
   }
   focusMainWindow();
@@ -293,12 +303,16 @@ async function flushEnqueueItems(
   try {
     const created = await sidecar.request("download.createTasks", {
       urls,
+      expand_playlists: false,
       items: items.map((item) => ({
         url: item.url,
         title: item.title || undefined,
+        media_title_verified: item.media_title_verified === true,
+        browser_extension: true,
+        direct_media: item.route === "media",
         headers: item.headers || undefined,
         quality: item.quality || undefined,
-        audio_only: item.audio_only || undefined,
+        audio_only: item.audio_only,
         download_subtitles: item.download_subtitles || undefined,
         pageUrl: item.pageUrl || undefined,
         thumbnail_url: item.thumbnail_url || undefined,
@@ -331,13 +345,14 @@ async function flushEnqueueItems(
     }
     return { ok: true, count: items.length, taskIds };
   } catch (err) {
-    process.stderr.write(`外部入队失败: ${String(err)}\n`);
+    const message = redactErrors ? "加入下载失败，请重试" : String(err);
+    process.stderr.write(`外部入队失败: ${message}\n`);
     mainWindow?.webContents.send("app:externalEnqueue", {
       count: 0,
       urls,
-      error: String(err),
+      error: message,
     });
-    return { ok: false, error: String(err), count: 0 };
+    return { ok: false, error: message, count: 0 };
   }
 }
 
@@ -379,6 +394,24 @@ async function flushPendingEnqueue(): Promise<void> {
           isSidecarAcceptingEnqueue(sidecar!.getConnectionState()),
       }),
       getTasks: (ids) => taskTracker.getByIds(ids).map(trackedToBridgeStatus),
+      retryTask: async (id) => {
+        const task = taskTracker.getByIds([id])[0];
+        if (!task || !["failed", "cancelled"].includes(task.status)) return { ok: false, error: "任务不存在或当前不能重试" };
+        if (!sidecar || !sidecarReady || engineActivating || isQuitting) return { ok: false, error: "下载服务未就绪" };
+        try {
+          await sidecar.request("download.retry", { taskId: id, browser_extension: true });
+          await refreshDockFromSnapshot();
+          return { ok: true, taskIds: [id] };
+        } catch { return { ok: false, error: "原任务重试失败，请在百纳查看具体原因" }; }
+      },
+      focusTask: async (id) => {
+        const task = taskTracker.getByIds([id])[0];
+        if (!task || task.status === "unknown") return { ok: false, error: "任务已移除或暂未恢复" };
+        focusMainWindow();
+        mainWindow?.webContents.send("app:navigate", "queue");
+        mainWindow?.webContents.send("app:highlightTask", id);
+        return { ok: true, taskIds: [id] };
+      },
     });
     bridgeServer = server;
     server.once("listening", () => {
@@ -565,7 +598,7 @@ function notifyTaskResult(kind: "completed" | "failed", title: string, taskId: s
   });
   if (kind === "failed") {
     n.on("action", () => {
-      void sidecar?.request("download.retry", { taskId });
+      if (!engineActivating) void sidecar?.request("download.retry", { taskId });
       focusMainWindow();
       mainWindow?.webContents.send("app:highlightTask", taskId);
     });
@@ -640,9 +673,39 @@ function syncClipboardWatcher(enabled: boolean): void {
 }
 
 async function startSidecar(): Promise<void> {
+  recoverEngineActivation(downanyDataDir());
   const repoRoot = resolveRepoRoot(__dirname);
   sidecar = new SidecarProcess({ repoRoot, appVersion: app.getVersion() });
+  engineUpdater = new EngineUpdater({
+    dataDir: downanyDataDir(),
+    request: async (method, payload) => {
+      if (!sidecar) throw new Error("下载服务未启动");
+      return sidecar.request(method, payload);
+    },
+    restart: async () => {
+      if (!sidecar) throw new Error("下载服务未启动");
+      await sidecar.restart();
+    },
+    freezeOtherWork: async () => telegramController ? telegramController.tryFreezeForEngine() : true,
+    resumeOtherWork: async () => { telegramController?.resumeAfterEngine(); },
+    setActivating: (value) => {
+      engineActivating = value;
+      if (value) {
+        sidecarReady = false;
+        broadcastState("reconnecting");
+      } else if (!isQuitting) {
+        const state = sidecar?.getConnectionState() ?? "disconnected";
+        broadcastState(state);
+        markSidecarReady(state === "connected");
+        void refreshDockFromSnapshot();
+      }
+    },
+  });
   sidecar.on("state", (state: ConnectionState) => {
+    if (engineActivating) {
+      broadcastState(engineUpdater?.recoveryRequired || state === "failed" ? "failed" : "reconnecting");
+      return;
+    }
     broadcastState(state);
     // 与真实连接态同步：重连成功后自动冲刷 pending；失联后拒收假成功
     if (isSidecarAcceptingEnqueue(state)) {
@@ -697,6 +760,7 @@ async function startSidecar(): Promise<void> {
     process.stderr.write(chunk);
   });
   sidecar.on("reconnected", () => {
+    if (engineActivating) return;
     markSidecarReady(true);
     void sidecar?.request("app.getSnapshot", {}).then((snap) => {
       broadcastAll("sidecar:event", {
@@ -786,7 +850,27 @@ async function startSidecar(): Promise<void> {
 }
 
 function registerIpc(): void {
-  registerTelegramIpc(() => telegramController);
+  const retryEmbeddedDouyin = createEmbeddedDouyinRetry({
+    readTask: async (id) => {
+      if (sidecarStartup) await sidecarStartup;
+      if (!sidecar || engineActivating) return undefined;
+      const snapshot = await sidecar.request("app.getSnapshot", {}) as { tasks: { id: string; url: string; status: string }[] };
+      return snapshot.tasks.find((task) => task.id === id);
+    },
+    nativeFetch: (input, init) => getExtractSession().fetch(input, init),
+    apply: async (taskId, video) => {
+      if (!sidecar || engineActivating) throw new Error("unavailable");
+      await sidecar.request("download.retryEmbeddedDouyin", { taskId, ...video });
+    },
+  });
+  ipcMain.handle("app:retryEmbeddedDouyin", async (event, id: unknown) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || typeof id !== "string") return { ok: false, code: "invalid" };
+    return retryEmbeddedDouyin(id);
+  });
+  registerTelegramIpc(() => {
+    if (engineActivating) throw new Error("下载工具正在启用，请稍后重试");
+    return telegramController;
+  });
   ipcMain.handle("sidecar:request", async (_evt, method: string, payload: unknown) => {
     if (sidecarStartup) {
       await sidecarStartup;
@@ -794,10 +878,27 @@ function registerIpc(): void {
     if (!sidecar) {
       throw new Error("Sidecar 未启动");
     }
+    // 启用控制方法只允许 Main 调用，Renderer 不能绕过事务与其他业务门禁。
+    if (method === "updater.freezeEngine" || method === "updater.unfreezeEngine" || method === "download.retryEmbeddedDouyin") {
+      throw new Error("不支持的下载工具操作");
+    }
+    if (method === "updater.checkYtDlp") return engineUpdater!.check();
+    if (method === "updater.getEngineState") return engineUpdater!.getState();
+    if (method === "updater.updateYtDlp") {
+      if (payload && Object.keys(payload as object).length) throw new Error("下载工具更新不接受自定义来源");
+      const result = await engineUpdater!.update();
+      if (engineUpdater!.recoveryRequired) broadcastState("failed");
+      return result;
+    }
+    if (engineActivating && !["app.ping", "app.getSnapshot", "settings.get", "updater.checkHealth", "updater.getEngineState"].includes(method)) {
+      throw new Error("下载工具正在启用，请稍后重试");
+    }
     return sidecar.request(method, (payload as Record<string, unknown>) || {});
   });
 
   ipcMain.handle("sidecar:getState", async () => {
+    if (engineUpdater?.recoveryRequired) return "failed";
+    if (engineActivating) return "reconnecting";
     return sidecar?.getConnectionState() ?? "disconnected";
   });
 
@@ -898,18 +999,15 @@ function registerIpc(): void {
     },
   );
 
-  ipcMain.handle(
-    "extract:enqueue",
-    async (_evt, payload: { items?: Array<{ url: string; title?: string }> }) => {
-      const items = Array.isArray(payload?.items) ? payload.items : [];
-      if (items.length === 0) {
-        return { ok: false, error: "未选择媒体", count: 0 };
-      }
-      const ses = getExtractSession();
-      const bridgeItems = await buildExtractEnqueueItems(ses, items);
-      return flushEnqueueItems(bridgeItems);
-    },
-  );
+  ipcMain.handle("extract:locate", (event, id: string) => {
+    if (event.sender !== getExtractWindow()?.webContents || typeof id !== "string") return false;
+    return locateExtractMedia(id);
+  });
+  ipcMain.handle("extract:enqueue", (event, payload: { ids?: string[] }) => {
+    if (event.sender !== getExtractWindow()?.webContents) return { ok: false, error: "无法加入下载" };
+    const ids = Array.isArray(payload?.ids) ? payload.ids.filter(id => typeof id === "string").slice(0, 100) : [];
+    return enqueueExtractMedia(ids, items => flushEnqueueItems(items, true));
+  });
 }
 
 initializePrimaryInstance(gotLock, () => {
@@ -959,10 +1057,7 @@ app.on("activate", () => {
   }
 });
 
-app.on("before-quit", (event) => {
-  if (quitSequenceStarted) return;
-  event.preventDefault();
-  quitSequenceStarted = true;
+app.on("before-quit", createQuitHandler(async () => {
   isQuitting = true;
   taskProgressRelay.dispose();
   if (mainWindow) saveWindowState(mainWindow);
@@ -970,20 +1065,17 @@ app.on("before-quit", (event) => {
   clipboardWatcher.stop();
   tray.disable();
   stopBridge();
-  void (async () => {
-    try {
-      // Telegram worker 的 lease/终态写入必须先于 Sidecar shutdown，避免
-      // 退出时把 sending 留成无主记录或丢掉最后一次状态提交。
-      await telegramController?.stop();
-    } catch (error) {
-      process.stderr.write(`Telegram 停止失败: ${String(error)}\n`);
-    }
-    try {
-      await sidecar?.stop();
-    } catch (error) {
-      process.stderr.write(`Sidecar 停止失败: ${String(error)}\n`);
-    } finally {
-      app.quit();
-    }
-  })();
-});
+  await engineUpdater?.stop();
+  try {
+    // Telegram worker 的 lease/终态写入必须先于 Sidecar shutdown，避免
+    // 退出时把 sending 留成无主记录或丢掉最后一次状态提交。
+    await telegramController?.stop();
+  } catch (error) {
+    process.stderr.write(`Telegram 停止失败: ${String(error)}\n`);
+  }
+  try {
+    await sidecar?.stop();
+  } catch (error) {
+    process.stderr.write(`Sidecar 停止失败: ${String(error)}\n`);
+  }
+}, () => app.quit(), () => process.stderr.write("应用退出清理失败\n")));

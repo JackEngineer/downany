@@ -1,0 +1,22 @@
+const assert=require("node:assert/strict");
+const {identity,createStore,outputOptions}=require("./delivery-state");
+(async()=>{
+ let saved={};const storage={get:async key=>({[key]:saved[key]}),set:async data=>{saved={...saved,...data};}};
+ const store=createStore(storage);let calls=0;
+ const item={route:"media",url:"https://cdn.example/v.mp4?signature=A%2FB&expires=123",headers:{Cookie:"never-persist"}};
+ const transport=async()=>{calls++;await new Promise(r=>setTimeout(r,20));return {ok:true,taskIds:["original"]};};
+ const [a,b]=await Promise.all([store.send(item,transport),store.send(item,transport)]);assert.equal(calls,1);assert.deepEqual(a.taskIds,b.taskIds);
+ const reopened=createStore(storage);assert.equal((await reopened.send(item,transport)).duplicate,true);assert.equal(calls,1);
+ assert.notEqual(await identity(item),await identity({...item,route:"page"}));assert.notEqual(await identity(item),await identity({...item,url:item.url+"&variant=2"}));
+ assert.notEqual(await identity(item),await identity({...item,audio_only:true}));
+ assert.equal(await identity(item),await identity({...item,quality:"720p"}));
+ assert.notEqual(await identity({...item,route:"page"}),await identity({...item,route:"page",quality:"720p"}));
+ assert.deepEqual(outputOptions({...item,type:"audio",quality:"1080p"}),{audio_only:true,quality:"best"});
+ const audioResult=await reopened.send({...item,audio_only:true},async()=>({ok:true,taskIds:["audio-task"]}));assert.deepEqual(audioResult.taskIds,["audio-task"]);
+ assert(!JSON.stringify(saved).includes("never-persist"));assert(!JSON.stringify(saved).includes("signature"));
+ const failing={route:"media",url:"https://cdn.example/fail.mp4"};let request;
+ await store.send(failing,async id=>{request=id;throw Error("response lost");});
+ await reopened.send(failing,async id=>{assert.equal(id,request);return {ok:true,taskIds:["recovered"]};});
+ const noAck=await store.send({route:"media",url:"https://cdn.example/noack.mp4"},async()=>({ok:true}));assert.equal(noAck.ok,false);
+ console.log("delivery-state: duplicate clicks, reopen, route/signature separation, credential-free persistence, lost-response recovery and real acknowledgements passed");
+})().catch(error=>{console.error(error);process.exitCode=1;});

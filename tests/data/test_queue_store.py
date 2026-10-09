@@ -478,3 +478,11 @@ def test_stale_progress_batch_cannot_rewrite_terminal_facts(tmp_path, status):
     before = _raw_rows(store)
     store.update_progress_many([(task.id, 99, 297, 300)])
     assert _raw_rows(store) == before
+
+
+def test_verified_media_title_survives_queue_roundtrip(tmp_path):
+    store = QueueStore(str(tmp_path / "q.db"))
+    task = _make_task()
+    task.video_info.media_title_verified = True
+    store.upsert_task(task)
+    assert store.load_tasks()[0].video_info.media_title_verified is True

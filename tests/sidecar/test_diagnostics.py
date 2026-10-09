@@ -4,6 +4,8 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from src.core.download_manager import DownloadManager
 from src.core.download_task import DownloadTask, Platform, TaskStatus, VideoInfo
 from src.sidecar import diagnostics
@@ -23,12 +25,15 @@ def test_collect_environment_reports_capabilities_without_local_paths(
     monkeypatch,
 ) -> None:
     paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
-    ytdlp_path = r"C:\Users\private-user\Downany\yt-dlp.exe"
     ffmpeg_path = Path("/Users/private-user/Downany/ffmpeg")
     ffprobe_path = Path("/Users/private-user/Downany/ffprobe")
     calls: list[list[str]] = []
 
-    monkeypatch.setattr(diagnostics, "resolve_ytdlp_executable", lambda _paths: ytdlp_path)
+    monkeypatch.setattr(
+        diagnostics,
+        "current_engine",
+        lambda: {"version": "2026.07.04", "source": "bundled", "selection": "bundled"},
+    )
     monkeypatch.setattr(diagnostics, "resolve_ffmpeg_path", lambda: ffmpeg_path)
     monkeypatch.setattr(diagnostics, "resolve_ffprobe_path", lambda: ffprobe_path)
 
@@ -38,7 +43,7 @@ def test_collect_environment_reports_capabilities_without_local_paths(
             if "ffprobe" in command[0]:
                 return "ffprobe version 7.1.2 Copyright (c) FFmpeg developers"
             return "ffmpeg version 7.1 Copyright (c) FFmpeg developers"
-        return "2026.07.04"
+        return "2099.12.31"
 
     monkeypatch.setattr(diagnostics, "_run_version", fake_version)
 
@@ -51,12 +56,10 @@ def test_collect_environment_reports_capabilities_without_local_paths(
     assert result["ffprobe_available"] is True
     assert result["ffprobe_version"] == "7.1.2"
     assert calls == [
-        [ytdlp_path, "--version"],
         [str(ffmpeg_path), "-version"],
         [str(ffprobe_path), "-version"],
     ]
     serialized = json.dumps(result, ensure_ascii=False)
-    assert ytdlp_path not in serialized
     assert str(ffmpeg_path) not in serialized
     assert str(ffprobe_path) not in serialized
     assert not any(key.endswith("_path") or key.endswith("_executable") for key in result)
@@ -77,8 +80,8 @@ def test_collect_environment_rejects_unstructured_version_output(
 
     monkeypatch.setattr(
         diagnostics,
-        "resolve_ytdlp_executable",
-        lambda _paths: r"C:\trusted-package\yt-dlp.exe",
+        "current_engine",
+        lambda: {"version": sentinel, "source": "bundled", "selection": "bundled"},
     )
     monkeypatch.setattr(
         diagnostics,
@@ -98,6 +101,57 @@ def test_collect_environment_rejects_unstructured_version_output(
     assert result["ffmpeg_version"] == "unavailable"
     assert result["ffprobe_version"] == "unavailable"
     assert sentinel not in json.dumps(result, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [("bundled", "bundled"), ("updated", "updated"), ("/private/source", "unknown")],
+)
+def test_collect_environment_minimizes_active_engine_metadata(
+    tmp_path: Path,
+    monkeypatch,
+    source: str,
+    expected: str,
+) -> None:
+    paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
+    monkeypatch.setattr(diagnostics, "resolve_ffmpeg_path", lambda: None)
+    monkeypatch.setattr(diagnostics, "resolve_ffprobe_path", lambda: None)
+    monkeypatch.setattr(diagnostics, "_run_version", lambda _command: "2099.12.31")
+    monkeypatch.setattr(
+        diagnostics,
+        "current_engine",
+        lambda: {
+            "version": "2026.09.01",
+            "source": source,
+            "selection": "PRIVATE_SELECTION",
+            "fallbackReason": "PRIVATE_RUNTIME_ERROR /private/path",
+        },
+    )
+
+    result = diagnostics.collect_environment(paths)
+
+    assert result["ytdlp_version"] == "2026.09.01"
+    assert result["ytdlp_source"] == expected
+    assert "PRIVATE_" not in json.dumps(result)
+    assert "/private/" not in json.dumps(result)
+
+
+def test_collect_environment_hides_runtime_inspection_failure(tmp_path: Path, monkeypatch) -> None:
+    paths = AppPaths(data_dir=tmp_path / "data", log_dir=tmp_path / "logs")
+    monkeypatch.setattr(diagnostics, "resolve_ffmpeg_path", lambda: None)
+    monkeypatch.setattr(diagnostics, "resolve_ffprobe_path", lambda: None)
+    monkeypatch.setattr(diagnostics, "_run_version", lambda _command: "2099.12.31")
+
+    def failed_runtime():
+        raise RuntimeError("PRIVATE_RUNTIME_ERROR /private/path")
+
+    monkeypatch.setattr(diagnostics, "current_engine", failed_runtime)
+
+    result = diagnostics.collect_environment(paths)
+
+    assert result["ytdlp_version"] == "unavailable"
+    assert result["ytdlp_source"] == "unknown"
+    assert "PRIVATE_RUNTIME_ERROR" not in json.dumps(result)
 
 
 def test_export_diagnostics_contains_only_minimized_structured_summaries(

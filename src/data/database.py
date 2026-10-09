@@ -293,7 +293,11 @@ class HistoryDB:
         limit: int = 50,
         status: Optional[str] = None,
         query: Optional[str] = None,
+        sort_order: str = "newest",
     ) -> List[DownloadRecord]:
+        if sort_order not in {"newest", "oldest"}:
+            raise ValueError("Invalid history sort order")
+        direction = "DESC" if sort_order == "newest" else "ASC"
         clauses = []
         params: list = []
         if status:
@@ -308,7 +312,7 @@ class HistoryDB:
         sql = f"""
             SELECT * FROM download_history
             {where}
-            ORDER BY created_at DESC
+            ORDER BY created_at {direction}, id ASC
             LIMIT ? OFFSET ?
         """
         with self._get_connection() as conn:

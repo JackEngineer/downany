@@ -12,7 +12,6 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from itertools import count
 from pathlib import Path
 from uuid import uuid4
 
@@ -263,7 +262,10 @@ def _stage_hidden_copy(
     except (OSError, RuntimeError, ValueError) as exc:
         raise _commit_failure(f"暂存来源不可用: {exc}") from exc
 
-    hidden = target.parent / f".{target.name}.downany-{uuid4().hex}.tmp"
+    # Windows 最终预算 240、最小叶预算 40，使目录最多占 199 个 UTF-16 单元；
+    # 固定 52 单元的临时名使绝对路径最多 252，避免附加完整标题后超出 MAX_PATH。
+    # 仍匹配既有的严格清理格式，UUID 保证每次主文件/字幕复制独立。
+    hidden = target.parent / f".output.downany-{uuid4().hex}.tmp"
     try:
         copy_file(source_path, hidden)
         with hidden.open("r+b") as handle:
@@ -315,6 +317,9 @@ def _targets_exist(plan: FinalPathPlan) -> bool:
     )
 
 
+MAX_COMMIT_ATTEMPTS = 1000
+
+
 def commit_output_bundle(
     *,
     download_root: Path,
@@ -333,7 +338,8 @@ def commit_output_bundle(
     source_paths.append(result.main_file)
 
     with lock:
-        for copy_index in count(1):
+        seen_targets: set[tuple[Path, ...]] = set()
+        for copy_index in range(1, MAX_COMMIT_ATTEMPTS + 1):
             plan = build_final_path_plan(
                 requested_root,
                 playlist_folder,
@@ -348,6 +354,10 @@ def commit_output_bundle(
             targets = [
                 _validated_target(root, target, directory) for target in targets
             ]
+            target_identity = tuple(targets)
+            if target_identity in seen_targets:
+                raise _commit_failure("成品路径规划重复，请调整文件名或下载位置")
+            seen_targets.add(target_identity)
             if _targets_exist(plan):
                 continue
 
@@ -382,3 +392,5 @@ def commit_output_bundle(
                 subtitle_files=plan.subtitle_files,
                 created_fingerprints=tuple(created),
             )
+
+        raise _commit_failure("成品重名次数过多，请调整文件名或下载位置")

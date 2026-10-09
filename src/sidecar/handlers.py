@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
@@ -49,6 +50,15 @@ from src.utils.logger import setup_logger
 logger = setup_logger("SidecarHandlers")
 
 EmitEvent = Callable[[str, Dict[str, Any]], None]
+_PARSE_SHUTDOWN_TIMEOUT = 5.0
+_ENGINE_FROZEN_ALLOWED = frozenset({
+    Method.APP_PING.value,
+    Method.APP_GET_SNAPSHOT.value,
+    Method.APP_SHUTDOWN.value,
+    Method.UPDATER_GET_ENGINE_STATE.value,
+    Method.UPDATER_CHECK_HEALTH.value,
+    Method.UPDATER_UNFREEZE_ENGINE.value,
+})
 
 
 def _normalize_inbound_url(url: str) -> str:
@@ -96,6 +106,8 @@ class _ParseJob:
         self.cancelled = False
         self.session: Optional[ParseSession] = None
         self.lock = threading.Lock()
+        self.done = threading.Event()
+        self.thread: Optional[threading.Thread] = None
 
     def cancel(self) -> None:
         with self.lock:
@@ -106,10 +118,25 @@ class _ParseJob:
     def set_session(self, session: Optional[ParseSession]) -> bool:
         """设置当前会话；若已取消返回 False。"""
         with self.lock:
-            if self.cancelled:
+            if session is not None and self.cancelled:
                 return False
             self.session = session
             return True
+
+    def wait(self, timeout: float) -> bool:
+        deadline = time.monotonic() + max(0.0, timeout)
+        with self.lock:
+            session = self.session
+        if session is not None and not session.cancel_and_wait(
+            timeout=max(0.0, deadline - time.monotonic()),
+        ):
+            return False
+        if not self.done.wait(timeout=max(0.0, deadline - time.monotonic())):
+            return False
+        if self.thread is not None:
+            self.thread.join(timeout=max(0.0, deadline - time.monotonic()))
+            return not self.thread.is_alive()
+        return True
 
     def is_cancelled(self) -> bool:
         with self.lock:
@@ -138,6 +165,35 @@ class HandlerContext:
         self.shutdown_requested = False
         self._parse_jobs: Dict[str, _ParseJob] = {}
         self._parse_lock = threading.Lock()
+        self._parse_closing = False
+        self._search_jobs: set[str] = set()
+        self._search_lock = threading.Lock()
+        self.engine_updates = ytdlp_updater.EngineUpdateService(paths)
+        # 准入锁只保护计数和冻结状态，不跨解析、网络或下载执行持有。
+        # 冻结检查顺序：准入 -> 解析/搜索 -> manager；worker 不反向取准入锁。
+        self._engine_gate_lock = threading.Lock()
+        self._engine_inflight_requests = 0
+        self._engine_freeze_token: Optional[str] = None
+
+    def cancel_parse_jobs(self) -> bool:
+        """停止接收解析，锁外等待全部 worker 退出，失败时保留未退出任务。"""
+        with self._parse_lock:
+            self._parse_closing = True
+            jobs = list(self._parse_jobs.values())
+        deadline = time.monotonic() + _PARSE_SHUTDOWN_TIMEOUT
+        stopped = True
+        for job in jobs:
+            try:
+                job.cancel()
+            except Exception:
+                stopped = False
+        for job in jobs:
+            try:
+                if not job.wait(timeout=max(0.0, deadline - time.monotonic())):
+                    stopped = False
+            except Exception:
+                stopped = False
+        return stopped
 
     def snapshot_task(self, task: DownloadTask) -> Dict[str, Any]:
         return asdict(task.to_snapshot())
@@ -161,6 +217,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_RESUME_ALL.value: _resume_all,
         Method.DOWNLOAD_CANCEL.value: _cancel,
         Method.DOWNLOAD_RETRY.value: _retry,
+        Method.DOWNLOAD_RETRY_EMBEDDED_DOUYIN.value: _retry_embedded_douyin,
         Method.DOWNLOAD_REMOVE.value: _remove,
         Method.DOWNLOAD_REMOVE_GROUP.value: _remove_group,
         Method.DOWNLOAD_APPLY_GROUP_ACTION.value: _apply_group_action,
@@ -176,6 +233,9 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.UPDATER_CHECK_YTDLP.value: _check_ytdlp,
         Method.UPDATER_CHECK_HEALTH.value: _check_ytdlp_health,
         Method.UPDATER_UPDATE_YTDLP.value: _update_ytdlp,
+        Method.UPDATER_GET_ENGINE_STATE.value: _get_engine_state,
+        Method.UPDATER_FREEZE_ENGINE.value: _freeze_engine,
+        Method.UPDATER_UNFREEZE_ENGINE.value: _unfreeze_engine,
         Method.TELEGRAM_GET_CONFIG.value: _telegram_get_config,
         Method.TELEGRAM_CONFIGURE.value: _telegram_configure,
         Method.TELEGRAM_LIST_DELIVERIES.value: _telegram_list_deliveries,
@@ -198,15 +258,27 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.TELEGRAM_GET_TARGET_BLOCK.value: _telegram_get_target_block,
         Method.TELEGRAM_CLEAR_TARGET_BLOCK.value: _telegram_clear_target_block,
     }
-    handler = handlers.get(method)
-    if handler is None:
-        raise HandlerError(ErrorCode.METHOD_NOT_FOUND, f"未知方法: {method}")
+    tracked = (
+        method not in _ENGINE_FROZEN_ALLOWED or method == Method.APP_SHUTDOWN.value
+    ) and method != Method.UPDATER_FREEZE_ENGINE.value
+    with ctx._engine_gate_lock:
+        if ctx._engine_freeze_token is not None and method not in _ENGINE_FROZEN_ALLOWED:
+            raise HandlerError(ErrorCode.INTERNAL, "下载组件正在切换，请稍后重试", retryable=True)
+        if tracked:
+            ctx._engine_inflight_requests += 1
     try:
+        handler = handlers.get(method)
+        if handler is None:
+            raise HandlerError(ErrorCode.METHOD_NOT_FOUND, f"未知方法: {method}")
         return handler(ctx, payload)
     except QueueMutationError as exc:
         raise HandlerError(
             ErrorCode.INTERNAL, "无法保存任务更改，请重试", retryable=True,
         ) from exc
+    finally:
+        if tracked:
+            with ctx._engine_gate_lock:
+                ctx._engine_inflight_requests -= 1
 
 
 def _ping(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -222,6 +294,8 @@ def _get_snapshot(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
 
 
 def _shutdown(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not ctx.cancel_parse_jobs():
+        raise HandlerError(ErrorCode.INTERNAL, "无法停止链接解析，请重试", retryable=True)
     ctx.manager.stop()
     ctx.shutdown_requested = True
     return {"ok": True}
@@ -310,6 +384,14 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
         postprocessing = str(item["postprocessing"]).strip().lower()
         if postprocessing in {"none", "mp4", "mp3", "script"}:
             opts.postprocessing = postprocessing
+    if item.get("browser_extension") is True:
+        opts.browser_extension = True
+        opts.cookies_from_browser = opts.cookiefile = ""
+        if item.get("audio_only") is False and opts.postprocessing == "mp3":
+            opts.postprocessing = "none"
+    if item.get("direct_media") is True:
+        opts.direct_media = True
+        opts.embed_metadata = False
     return opts
 
 
@@ -496,6 +578,7 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
             {
                 "url": url,
                 "title": title,
+                "media_title_verified": bool(item and item.get("media_title_verified") is True),
                 "thumbnail_url": thumbnail_url,
                 "page_url": page_url,
                 "group_id": group_id,
@@ -532,6 +615,7 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
             video_info=VideoInfo(
                 url=url,
                 title=title,
+                media_title_verified=spec.get("media_title_verified") is True,
                 thumbnail_url=thumbnail_url,
                 platform=platform,
             ),
@@ -566,7 +650,20 @@ def _cancel(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     return _single_action(ctx, payload, TaskAction.CANCEL)
 
 
+def _retry_embedded_douyin(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        ctx.manager.retry_embedded_douyin(_require_task_id(payload), str(payload.get("originalUrl") or ""), str(payload.get("mediaUrl") or ""), str(payload.get("title") or ""))
+    except ValueError:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "内置登录重试不可用，请刷新后重试") from None
+    return {"ok": True}
+
+
 def _retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if payload.get("browser_extension") is True:
+        task = ctx.manager.get_task(_require_task_id(payload))
+        if task is not None and task.status.value in ("failed", "cancelled"):
+            task.options.browser_extension = True
+            task.options.cookies_from_browser = task.options.cookiefile = ""
     return _single_action(ctx, payload, TaskAction.RETRY)
 
 
@@ -718,8 +815,6 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     timeout = float(payload.get("timeout") or 30)
     allow_playlist = bool(payload.get("allow_playlist") or payload.get("allowPlaylist"))
     job = _ParseJob()
-    with ctx._parse_lock:
-        ctx._parse_jobs[parse_id] = job
 
     def worker():
         try:
@@ -798,8 +893,20 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
             job.set_session(None)
             with ctx._parse_lock:
                 ctx._parse_jobs.pop(parse_id, None)
+            job.done.set()
 
-    threading.Thread(target=worker, daemon=True).start()
+    job.thread = threading.Thread(target=worker, daemon=True)
+    with ctx._parse_lock:
+        if ctx._parse_closing:
+            raise HandlerError(ErrorCode.INTERNAL, "应用正在关闭，请稍后重试", retryable=True)
+        ctx._parse_jobs[parse_id] = job
+    try:
+        job.thread.start()
+    except Exception:
+        with ctx._parse_lock:
+            ctx._parse_jobs.pop(parse_id, None)
+        job.done.set()
+        raise
     return {"parseId": parse_id}
 
 
@@ -837,6 +944,8 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         payload.get("searchId") or payload.get("search_id") or ""
     ).strip()
     search_id = requested_search_id or str(uuid.uuid4())
+    # 客户端可以重复 searchId；内部句柄必须逐次独立，防止较快任务遮住旧任务。
+    job_id = str(uuid.uuid4())
 
     def worker():
         try:
@@ -875,8 +984,18 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
                     "error": str(exc),
                 },
             )
+        finally:
+            with ctx._search_lock:
+                ctx._search_jobs.discard(job_id)
 
-    threading.Thread(target=worker, daemon=True).start()
+    with ctx._search_lock:
+        ctx._search_jobs.add(job_id)
+    try:
+        threading.Thread(target=worker, daemon=True).start()
+    except Exception:
+        with ctx._search_lock:
+            ctx._search_jobs.discard(job_id)
+        raise
     return {"searchId": search_id}
 
 
@@ -890,6 +1009,7 @@ def _history_list(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         limit=limit,
         status=str(status) if status else None,
         query=str(query) if query else None,
+        sort_order=str(payload.get("sort_order") or "newest"),
     )
     return {
         "items": [
@@ -1069,9 +1189,9 @@ def _telegram_clear_target_block(ctx: HandlerContext, payload: Dict[str, Any]) -
 
 def _check_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        return ytdlp_updater.check_update(ctx.paths)
+        return ctx.engine_updates.start_check()
     except Exception as exc:
-        raise HandlerError(ErrorCode.INTERNAL, f"检查 yt-dlp 更新失败: {exc}") from exc
+        raise HandlerError(ErrorCode.INTERNAL, "暂时无法检查下载组件，请稍后重试", retryable=True) from exc
 
 
 def _check_ytdlp_health(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1082,11 +1202,55 @@ def _check_ytdlp_health(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[st
 
 
 def _update_ytdlp(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    download_url = payload.get("downloadUrl") or payload.get("download_url")
+    if "downloadUrl" in payload or "download_url" in payload:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "请从应用内检查并更新下载组件")
     try:
-        return ytdlp_updater.update_ytdlp(
-            ctx.paths,
-            download_url=str(download_url) if download_url else None,
-        )
+        return ctx.engine_updates.start_prepare()
     except Exception as exc:
-        raise HandlerError(ErrorCode.INTERNAL, f"更新 yt-dlp 失败: {exc}") from exc
+        raise HandlerError(ErrorCode.INTERNAL, "暂时无法准备下载组件，请稍后重试", retryable=True) from exc
+
+
+def _get_engine_state(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return ctx.engine_updates.snapshot()
+
+
+def _freeze_engine(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    with ctx._engine_gate_lock:
+        if ctx.shutdown_requested or ctx._engine_freeze_token is not None or ctx._engine_inflight_requests:
+            return {"frozen": False, "reason": "busy"}
+        with ctx._parse_lock, ctx._search_lock:
+            if ctx._parse_jobs or ctx._search_jobs:
+                return {"frozen": False, "reason": "busy"}
+        state = ctx.engine_updates.snapshot()
+        operation = state.get("operation")
+        if operation and operation.get("state") == "running":
+            return {"frozen": False, "reason": "busy"}
+        try:
+            pending = ytdlp_updater.read_pending(ctx.paths)
+        except Exception:
+            pending = None
+        if not pending or payload.get("sha256") != pending["sha256"]:
+            return {"frozen": False, "reason": "not_ready"}
+        if ctx.telegram is not None:
+            # 领取已由 Main 暂停。所有领取/续约协议请求也受同一准入门禁约束。
+            # 无法证明已空闲时保守阻止；等待发送的队列不影响切换。
+            try:
+                if any(ctx.telegram.store.list_deliveries(status=status, limit=1).total
+                       for status in ("preparing", "sending")):
+                    return {"frozen": False, "reason": "busy"}
+            except Exception:
+                return {"frozen": False, "reason": "busy"}
+        token = str(uuid.uuid4())
+        if not ctx.manager.freeze_for_engine_update():
+            return {"frozen": False, "reason": "busy"}
+        ctx._engine_freeze_token = token
+        return {"frozen": True, "token": token, "current": state["current"], "pending": pending}
+
+
+def _unfreeze_engine(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    with ctx._engine_gate_lock:
+        if not ctx._engine_freeze_token or payload.get("token") != ctx._engine_freeze_token:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, "切换状态已失效，请重试", retryable=True)
+        ctx.manager.unfreeze_engine_update()
+        ctx._engine_freeze_token = None
+        return {"ok": True}

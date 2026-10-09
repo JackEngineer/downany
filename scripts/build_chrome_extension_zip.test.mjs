@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const extensionVersion = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "browser-extension", "manifest.json"), "utf8")).version;
 const buildScript = path.join(repositoryRoot, "scripts", "build_chrome_extension_zip.sh");
 
 test("builds a versioned extension ZIP without tests or hidden files", () => {
@@ -19,7 +20,7 @@ test("builds a versioned extension ZIP without tests or hidden files", () => {
     });
     assert.equal(build.status, 0, `${build.stdout}\n${build.stderr}`);
 
-    const artifact = path.join(outputDir, "Downany-chrome-extension-0.8.3.zip");
+    const artifact = path.join(outputDir, `Downany-chrome-extension-${extensionVersion}.zip`);
     assert.equal(fs.statSync(artifact).size > 0, true);
     const listing = spawnSync("unzip", ["-Z1", artifact], { encoding: "utf8" });
     assert.equal(listing.status, 0, listing.stderr);
@@ -30,7 +31,7 @@ test("builds a versioned extension ZIP without tests or hidden files", () => {
 
     const manifest = spawnSync("unzip", ["-p", artifact, "manifest.json"], { encoding: "utf8" });
     assert.equal(manifest.status, 0, manifest.stderr);
-    assert.equal(JSON.parse(manifest.stdout).version, "0.8.3");
+    assert.equal(JSON.parse(manifest.stdout).version, extensionVersion);
 
     const secondOutputDir = fs.mkdtempSync(path.join(outputDir, "repeat-"));
     const repeat = spawnSync("bash", [buildScript, secondOutputDir], {
@@ -39,7 +40,7 @@ test("builds a versioned extension ZIP without tests or hidden files", () => {
     });
     assert.equal(repeat.status, 0, `${repeat.stdout}\n${repeat.stderr}`);
     assert.deepEqual(
-      fs.readFileSync(path.join(secondOutputDir, "Downany-chrome-extension-0.8.3.zip")),
+      fs.readFileSync(path.join(secondOutputDir, `Downany-chrome-extension-${extensionVersion}.zip`)),
       fs.readFileSync(artifact),
     );
   } finally {

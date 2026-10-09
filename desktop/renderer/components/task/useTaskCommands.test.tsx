@@ -87,3 +87,12 @@ describe("single-task commands", () => {
     expect(JSON.stringify(useAppStore.getState().toasts)).not.toContain("fake-secret");
   });
 });
+
+it("built-in retry reports a fixed message without leaking transport secrets", async () => {
+  window.api.retryEmbeddedDouyin = vi.fn().mockRejectedValue(new Error("Cookie=secret token=private"));
+  const { result } = renderHook(() => useTaskCommands(taskFixture({ id: "task-1" })));
+  await act(async () => { await result.current.retryEmbeddedDouyin!(); });
+  expect(window.api.retryEmbeddedDouyin).toHaveBeenCalledWith("task-1");
+  expect(JSON.stringify(useAppStore.getState().toasts)).not.toMatch(/secret|private/);
+  expect(useAppStore.getState().toasts[0].kind).toBe("error");
+});

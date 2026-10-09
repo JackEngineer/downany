@@ -1,6 +1,7 @@
 /** 本机 HTTP 桥：供 Chrome 扩展可靠入队（仅绑定 127.0.0.1）。 */
 
 import * as http from "node:http";
+import { createHash } from "node:crypto";
 
 const DEFAULT_BRIDGE_PORT = 17888;
 
@@ -31,7 +32,9 @@ export type BridgeEnqueueResult = {
 
 export type BridgeEnqueueItem = {
   url: string;
+  route?: "media" | "page";
   title?: string;
+  media_title_verified?: boolean;
   headers?: Record<string, string>;
   quality?: string;
   audio_only?: boolean;
@@ -54,6 +57,8 @@ export type BridgeHandlers = {
   getStatus?: () => { sidecarReady: boolean };
   /** 可选：按 taskId 批量查询状态（扩展轮询） */
   getTasks?: (ids: string[]) => BridgeTaskStatus[];
+  retryTask?: (id: string) => Promise<BridgeEnqueueResult>;
+  focusTask?: (id: string) => Promise<BridgeEnqueueResult>;
 };
 
 function sendJson(
@@ -102,12 +107,17 @@ function pushItem(
   url: string,
   title?: string,
   headers?: Record<string, string>,
-  extras?: { pageUrl?: string; thumbnail_url?: string },
+  extras?: { pageUrl?: string; thumbnail_url?: string; route?: "media" | "page"; media_title_verified?: boolean; quality?: string; audio_only?: boolean },
 ): void {
   const trimmed = url.trim();
-  if (!trimmed || seen.has(trimmed)) return;
-  seen.add(trimmed);
+  const key = JSON.stringify([trimmed,extras?.route,extras?.quality || "best",extras?.audio_only === true]);
+  if (!trimmed || seen.has(key)) return;
+  seen.add(key);
   const item: BridgeEnqueueItem = { url: trimmed };
+  if (extras?.route) item.route = extras.route;
+  if (extras?.quality) item.quality = extras.quality;
+  if (extras?.audio_only !== undefined) item.audio_only = extras.audio_only;
+  if (extras?.media_title_verified === true) item.media_title_verified = true;
   if (title && title.trim()) item.title = title.trim();
   if (headers) item.headers = headers;
   if (extras?.pageUrl && extras.pageUrl.trim()) {
@@ -148,6 +158,10 @@ export function parseEnqueueBody(raw: string): BridgeEnqueueItem[] {
         typeof rec.title === "string" ? rec.title : undefined,
         normalizeHeaders(rec.headers),
         {
+          route: rec.route === "media" || rec.route === "page" ? rec.route : undefined,
+          media_title_verified: rec.media_title_verified === true,
+          quality: ["best","1080p","720p"].includes(String(rec.quality)) ? String(rec.quality) : undefined,
+          audio_only: typeof rec.audio_only === "boolean" ? rec.audio_only : undefined,
           pageUrl:
             typeof rec.pageUrl === "string"
               ? rec.pageUrl
@@ -196,6 +210,7 @@ export function startBridgeServer(
   handlers: BridgeHandlers,
   port = BRIDGE_PORT,
 ): http.Server {
+  const receipts = new Map<string, { fingerprint: string; result: Promise<BridgeEnqueueResult> }>();
   const server = http.createServer((req, res) => {
     void (async () => {
       const method = req.method || "GET";
@@ -217,6 +232,7 @@ export function startBridgeServer(
           ok: true,
           service: "downany-bridge",
           sidecarReady: status ? status.sidecarReady : true,
+          capabilities: ["explicit-routes", "enqueue-receipts", "task-retry", "task-focus"],
         });
         return;
       }
@@ -243,11 +259,38 @@ export function startBridgeServer(
           sendJson(res, 400, { ok: false, error: "缺少 url / urls / items" });
           return;
         }
-        const result = await handlers.enqueue(items);
+        const input = JSON.parse(raw) as { requestId?: unknown };
+        const requestId = typeof input.requestId === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(input.requestId) ? input.requestId : "";
+        const fingerprint = createHash("sha256").update(JSON.stringify(items.map(item => [item.url, item.route]))).digest("hex");
+        const existing = requestId ? receipts.get(requestId) : undefined;
+        if (existing && existing.fingerprint !== fingerprint) {
+          sendJson(res, 409, { ok: false, error: "发送标识与媒体不一致" }); return;
+        }
+        if (!existing && requestId && receipts.size >= 500) {
+          sendJson(res, 429, { ok: false, error: "发送回执已满，请稍后重试" }); return;
+        }
+        const operation = existing?.result || handlers.enqueue(items);
+        if (requestId && !existing) receipts.set(requestId, { fingerprint, result: operation });
+        let result: BridgeEnqueueResult;
+        try { result = await operation; } catch (error) { if(requestId) receipts.delete(requestId); throw error; }
+        if (!result.ok && requestId) receipts.delete(requestId);
         sendJson(res, result.ok ? 200 : 502, result as unknown as Record<string, unknown>);
         return;
       }
 
+      if (method === "POST" && ["/task/retry", "/task/focus"].includes(url.pathname)) {
+        const origin = String(req.headers.origin || "");
+        if (origin && !/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
+          sendJson(res, 403, { ok: false, error: "仅允许本机扩展操作任务" }); return;
+        }
+        const input = JSON.parse(await readBody(req)) as { taskId?: unknown };
+        const taskId = typeof input.taskId === "string" ? input.taskId : "";
+        if (!/^[a-zA-Z0-9_-]{1,100}$/.test(taskId)) { sendJson(res, 400, { ok: false, error: "无效任务标识" }); return; }
+        const handler = url.pathname === "/task/retry" ? handlers.retryTask : handlers.focusTask;
+        if (!handler) { sendJson(res, 501, { ok: false, error: "请更新百纳桌面端" }); return; }
+        const result = await handler(taskId);
+        sendJson(res, result.ok ? 200 : 409, result as unknown as Record<string, unknown>); return;
+      }
       sendJson(res, 404, { ok: false, error: "not found" });
     })().catch((err) => {
       sendJson(res, 500, { ok: false, error: String(err) });

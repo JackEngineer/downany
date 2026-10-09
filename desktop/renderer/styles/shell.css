@@ -392,3 +392,6 @@
     grid-template-columns: 116px minmax(0, 1fr) auto;
   }
 }
+
+.list-sort { white-space: nowrap; flex-shrink: 0; margin-left: auto; align-self: center; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+.list-sort select { width: auto; min-width: 104px; padding: 3px 8px; font-size: 12px; }

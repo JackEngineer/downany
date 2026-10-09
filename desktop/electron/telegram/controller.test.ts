@@ -8,12 +8,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TelegramController } from "./controller";
 import { TelegramCredentialVault } from "./credentialVault";
+import type { TelegramClient } from "./client";
+import type { TelegramBotApiSupervisor } from "./supervisor";
 import type { TelegramVideoSegmenter } from "./videoSegmenter";
 
 let tempDir: string | undefined;
 let server: http.Server | undefined;
 
 afterEach(async () => {
+  vi.useRealTimers();
   if (server) {
     await new Promise<void>((resolve) => server!.close(() => resolve()));
     server = undefined;
@@ -42,6 +45,124 @@ function config(targetChatId: string | null = null, accountId = "42") {
 }
 
 describe("TelegramController mutation ordering", () => {
+  it("counts queued mutations and rejects new changes synchronously while frozen", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-freeze-mutations-"));
+    const releases: Array<() => void> = [];
+    const gates = [0, 1].map(() => new Promise<void>((resolve) => { releases.push(resolve); }));
+    const configured: string[] = [];
+    const request = async (_method: string, payload?: Record<string, unknown>): Promise<unknown> => {
+      configured.push(String(payload?.targetChatId));
+      const gate = gates[configured.length - 1];
+      if (gate) await gate;
+      return config(String(payload?.targetChatId));
+    };
+    const controller = new TelegramController(request, tempDir);
+    (controller as unknown as { client: unknown }).client = {
+      getChat: async (id: string) => ({ id, type: "supergroup", title: id }),
+    };
+    const first = controller.selectTarget("-1001");
+    const second = controller.selectTarget("-1002");
+    // Neither queued operation has reached the network yet.
+    expect(configured).toEqual([]);
+    expect(await controller.tryFreezeForEngine()).toBe(false);
+    releases[0]();
+    await first;
+    expect(await controller.tryFreezeForEngine()).toBe(false);
+    releases[1]();
+    await second;
+    const freezing = controller.tryFreezeForEngine();
+    const rejected = controller.selectTarget("-1003");
+    expect(await freezing).toBe(true);
+    await expect(rejected).rejects.toThrow("Telegram 暂时不可操作");
+    await expect(controller.bind("unused-token")).rejects.toThrow("Telegram 暂时不可操作");
+    await expect(controller.disconnect()).rejects.toThrow("Telegram 暂时不可操作");
+    await expect(controller.start()).rejects.toThrow("Telegram 暂时不可操作");
+    await expect(controller.getConfig()).rejects.toThrow("Telegram 暂时不可操作");
+    expect(() => controller.attachSupervisor()).toThrow("Telegram 暂时不可操作");
+    expect(configured).toEqual(["-1001", "-1002"]);
+    controller.resumeAfterEngine();
+    await controller.selectTarget("-1003");
+    expect(configured).toEqual(["-1001", "-1002", "-1003"]);
+  });
+
+  it.each(["start", "getConfig"] as const)("refuses freeze while %s is waiting to replace client/config", async (method) => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-freeze-operation-"));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const vault = { read: vi.fn(() => null) } as unknown as TelegramCredentialVault;
+    const request = vi.fn(async () => { if (method === "getConfig") await gate; return config(null, ""); });
+    const controller = new TelegramController(request, tempDir, undefined, undefined, method === "start" ? gate : Promise.resolve(), vault);
+    const operation = controller[method]();
+    try {
+      expect(await controller.tryFreezeForEngine()).toBe(false);
+    } finally {
+      release();
+      await operation;
+    }
+    expect(await controller.tryFreezeForEngine()).toBe(true);
+    const reads = vi.mocked(vault.read).mock.calls.length;
+    controller.resumeAfterEngine();
+    expect(vi.mocked(vault.read).mock.calls.length).toBe(reads);
+    await controller.stop();
+  });
+
+  it("freezes idle delivery without touching credentials, client, auto-send or the background service", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-freeze-idle-"));
+    const current = { ...config("-1001"), autoSendEnabled: true };
+    const vault = { read: vi.fn(() => "test-only-token"), save: vi.fn(), clear: vi.fn() } as unknown as TelegramCredentialVault;
+    const supervisor = { start: vi.fn(async () => ({ baseUrl: "http://127.0.0.1" })), stop: vi.fn(async () => undefined) } as unknown as TelegramBotApiSupervisor;
+    const client = { getMe: vi.fn(async () => ({ id: 42 })) } as unknown as TelegramClient;
+    const methods: string[] = [];
+    const request = async (method: string): Promise<unknown> => {
+      methods.push(method);
+      return method === "telegram.getConfig" ? current : { claim: null };
+    };
+    const controller = new TelegramController(request, tempDir, undefined, supervisor, Promise.resolve(), vault);
+    vi.spyOn(controller as unknown as { createClient: () => Promise<TelegramClient> }, "createClient").mockResolvedValue(client);
+    await controller.start();
+    try {
+      expect(await controller.tryFreezeForEngine()).toBe(true);
+      const initialMethods = [...methods];
+      await vi.advanceTimersByTimeAsync(3600);
+      expect(methods).toEqual(initialMethods);
+      await expect(controller.setAutoSend(false)).rejects.toThrow("Telegram 暂时不可操作");
+      expect(current.autoSendEnabled).toBe(true);
+      expect((controller as unknown as { client: unknown }).client).toBe(client);
+      expect(vault.read).toHaveBeenCalledTimes(1);
+      expect(vault.save).not.toHaveBeenCalled();
+      expect(vault.clear).not.toHaveBeenCalled();
+      expect(supervisor.stop).not.toHaveBeenCalled();
+      controller.resumeAfterEngine();
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(methods.filter((method) => method === "telegram.claimNext").length).toBeGreaterThan(1);
+      expect(methods).not.toContain("telegram.configure");
+      expect(vault.read).toHaveBeenCalledTimes(1);
+      expect(client.getMe).toHaveBeenCalledTimes(1);
+    } finally {
+      controller.resumeAfterEngine?.();
+      const stopped = controller.stop();
+      await vi.advanceTimersByTimeAsync(1200);
+      await stopped;
+    }
+  });
+
+  it("allows final stop while frozen without reopening mutations or worker claims", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-freeze-stop-"));
+    const vault = { read: vi.fn(() => null) } as unknown as TelegramCredentialVault;
+    const supervisor = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) } as unknown as TelegramBotApiSupervisor;
+    const request = vi.fn(async () => config(null, ""));
+    const controller = new TelegramController(request, tempDir, undefined, supervisor, Promise.resolve(), vault);
+    await controller.start();
+    expect(await controller.tryFreezeForEngine()).toBe(true);
+    await expect(controller.stop()).resolves.toBeUndefined();
+    expect(supervisor.stop).toHaveBeenCalledTimes(1);
+    expect((controller as unknown as { client: unknown }).client).toBeNull();
+    await expect(controller.start()).rejects.toThrow("Telegram 暂时不可操作");
+    await expect(controller.setAutoSend(true)).rejects.toThrow("Telegram 暂时不可操作");
+    expect(request.mock.calls).toEqual([["telegram.getConfig", {}]]);
+  });
+
   it("keeps discovered chats and restores the verified target when an incremental refresh is empty", async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-discovery-"));
     const verifiedTargetId = "-1001234567890";

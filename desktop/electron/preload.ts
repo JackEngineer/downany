@@ -148,6 +148,9 @@ const api = {
     ipcRenderer.on("app:highlightTask", listener);
     return () => ipcRenderer.removeListener("app:highlightTask", listener);
   },
+  retryEmbeddedDouyin(taskId: string): Promise<{ ok: boolean; code?: string }> {
+    return ipcRenderer.invoke("app:retryEmbeddedDouyin", taskId);
+  },
   openExtractWindow(url: string): Promise<void> {
     return ipcRenderer.invoke("app:openExtractWindow", url);
   },

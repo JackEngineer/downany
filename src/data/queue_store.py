@@ -144,6 +144,8 @@ class QueueStore:
         video_info = {
             "url": task.video_info.url,
             "title": task.video_info.title,
+            "media_title_verified": task.video_info.media_title_verified,
+            "requires_embedded_session": task.requires_embedded_session,
             "duration": task.video_info.duration,
             "thumbnail_url": task.video_info.thumbnail_url,
             "uploader": task.video_info.uploader,
@@ -165,6 +167,8 @@ class QueueStore:
             "postprocess_script": task.options.postprocess_script,
             "cookies_from_browser": task.options.cookies_from_browser,
             "cookiefile": task.options.cookiefile,
+            "browser_extension": task.options.browser_extension,
+            "direct_media": task.options.direct_media,
             "embed_metadata": task.options.embed_metadata,
             "subtitle_langs": task.options.subtitle_langs,
             "embed_subs": task.options.embed_subs,
@@ -313,9 +317,11 @@ class QueueStore:
         status = TaskStatus(row["status"])
         return DownloadTask(
             id=row["id"],
+            requires_embedded_session=info.get("requires_embedded_session") is True,
             video_info=VideoInfo(
                 url=info["url"],
                 title=info.get("title", ""),
+                media_title_verified=info.get("media_title_verified") is True,
                 duration=info.get("duration", 0),
                 thumbnail_url=info.get("thumbnail_url", ""),
                 uploader=info.get("uploader", ""),
@@ -339,6 +345,8 @@ class QueueStore:
                 postprocess_script=str(opts.get("postprocess_script", "")),
                 cookies_from_browser=str(opts.get("cookies_from_browser", "")),
                 cookiefile=str(opts.get("cookiefile", "")),
+                browser_extension=bool(opts.get("browser_extension", False)),
+                direct_media=bool(opts.get("direct_media", False)),
                 embed_metadata=bool(opts.get("embed_metadata", True)),
                 subtitle_langs=str(opts.get("subtitle_langs", "")),
                 embed_subs=bool(opts.get("embed_subs", False)),

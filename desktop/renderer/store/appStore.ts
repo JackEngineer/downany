@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { DownloadSortOrder } from "../lib/downloadSorting";
 
 import { acceptsTaskProgress, taskProgressPatch } from "../../electron/taskProgressRelay";
 import type {
@@ -22,6 +23,8 @@ function toastId(): string {
 interface AppState {
   connection: ConnectionState;
   filter: ListFilter;
+  sortOrder: DownloadSortOrder;
+  setSortOrder: (order: DownloadSortOrder) => void;
   searchQuery: string;
   searchMode: SearchMode;
   netSearchId: string;
@@ -110,6 +113,8 @@ function reconcileSnapshotTasks(
 export const useAppStore = create<AppState>((set, get) => ({
   connection: "connecting",
   filter: "all",
+  sortOrder: "newest",
+  setSortOrder: (sortOrder) => set({ sortOrder }),
   searchQuery: "",
   searchMode: "filter",
   netSearchId: "",

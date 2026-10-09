@@ -290,6 +290,10 @@ def compile_output_plan(task: DownloadTask) -> OutputPlan:
         # playlist wrapper even when a client-expanded task represents one row.
         ydl_options["playlist_items"] = str(int(task.playlist_index))
 
+    if task.video_info.platform == Platform.TWITTER:
+        # X multi-video posts ignore noplaylist; each task owns one output.
+        ydl_options["playlist_items"] = str(max(1, int(task.playlist_index or 0)))
+
     final_leaf_template, source_key_template, playlist_folder = _compile_final_names(task)
     return OutputPlan(
         media_kind=media_kind,

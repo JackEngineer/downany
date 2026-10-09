@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from threading import Barrier
 
 import pytest
 
+from src.core import output_paths
+import src.core.output_commit as commits
 from src.core.downloader import (
     DownloadResult,
     SourceFacts,
@@ -117,6 +121,61 @@ def test_existing_target_is_unchanged_and_bundle_uses_suffix_two(tmp_path):
     assert _hidden_files(tmp_path) == []
 
 
+@pytest.mark.parametrize("directory_units", [160, 199])
+@pytest.mark.parametrize("playlist_folder", ["", "合集"])
+def test_windows_long_paths_publish_subtitles_and_preserve_existing_bundle(
+    tmp_path, monkeypatch, directory_units, playlist_folder,
+):
+    monkeypatch.setattr(output_paths, "IS_WINDOWS", True)
+    base = tmp_path.resolve()
+    folder_units = len(playlist_folder.encode("utf-16-le")) // 2
+    root_units = directory_units - (folder_units + 1 if playlist_folder else 0)
+    padding = root_units - len(str(base).encode("utf-16-le")) // 2 - 1
+    assert padding > 0
+    download_root = base / ("r" * padding)
+    directory = download_root / playlist_folder if playlist_folder else download_root
+    assert len(str(directory).encode("utf-16-le")) // 2 == directory_units
+    result = _result_with_main_and_subtitle(
+        tmp_path / "staging", rendered_leaf="视频😀" * 60 + " [site-id].mp4",
+    )
+
+    def require_legacy_windows_path(path: Path) -> None:
+        if len(str(path).encode("utf-16-le")) // 2 >= 260:
+            raise OSError("simulated WinError 206: path exceeds MAX_PATH")
+
+    def bounded_copy(source: Path, target: Path) -> None:
+        require_legacy_windows_path(source)
+        require_legacy_windows_path(target)
+        shutil.copyfile(source, target)
+
+    def bounded_publish(hidden: Path, target: Path) -> None:
+        require_legacy_windows_path(hidden)
+        require_legacy_windows_path(target)
+        publish_no_replace(hidden, target)
+
+    first = commit_output_bundle(
+        download_root=download_root, playlist_folder=playlist_folder,
+        result=result, copy_file=bounded_copy, publisher=bounded_publish,
+    )
+    result.main_file.write_bytes(b"second payload")
+    result.subtitles[0].path.write_bytes(b"second subtitle")
+    second = commit_output_bundle(
+        download_root=download_root, playlist_folder=playlist_folder,
+        result=result, copy_file=bounded_copy, publisher=bounded_publish,
+    )
+
+    assert first.main_file.read_bytes() == b"main payload"
+    assert first.subtitle_files[0].read_bytes() == b"subtitle:main payload"
+    assert second.main_file.read_bytes() == b"second payload"
+    assert second.subtitle_files[0].read_bytes() == b"second subtitle"
+    assert first.main_file != second.main_file
+    assert second.main_file.name.endswith(" [site-id] (2).mp4")
+    assert second.subtitle_files[0].name == second.main_file.stem + ".zh-Hans.srt"
+    final_files = {first.main_file, *first.subtitle_files, second.main_file, *second.subtitle_files}
+    assert all(len(str(path).encode("utf-16-le")) // 2 <= 240 for path in final_files)
+    assert set(directory.iterdir()) == final_files
+
+
 def test_subtitles_publish_before_main_and_file_copies_are_fsynced(tmp_path, monkeypatch):
     result = _result_with_main_and_subtitle(tmp_path / "staging")
     publish_order: list[str] = []
@@ -161,7 +220,9 @@ def test_main_collision_rolls_back_attempt_and_cleans_hidden_before_retry(tmp_pa
             assert not (tmp_path / "Title [site-id].zh-Hans.srt").exists()
             retry_hidden = _hidden_files(tmp_path)
             assert len(retry_hidden) == 2
-            assert all(" (2)." in path.name for path in retry_hidden)
+            assert {path.read_bytes() for path in retry_hidden} == {
+                b"main payload", b"subtitle:main payload",
+            }
         publish_no_replace(hidden, target)
 
     committed = commit_output_bundle(
@@ -363,3 +424,54 @@ def test_two_threads_publish_same_leaf_without_overwrite(tmp_path):
     assert payloads == {b"payload-a", b"payload-b"}
     assert subtitle_payloads == {b"subtitle:payload-a", b"subtitle:payload-b"}
     assert _hidden_files(tmp_path / "downloads") == []
+
+
+def test_long_generic_id_repeated_publish_preserves_existing_files(tmp_path):
+    source = "generic-" + "query=" * 100
+    result = replace(_result_with_main_and_subtitle(tmp_path / "staging"),
+                     rendered_leaf=f"{'旅行😀' * 100} [{source}].mp4", source_key=source)
+    published = [commit_output_bundle(download_root=tmp_path / "output", playlist_folder="", result=result)
+                 for _ in range(3)]
+    assert len({p.main_file for p in published}) == 3
+    assert published[-1].main_file.name.endswith(" (3).mp4")
+    assert all(p.main_file.read_bytes() == b"main payload" for p in published)
+    assert all(p.subtitle_files[0].read_bytes() == b"subtitle:main payload" for p in published)
+
+
+def test_repeated_candidate_fails_before_copying(tmp_path, monkeypatch):
+    result = _result_with_main_and_subtitle(tmp_path / "staging")
+    plan = output_paths.build_final_path_plan(tmp_path, "", result.rendered_leaf, result.source_key, ())
+    plan.main_file.write_bytes(b"old")
+    monkeypatch.setattr(commits, "build_final_path_plan", lambda *args, **kwargs: plan)
+    with pytest.raises(OutputVerificationFailed):
+        commit_output_bundle(download_root=tmp_path, playlist_folder="", result=result,
+                             copy_file=lambda *_: pytest.fail("must not copy"))
+    assert plan.main_file.read_bytes() == b"old"
+
+
+def test_all_candidates_occupied_fail_at_attempt_bound(tmp_path, monkeypatch):
+    result = _result_with_main_and_subtitle(tmp_path / "staging")
+    monkeypatch.setattr(commits, "MAX_COMMIT_ATTEMPTS", 3)
+    targets = []
+    for i in range(1, 4):
+        plan = output_paths.build_final_path_plan(tmp_path, "", result.rendered_leaf, result.source_key, (), copy_index=i)
+        plan.main_file.write_bytes(b"old")
+        targets.append(plan.main_file)
+    with pytest.raises(OutputVerificationFailed):
+        commit_output_bundle(download_root=tmp_path, playlist_folder="", result=result,
+                             copy_file=lambda *_: pytest.fail("must not copy"))
+    assert all(p.read_bytes() == b"old" for p in targets)
+
+
+def test_publish_races_are_bounded_and_hidden_copies_removed(tmp_path, monkeypatch):
+    result = _result_with_main_and_subtitle(tmp_path / "staging")
+    monkeypatch.setattr(commits, "MAX_COMMIT_ATTEMPTS", 3)
+    attempts = []
+    def occupied(hidden, target):
+        attempts.append(target)
+        raise FileExistsError()
+    with pytest.raises(OutputVerificationFailed):
+        commit_output_bundle(download_root=tmp_path / "output", playlist_folder="", result=result, publisher=occupied)
+    assert len(attempts) == 3
+    assert len(set(attempts)) == 3
+    assert _hidden_files(tmp_path / "output") == []

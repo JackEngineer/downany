@@ -15,6 +15,7 @@ from src.core.error_codes import OutputVerificationFailed
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.output_contract import OutputPlan, SubtitleMode
 from src.core.output_paths import safe_component, stable_source_key
+from src.core.title_utils import is_weak_title
 from src.core.twitter_fallback import extract_tweet_id, is_twitter_url, resolve_twitter_media
 from src.core.ytdlp_cookies import apply_cookiefile_from_headers, cleanup_cookiefile
 from src.core.ytdlp_opts import REMOTE_COMPONENTS, resolve_js_runtimes
@@ -81,18 +82,27 @@ def _output_failure(detail: str) -> OutputVerificationFailed:
 class _YtDlpQuietLogger:
     """Route yt-dlp diagnostics to stderr without polluting Sidecar stdout."""
 
+    def __init__(self, *, suppress: bool = False):
+        self.suppress = suppress
+
     def debug(self, msg: str) -> None:
-        if msg.startswith("[debug] "):
+        if self.suppress or msg.startswith("[debug] "):
             return
         logger.debug("%s", msg)
 
     def info(self, msg: str) -> None:
+        if self.suppress:
+            return
         logger.info("%s", msg)
 
     def warning(self, msg: str) -> None:
+        if self.suppress:
+            return
         logger.warning("%s", msg)
 
     def error(self, msg: str) -> None:
+        if self.suppress:
+            return
         logger.error("%s", msg)
 
 
@@ -422,6 +432,8 @@ class Downloader:
         plan: OutputPlan,
         url: str,
     ) -> str:
+        if info.get("direct") is True:
+            return stable_source_key(url)
         if "%(" in plan.source_key_template:
             rendered = ydl.evaluate_outtmpl(
                 plan.source_key_template,
@@ -500,11 +512,23 @@ class Downloader:
         *,
         source_url: Optional[str] = None,
         metadata_fallback: Optional[VideoInfo] = None,
+        preferred_title: str = "",
     ) -> DownloadResult:
         for attempt in range(2):
             try:
                 with self.ydl_factory(ydl_options) as ydl:
-                    info = ydl.extract_info(url, download=True)
+                    if metadata_fallback is not None:
+                        info = ydl.extract_info(url, download=False)
+                        info = _merge_fallback_info(info, metadata_fallback)
+                        info = ydl.process_ie_result(info, download=True)
+                    else:
+                        info = ydl.extract_info(url, download=True)
+                    if isinstance(info, dict) and info.get("direct") is True and preferred_title and not is_weak_title(preferred_title):
+                        info = {**info, "title": preferred_title.strip()}
+                    if source_url and metadata_fallback is None and isinstance(info, dict):
+                        info = {**info, "id": source_url.rsplit("/", 1)[-1], "title": preferred_title, "webpage_url": source_url, "original_url": source_url, "direct": True}
+                        for key in ("url", "thumbnail", "thumbnails", "description", "formats", "http_headers"):
+                            info.pop(key, None)
                     if metadata_fallback is not None:
                         info = _merge_fallback_info(info, metadata_fallback)
                     return self._result_from_info(
@@ -529,6 +553,8 @@ class Downloader:
         *,
         toolchain: MediaToolchain,
         staging_dir: Path,
+        preferred_title: str = "",
+        ephemeral_source_url: str = "",
     ) -> DownloadResult:
         """Download into staging and return only postprocessed output facts."""
         cookie_path: Optional[str] = None
@@ -536,12 +562,22 @@ class Downloader:
             staging = _resolved_staging_directory(staging_dir)
             preexisting_files = _existing_stage_files(staging)
             ydl_options = self._ydl_options(plan, toolchain, staging)
-            logger.info("开始下载: %s", url)
+            if ephemeral_source_url:
+                ydl_options["logger"] = _YtDlpQuietLogger(suppress=True)
+                ydl_options["http_headers"] = dict(DEFAULT_HTTP_HEADERS)
+                for key in ("cookiefile", "cookiesfrombrowser", "username", "password", "videopassword"):
+                    ydl_options.pop(key, None)
+                ydl_options.update(cachedir=False, writeinfojson=False, writethumbnail=False)
+                ydl_options["postprocessors"] = [p for p in ydl_options.get("postprocessors", []) if p.get("key") not in ("FFmpegMetadata", "EmbedThumbnail")]
+                logger.info("开始下载内置会话解析的媒体（无登录凭证）")
+            else:
+                logger.info("开始下载: %s", url)
             self.last_filename = ""
             self.last_info = None
             self.last_ydl_info = None
             self._observed_transfer = False
-            cookie_path = apply_cookiefile_from_headers(ydl_options, url)
+            if not ephemeral_source_url:
+                cookie_path = apply_cookiefile_from_headers(ydl_options, url)
 
             try:
                 result = self._download_with_ydl(
@@ -550,6 +586,8 @@ class Downloader:
                     plan,
                     staging,
                     preexisting_files,
+                    preferred_title=preferred_title,
+                    source_url=ephemeral_source_url or None,
                 )
             except DownloadCancelled:
                 raise
@@ -581,11 +619,19 @@ class Downloader:
         except DownloadCancelled:
             raise
         except OutputVerificationFailed as exc:
+            if ephemeral_source_url:
+                raise OutputVerificationFailed(_SAFE_OUTPUT_FAILURE) from None
             logger.error("下载暂存结果无效: %s", exc)
             if self.error_callback:
                 self.error_callback(str(exc))
             raise
         except Exception as exc:
+            if ephemeral_source_url:
+                message = "内置会话解析后的媒体下载失败，请主动重试"
+                logger.error("%s", message)
+                if self.error_callback:
+                    self.error_callback(message)
+                raise DownloadError(message) from None
             logger.error("下载出错: %s", exc)
             if self.error_callback:
                 self.error_callback(str(exc))

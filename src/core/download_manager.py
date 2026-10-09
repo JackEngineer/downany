@@ -14,7 +14,7 @@ import tempfile
 import threading
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -29,6 +29,7 @@ from src.core.download_task import (
     VideoInfo,
 )
 from src.core.error_codes import (
+    EmbeddedSessionRequired,
     MediaToolsMissing,
     OutputPathInvalid,
     OutputVerificationFailed,
@@ -224,6 +225,8 @@ def _join_completion_notes(*notes: str) -> str:
 
 
 def _safe_contract_error(exc: BaseException) -> tuple[str, str]:
+    if isinstance(exc, EmbeddedSessionRequired):
+        return exc.error_code, "临时媒体地址已释放，请主动使用内置登录重试"
     if isinstance(exc, OutputPathInvalid):
         return exc.error_code, _OUTPUT_PATH_MESSAGE
     if isinstance(exc, MediaToolsMissing):
@@ -298,8 +301,24 @@ class DownloadManager:
 
         self.scheduler_thread: Optional[threading.Thread] = None
         self.running = False
+        self._engine_update_frozen = False
 
         logger.info("下载管理器初始化完成")
+
+    def freeze_for_engine_update(self) -> bool:
+        """在调度锁内确认空闲并阻止新领取，不改变任何任务运行意图。"""
+        with self._lock:
+            if self._engine_update_frozen or self.active_tasks or any(
+                task.status in (TaskStatus.PENDING, TaskStatus.DOWNLOADING)
+                for task in self.tasks.values()
+            ):
+                return False
+            self._engine_update_frozen = True
+            return True
+
+    def unfreeze_engine_update(self) -> None:
+        with self._lock:
+            self._engine_update_frozen = False
 
     def restore_tasks(self) -> None:
         """按持久化运行意图恢复；用户暂停和终态不会自动重试。"""
@@ -343,6 +362,7 @@ class DownloadManager:
         with self._lock:
             self.running = False
             for task in self.tasks.values():
+                task.embedded_media_url = ""
                 if task.status == TaskStatus.DOWNLOADING or (
                     task.id in self.active_tasks and task.status == TaskStatus.PENDING
                 ):
@@ -447,6 +467,10 @@ class DownloadManager:
 
     def _refresh_retry_recovery_options(self, task: DownloadTask) -> None:
         """重试时采用当前登录状态与代理，同时保留任务自身的下载选项。"""
+        if task.requires_embedded_session:
+            task.options.cookies_from_browser = task.options.cookiefile = ""
+            task.options.http_headers = None
+            return
         builder = getattr(self.config, "build_download_options", None)
         if not callable(builder):
             self._refresh_task_proxy(task)
@@ -461,7 +485,9 @@ class DownloadManager:
             self._refresh_task_proxy(task)
             return
         task.options.proxy = current.proxy
-        task.options.cookies_from_browser = current.cookies_from_browser
+        task.options.cookies_from_browser = "" if task.options.browser_extension else current.cookies_from_browser
+        if task.options.browser_extension:
+            task.options.cookiefile = ""
         task.options.speed_limit = current.speed_limit
         task.options.concurrent_fragments = current.concurrent_fragments
         logger.info("重试任务已刷新登录状态与代理设置")
@@ -538,6 +564,7 @@ class DownloadManager:
             self._persist_removals_or_raise([task_id])
             if task.status in (TaskStatus.PENDING, TaskStatus.DOWNLOADING, TaskStatus.PAUSED):
                 task.status, task.run_intent = TaskStatus.CANCELLED, TaskRunIntent.PAUSE
+            task.embedded_media_url = ""
             self.tasks.pop(task_id, None)
         if delete_files and file_path:
             self._delete_task_file(file_path)
@@ -679,6 +706,8 @@ class DownloadManager:
                 if decision.outcome == TaskActionOutcome.SKIPPED:
                     continue
                 checkpoints.append((task, deepcopy(task)))
+                if action in (TaskAction.PAUSE, TaskAction.CANCEL):
+                    task.embedded_media_url = ""
                 task.status = decision.next_status
                 task.run_intent = decision.next_intent
                 if action in (TaskAction.RESUME, TaskAction.RETRY):
@@ -731,6 +760,31 @@ class DownloadManager:
 
     def retry_task(self, task_id: str) -> TaskActionResult:
         return self.apply_task_action(task_id, TaskAction.RETRY)
+
+    def retry_embedded_douyin(self, task_id: str, original_url: str, media_url: str, title: str) -> None:
+        # Only Main may call this route; nevertheless validate the IPC payload again.
+        if not re.fullmatch(r"https://www\.douyin\.com/video/\d+", original_url):
+            raise ValueError("无效的抖音原链接")
+        if not re.fullmatch(r"https://(?:video-web-cn\.douyin\.com|v\d+-(?:web|dy)\.douyinvod\.com)/[^\s\x00-\x1f]+", media_url) or len(media_url) > 8192:
+            raise ValueError("无效的媒体地址")
+        if not title or len(title) > 500 or re.search(r"[\x00-\x1f]", title):
+            raise ValueError("未取得作品名称")
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is None or task.status != TaskStatus.FAILED or task_id in self.active_tasks or task.video_info.url != original_url:
+                raise ValueError("任务状态已改变")
+            checkpoint = deepcopy(task)
+            try:
+                task.options = replace(task.options, http_headers=None, cookies_from_browser="", cookiefile="", embed_metadata=False)
+                task.video_info.title = title
+                task.video_info.media_title_verified = True
+                task.requires_embedded_session = True
+                task.embedded_media_url = media_url
+                report = self._apply_task_actions_locked((task_id,), TaskAction.RETRY)
+            except Exception:
+                self._restore_checkpoints([(task, checkpoint)])
+                raise
+        self._emit_action_results(report)
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
         with self._lock:
@@ -928,6 +982,8 @@ class DownloadManager:
 
     def _pick_next_pending_locked(self) -> Optional[DownloadTask]:
         """锁内调用：优先级、队列位置、创建时间和 ID 与可见队列一致。"""
+        if self._engine_update_frozen:
+            return None
         candidates = [
             task
             for task in self.tasks.values()
@@ -966,6 +1022,8 @@ class DownloadManager:
                     return
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.PAUSED):
                     return
+                if task.requires_embedded_session and not task.embedded_media_url:
+                    raise EmbeddedSessionRequired("临时媒体地址已释放，请主动使用内置登录重试")
                 self._refresh_task_proxy(task)
                 self._normalize_task_url(task)
                 task.status = TaskStatus.DOWNLOADING
@@ -1009,7 +1067,7 @@ class DownloadManager:
                 task.video_info.platform == Platform.YOUTUBE
                 or PlatformDetector.detect(task.video_info.url) == Platform.YOUTUBE
             )
-            if extract_url and not is_youtube_task:
+            if extract_url and not is_youtube_task and not task.requires_embedded_session and not task.options.direct_media:
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
                     extract_url,
@@ -1076,11 +1134,11 @@ class DownloadManager:
                     ):
                         title = pick_title_from_ydl_info(
                             info_dict,
-                            task.video_info.title if is_direct_media else "",
+                            task.video_info.title if (is_direct_media or task.video_info.media_title_verified) else "",
                         )
                         if title:
                             if title != task.video_info.title and (
-                                not is_direct_media
+                                not (is_direct_media or task.video_info.media_title_verified)
                                 or is_weak_title(task.video_info.title)
                             ):
                                 task.video_info.title = title
@@ -1123,10 +1181,12 @@ class DownloadManager:
             downloader.set_callbacks(progress=progress_callback)
 
             result = downloader.download(
-                task.video_info.url,
+                task.embedded_media_url if task.requires_embedded_session else task.video_info.url,
                 plan,
                 toolchain=toolchain,
                 staging_dir=staging_dir,
+                **({"preferred_title": task.video_info.title} if task.video_info.media_title_verified else {}),
+                **({"ephemeral_source_url": task.video_info.url} if task.requires_embedded_session else {}),
             )
 
             with self._lock:
@@ -1339,6 +1399,7 @@ class DownloadManager:
         finally:
             requeue = False
             with self._lock:
+                task.embedded_media_url = ""
                 if self.active_tasks.get(task.id) is threading.current_thread():
                     self.active_tasks.pop(task.id, None)
                 if (
@@ -1378,8 +1439,10 @@ class DownloadManager:
         fallback_info: Optional[VideoInfo] = None,
     ) -> None:
         """下载完成后回填标题/平台/封面；页面任务优先用 yt-dlp 真实元数据。"""
-        ydl_info = dict(result_info)
-        is_direct = bool(_MEDIA_URL_RE.search(task.video_info.url))
+        ydl_info = ({"title": task.video_info.title, "duration": result_info.get("duration"), "direct": True} if task.requires_embedded_session else dict(result_info))
+        is_direct = bool(_MEDIA_URL_RE.search(task.video_info.url)) or (
+            task.video_info.media_title_verified and ydl_info.get("direct") is True
+        )
         if isinstance(ydl_info, dict):
             title = pick_title_from_ydl_info(
                 ydl_info,

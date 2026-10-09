@@ -439,3 +439,19 @@ function makeAnchor(href, opts = {}) {
 }
 
 console.log("shared.js title tests passed");
+
+// Extractor detail failure is not a login diagnosis, and diagnostics stay private.
+const failureMessage = globalThis.VideoDlShared.taskFailureMessage;
+for (const [raw, code] of [
+  ["ERROR: Fresh cookies (not necessarily logged in) are needed; Cookie=SECRET", undefined],
+  ["private diagnostic token=SECRET", "site_response_unavailable"],
+]) {
+  const text = failureMessage(raw, code);
+  assert.ok(text.includes("登录状态未知") && text.includes("浏览器抓取") && text.includes("检测到媒体"));
+  assert.ok(!text.includes("SECRET") && !text.includes("需要登录"));
+}
+assert.ok(failureMessage("", "cookie_unavailable").includes("来源不可用"));
+assert.ok(failureMessage("", "need_login").includes("授权访问"));
+assert.strictEqual(failureMessage("Cookie=SECRET; https://private.example/token", undefined), "下载失败，请在百纳查看详情。");
+assert.strictEqual(failureMessage("", undefined), "");
+console.log("shared.js failure recovery tests passed");

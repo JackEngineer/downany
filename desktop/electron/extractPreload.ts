@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { ExtractMediaItem } from "./extractWindow";
+import type { ExtractSnapshot } from "./extractMedia";
 
 const api = {
   getInitialUrl(): string {
@@ -12,18 +12,19 @@ const api = {
     ipcRenderer.on("extract:navigate", listener);
     return () => ipcRenderer.removeListener("extract:navigate", listener);
   },
-  onList(handler: (items: ExtractMediaItem[]) => void): () => void {
-    const listener = (_: Electron.IpcRendererEvent, items: ExtractMediaItem[]) =>
+  onList(handler: (items: ExtractSnapshot) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, items: ExtractSnapshot) =>
       handler(items);
     ipcRenderer.on("extract:list", listener);
     return () => ipcRenderer.removeListener("extract:list", listener);
   },
-  enqueue(items: Array<{ url: string; title?: string }>): Promise<{
+  locate(id: string): Promise<boolean> { return ipcRenderer.invoke("extract:locate", id); },
+  enqueue(ids: string[]): Promise<{
     ok: boolean;
     error?: string;
     count?: number;
   }> {
-    return ipcRenderer.invoke("extract:enqueue", { items });
+    return ipcRenderer.invoke("extract:enqueue", { ids });
   },
 };
 

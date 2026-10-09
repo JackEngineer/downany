@@ -413,19 +413,21 @@
   function scanDom(doc) {
     const out = [];
     const seen = new Set();
-    const push = (url, source) => {
+    const push = (url, source, metadata = {}) => {
       if (!url || typeof url !== "string") return;
       const trimmed = url.trim();
       if (!trimmed || !HTTP_RE.test(trimmed)) return;
       if (seen.has(trimmed)) return;
       seen.add(trimmed);
-      out.push({ url: trimmed, type: classifyUrl(trimmed), source });
+      out.push({ url: trimmed, type: classifyUrl(trimmed), source, ...metadata });
     };
 
     doc.querySelectorAll("video, audio").forEach((el) => {
-      push(el.currentSrc || el.src || "", "dom");
+      const title = String(el.getAttribute("aria-label") || el.getAttribute("title") || "").trim();
+      const metadata = { title: title && !isWeakPageTitle(title) ? title : "", media_title_verified: !!title && !isWeakPageTitle(title), matched: true, thumbnail_url: el.poster || "", width: el.videoWidth || 0, height: el.videoHeight || 0, duration: Number.isFinite(el.duration) ? el.duration : null };
+      push(el.currentSrc || el.src || "", "dom", metadata);
       el.querySelectorAll("source").forEach((src) => {
-        push(src.src || src.getAttribute("src") || "", "dom");
+        push(src.src || src.getAttribute("src") || "", "dom", metadata);
       });
     });
 
@@ -652,6 +654,19 @@
     return { pageUrl, title: title.slice(0, 160) };
   }
 
+  // Keep login unknown for extractor detail failures; never expose raw diagnostics.
+  function taskFailureMessage(error, errorCode) {
+    const raw = String(error || "").trim();
+    if (!raw && !errorCode) return "";
+    if (errorCode === "site_response_unavailable" || /Fresh cookies \(not necessarily logged in\) are needed/i.test(raw)) {
+      return "暂时无法读取视频信息，登录状态未知。可在百纳打开「网页识别」（浏览器抓取）；或播放原页视频，检测到媒体后下载。仍失败可导出诊断。";
+    }
+    if (errorCode === "cookie_unavailable" || /cookies? database/i.test(raw)) return "所选浏览器登录来源不可用，请在百纳检查任务设置。";
+    if (errorCode === "need_login" || errorCode === "private") return "网站要求授权访问，请在百纳查看详情并选择已有授权来源。";
+    if (/Requested format is not available/i.test(raw)) return "站点未提供符合清晰度上限的可确认格式；可改选最高可用重新发送，或下载检测媒体。";
+    return "下载失败，请在百纳查看详情。";
+  }
+
   function bridgeConnectionPresentation(health) {
     if (health && health.ok && health.sidecarReady !== false) {
       return { kind: "online", text: "百纳已连接" };
@@ -706,6 +721,7 @@
     scanDom,
     pickPageThumbnail,
     findVideoCard,
+    taskFailureMessage,
     bridgeConnectionPresentation,
     installGuidePresentation,
   };

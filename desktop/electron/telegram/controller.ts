@@ -48,6 +48,8 @@ export class TelegramController {
   // verified. Serialize all state-changing Telegram operations so an older
   // snapshot cannot be committed after a newer action has returned.
   private mutationTail: Promise<void> = Promise.resolve();
+  private activeOperations = 0;
+  private engineFrozen = false;
 
   constructor(
     private readonly request: SidecarRequest,
@@ -74,18 +76,37 @@ export class TelegramController {
   }
 
   attachSupervisor(supervisor?: TelegramBotApiSupervisor): void {
+    this.assertNotFrozen();
     if (this.started) throw new Error("Telegram Controller 已启动，不能替换本地 Supervisor");
     this.supervisor = supervisor;
   }
 
   async start(): Promise<void> {
-    if (this.started) return;
-    await this.supervisorReady;
-    this.started = true;
-    if (this.supervisor) await this.supervisor.start();
-    await this.reload();
-    await this.cleanupConfirmedSegments();
-    if (this.config?.autoSendEnabled && this.client && this.config.accountId) this.worker.start();
+    return this.runOperation(async () => {
+      if (this.started) return;
+      await this.supervisorReady;
+      this.started = true;
+      if (this.supervisor) await this.supervisor.start();
+      await this.reload();
+      await this.cleanupConfirmedSegments();
+      if (this.config?.autoSendEnabled && this.client && this.config.accountId) this.worker.start();
+    });
+  }
+
+  async tryFreezeForEngine(): Promise<boolean> {
+    if (this.engineFrozen) return true;
+    // 此处没有 await；同一轮内拒收新操作并暂停下一次领取。
+    this.engineFrozen = true;
+    if (this.activeOperations > 0 || !this.worker.tryFreeze()) {
+      this.engineFrozen = false;
+      return false;
+    }
+    return true;
+  }
+
+  resumeAfterEngine(): void {
+    this.worker.unfreeze();
+    this.engineFrozen = false;
   }
 
   private async cleanupConfirmedSegments(): Promise<void> {
@@ -113,17 +134,21 @@ export class TelegramController {
   }
 
   async stop(): Promise<void> {
-    if (!this.started) return;
-    await this.supervisorReady;
-    await this.worker.stop();
-    if (this.supervisor) await this.supervisor.stop();
-    this.client = null;
-    this.started = false;
+    return this.runOperation(async () => {
+      if (!this.started) return;
+      await this.supervisorReady;
+      await this.worker.stop();
+      if (this.supervisor) await this.supervisor.stop();
+      this.client = null;
+      this.started = false;
+    }, true);
   }
 
   async getConfig(): Promise<TelegramConfig> {
-    await this.reload();
-    return this.config!;
+    return this.runOperation(async () => {
+      await this.reload();
+      return this.config!;
+    });
   }
 
   async bind(token: string): Promise<TelegramConfig> {
@@ -281,10 +306,28 @@ export class TelegramController {
   }
 
   private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
-    const run = this.mutationTail.then(operation, operation);
-    // A failed mutation must not poison the queue for the next user action.
-    this.mutationTail = run.then(() => undefined, () => undefined);
-    return run;
+    return this.runOperation(() => {
+      const run = this.mutationTail.then(operation, operation);
+      // A failed mutation must not poison the queue for the next user action.
+      this.mutationTail = run.then(() => undefined, () => undefined);
+      return run;
+    });
+  }
+
+  private assertNotFrozen(): void {
+    if (this.engineFrozen) throw new Error("Telegram 暂时不可操作，请稍后重试");
+  }
+
+  private async runOperation<T>(operation: () => Promise<T>, allowWhileFrozen = false): Promise<T> {
+    // 最终退出允许 stop；它保留冻结，不会重新开放领取或业务操作。
+    if (!allowWhileFrozen) this.assertNotFrozen();
+    // 在排入 mutationTail 前计数，冻结也必须看见尚未开始的操作。
+    this.activeOperations += 1;
+    try {
+      return await operation();
+    } finally {
+      this.activeOperations -= 1;
+    }
   }
 
   private async reload(): Promise<void> {

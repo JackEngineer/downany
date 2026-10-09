@@ -24,6 +24,7 @@ export interface TaskCommands {
   open: () => Promise<void>;
   reveal: () => Promise<void>;
   recognizePage: () => Promise<void>;
+  retryEmbeddedDouyin?: () => Promise<void>;
   openSettings: (focus?: SettingsFocus) => Promise<void>;
   exportDiagnostics: () => Promise<void>;
   openAppDownload: () => Promise<void>;
@@ -113,12 +114,23 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
           await window.api.showItemInFolder(task.file_path);
         }
       }, "error.openFolder"),
+      retryEmbeddedDouyin: async () => {
+        try {
+          const result = await window.api.retryEmbeddedDouyin(task.id);
+          if (!result.ok) {
+            const key = result.code === "session_required" ? "embeddedRetry.sessionRequired" : result.code === "rejected" ? "embeddedRetry.rejected" : result.code === "busy" ? "embeddedRetry.busy" : "embeddedRetry.unavailable";
+            pushToast({ kind: "error", title: t("embeddedRetry.failed"), detail: t(key) });
+            return;
+          }
+          await refreshQueueAfterChange();
+        } catch { pushToast({ kind: "error", title: t("embeddedRetry.failed"), detail: t("embeddedRetry.unavailable") }); }
+      },
       recognizePage: () => safeOpen(() => openExtractWindow(task.url), "add.recognizeFailed"),
       openSettings: (focus) =>
         safeOpen(() => openSettingsWindow(focus), "settings.openFailed"),
       exportDiagnostics,
       openAppDownload,
     }),
-    [exportDiagnostics, openAppDownload, run, safeOpen, task.file_path, task.url, update],
+    [exportDiagnostics, openAppDownload, pushToast, run, safeOpen, task.id, task.file_path, task.url, update],
   );
 }

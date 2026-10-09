@@ -12,8 +12,11 @@
       <span class="top-status">
         <span class="connection starting" id="connection" aria-live="polite">检测连接…</span>
         <span class="count" id="count"></span>
+        <button class="linkish" id="refreshConnection" type="button">重连</button>
       </span>
     </header>
+
+    <p class="connection-detail" id="connectionDetail" aria-live="polite"></p>
 
     <section class="page-meta" id="pageMeta">
       <div class="thumb" id="thumb" aria-hidden="true"></div>
@@ -21,6 +24,12 @@
         <h1 class="title" id="title">加载中…</h1>
         <p class="url" id="url"></p>
       </div>
+    </section>
+
+    <section class="output-options" aria-label="下载输出偏好">
+      <label>输出 <select id="outputMode"><option value="video">视频 / 原媒体</option><option value="audio">音频（MP3）</option></select></label>
+      <label>网页清晰度偏好 <select id="qualityPreference"><option value="best">最高可用</option><option value="1080p">不超过 1080p</option><option value="720p">不超过 720p</option></select></label>
+      <p id="outputHint">清晰度仅用于网页解析，实际取决于站点。检测媒体不能切换清晰度。</p>
     </section>
 
     <div class="toolbar" id="toolbar" hidden>
@@ -37,13 +46,13 @@
     <p class="status" id="status" hidden></p>
 
     <div class="actions">
-      <button type="button" class="primary" id="enqueue" disabled>下载选中</button>
+      <button type="button" class="primary" id="enqueue" disabled>下载检测媒体</button>
       <button type="button" class="secondary" id="enqueuePage" disabled>
-        仅发送页面链接
+        解析本页视频
       </button>
     </div>
 
-    <p class="hint">也可右键页面 / 链接 / 媒体直接发送</p>
+    <p class="hint">检测媒体直接下载；网页解析会重新读取页面。也可右键发送。</p>
 
     <section class="recent" id="recentSection" hidden>
       <div class="recent-head">
@@ -59,6 +68,7 @@
     </label>
 
     <script src="shared.js"></script>
+    <script src="delivery-state.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

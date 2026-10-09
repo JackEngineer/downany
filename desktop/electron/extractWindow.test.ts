@@ -33,3 +33,15 @@ describe("buildExtractEnqueueItems", () => {
     expect(items[0].headers).toBeUndefined();
   });
 });
+
+
+it("marks only an exact player match as a verified media title", async () => {
+  const items = await buildExtractEnqueueItems(mockSession([]), [
+    { url: "https://cdn.example.com/no-extension-a", title: "作品标题", matched: true },
+    { url: "https://cdn.example.com/no-extension-b", title: "未知标签", matched: false },
+    { url: "https://cdn.example.com/no-extension-c", matched: true },
+  ]);
+  expect(items[0].media_title_verified).toBe(true);
+  expect(items[1].media_title_verified).toBeUndefined();
+  expect(items[2].media_title_verified).toBeUndefined();
+});

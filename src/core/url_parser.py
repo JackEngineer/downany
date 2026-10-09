@@ -6,8 +6,8 @@ import json
 import os
 import re
 import subprocess
-import sys
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,12 +22,12 @@ from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.formats import summarize_formats
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.platform_detector import PlatformDetector
+from src.core.ytdlp_runtime import engine_cli_command
 from src.core.twitter_fallback import (
     is_twitter_url,
     normalize_twitter_url,
     resolve_twitter_media,
 )
-from src.sidecar.bin_paths import resolve_bundled_ytdlp_path
 from src.utils.logger import setup_logger
 
 logger = setup_logger("UrlParser")
@@ -38,34 +38,11 @@ _DOUYIN_COLLECTION_RE = re.compile(
     r"^https?://(?:www\.)?douyin\.com/collection/(?P<id>\d+)(?:/\d+)?/?(?:[?#]|$)",
     re.IGNORECASE,
 )
-_WINDOWS_DLL_DIRECTORY_LOCK = threading.Lock()
-
-
-def _set_windows_dll_directory(path: Optional[str]) -> None:
-    """Set the process-wide DLL search directory used by child processes."""
-    import ctypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    set_dll_directory = kernel32.SetDllDirectoryW
-    set_dll_directory.argtypes = [ctypes.c_wchar_p]
-    set_dll_directory.restype = ctypes.c_int
-    if not set_dll_directory(path):
-        raise ctypes.WinError(ctypes.get_last_error())
 
 
 def _start_parse_process(command: List[str], **kwargs) -> subprocess.Popen:
-    bundle_dir = getattr(sys, "_MEIPASS", None)
-    if sys.platform != "win32" or not getattr(sys, "frozen", False):
-        return subprocess.Popen(command, **kwargs)
-    if not bundle_dir:
-        raise RuntimeError("打包运行时缺少 PyInstaller 资源目录")
-
-    with _WINDOWS_DLL_DIRECTORY_LOCK:
-        _set_windows_dll_directory(None)
-        try:
-            return subprocess.Popen(command, **kwargs)
-        finally:
-            _set_windows_dll_directory(str(bundle_dir))
+    # 同一 Sidecar 的 worker 要继承自身运行库，不能套用外部 EXE 的 DLL 清理。
+    return subprocess.Popen(command, **kwargs)
 
 
 def fetch_bilibili_view(bvid: str, proxy: Optional[str] = None) -> Tuple[str, str]:
@@ -328,10 +305,9 @@ def build_parse_command(
     cookies_from_browser: str = "",
     cookiefile: str = "",
 ) -> List[str]:
-    bundled_ytdlp = resolve_bundled_ytdlp_path()
-    executable = [str(bundled_ytdlp)] if bundled_ytdlp else [sys.executable, "-m", "yt_dlp"]
     cmd = [
-        *executable,
+        *engine_cli_command(),
+        "--ignore-config",
         "--dump-single-json",
         "--no-warnings",
         "--no-color",
@@ -385,7 +361,32 @@ class ParseSession:
         with self._lock:
             self._cancelled = True
             if self._process is not None and self._process.poll() is None:
-                self._process.terminate()
+                try:
+                    self._process.terminate()
+                except ProcessLookupError:
+                    pass
+
+    def cancel_and_wait(self, timeout: float = 5.0) -> bool:
+        """有界终止当前 owned worker；不把发送信号当作退出确认。"""
+        deadline = time.monotonic() + max(0.0, timeout)
+        self.cancel()
+        with self._lock:
+            process = self._process
+        if process is None or process.poll() is not None:
+            return True
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            process.wait(timeout=min(0.25, remaining / 2))
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=max(0.0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                return False
+        return process.poll() is not None
 
     def run(self) -> ParseResult:
         """阻塞执行解析。由调用方决定放在哪个线程。"""
@@ -436,10 +437,8 @@ class ParseSession:
 
     def _run_ytdlp(self) -> ParseResult:
         child_env = os.environ.copy()
-        for key in list(child_env):
-            normalized = key.upper()
-            if normalized.startswith("_PYI_") or normalized == "PYINSTALLER_RESET_ENVIRONMENT":
-                child_env.pop(key, None)
+        # 同一可执行文件启动解析 worker，保留 PyInstaller 的运行库定位信息。
+        child_env.pop("PYINSTALLER_RESET_ENVIRONMENT", None)
         with self._lock:
             if self._cancelled:
                 raise ParseCancelled(self.url)

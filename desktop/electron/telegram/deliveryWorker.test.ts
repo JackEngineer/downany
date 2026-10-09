@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TelegramDeliveryWorker } from "./deliveryWorker";
 
@@ -35,6 +35,7 @@ function fileMtimeNs(filePath: string): string {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -42,6 +43,113 @@ afterEach(() => {
 });
 
 describe("TelegramDeliveryWorker", () => {
+  it.each(["claim", "send", "writeback"])("refuses to freeze during %s without aborting, then resumes the same loop", async (phase) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-freeze-"));
+    const filePath = path.join(tempDir, "video.mp4");
+    fs.writeFileSync(filePath, "video");
+    const claim = {
+      delivery: {
+        id: "freeze-1", taskId: "task-freeze", accountId: "42", targetChatId: "-100123", targetChatType: "supergroup" as const,
+        targetChatTitle: "Test", sourceUrl: "https://example.com/video", title: "Video", filePath,
+        fileSize: fs.statSync(filePath).size, fileMtimeNs: fileMtimeNs(filePath), mediaKind: "video" as const,
+        attemptCount: 1, retrySequenceCount: 0, fallbackUsed: false,
+      },
+      leaseId: "lease-freeze",
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const methods: string[] = [];
+    let claims = 0;
+    let signal: AbortSignal | undefined;
+    const client = {
+      maxUploadBytes: 2_000_000_000,
+      sendFile: async (_chat: string, _path: string, _kind: string, _caption: string, abortSignal: AbortSignal) => {
+        signal = abortSignal;
+        if (phase === "send") await gate;
+        return { message_id: 501 };
+      },
+    };
+    const request = async (method: string): Promise<unknown> => {
+      methods.push(method);
+      if (method === "telegram.claimNext") {
+        claims += 1;
+        if (claims > 1) return { claim: null };
+        if (phase === "claim") await gate;
+        return { claim };
+      }
+      if (method === "telegram.markSent" && phase === "writeback") await gate;
+      return {};
+    };
+    const worker = new TelegramDeliveryWorker(request, () => client as never, () => "42");
+    const flush = async () => { for (let index = 0; index < 20; index += 1) await Promise.resolve(); };
+    worker.start();
+    try {
+      await flush();
+      expect(worker.tryFreeze()).toBe(false);
+      expect(signal?.aborted || false).toBe(false);
+      release();
+      await flush();
+      expect(methods).toContain("telegram.markSent");
+      expect(methods).not.toContain("telegram.markUncertain");
+      expect(signal?.aborted).toBe(false);
+      expect(worker.tryFreeze()).toBe(true);
+      const frozenClaims = claims;
+      await vi.advanceTimersByTimeAsync(3600);
+      expect(claims).toBe(frozenClaims);
+      worker.unfreeze();
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(claims).toBeGreaterThan(frozenClaims);
+    } finally {
+      release();
+      worker.unfreeze?.();
+      const stopped = worker.stop();
+      await vi.advanceTimersByTimeAsync(1200);
+      await stopped;
+    }
+  });
+
+  it("keeps a newly started loop frozen until explicitly resumed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    let claims = 0;
+    const worker = new TelegramDeliveryWorker(async () => { claims += 1; return { claim: null }; }, () => ({} as never), () => "42");
+    expect(worker.tryFreeze()).toBe(true);
+    worker.start();
+    try {
+      await vi.advanceTimersByTimeAsync(3600);
+      expect(claims).toBe(0);
+      worker.unfreeze();
+      await vi.advanceTimersByTimeAsync(1200);
+      expect(claims).toBeGreaterThan(0);
+    } finally {
+      const stopped = worker.stop();
+      await vi.advanceTimersByTimeAsync(1200);
+      await stopped;
+    }
+  });
+
+  it("can freeze after a stopped generation finishes releasing its late claim", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const methods: string[] = [];
+    const worker = new TelegramDeliveryWorker(async (method) => {
+      methods.push(method);
+      if (method === "telegram.claimNext") {
+        await gate;
+        return { claim: { delivery: { id: "late-claim" }, leaseId: "late-lease" } };
+      }
+      return {};
+    }, () => ({} as never), () => "42");
+    worker.start();
+    const stopped = worker.stop();
+    expect(worker.tryFreeze()).toBe(false);
+    release();
+    await stopped;
+    expect(methods).toEqual(["telegram.claimNext", "telegram.releaseClaim"]);
+    expect(worker.tryFreeze()).toBe(true);
+  });
+
   it("uploads an unchanged file whose nanosecond timestamp is not exactly representable as milliseconds", async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-telegram-worker-mtime-"));
     const file = createPrecisionSensitiveFile(tempDir);

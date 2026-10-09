@@ -16,6 +16,8 @@ export function FilterBar() {
   const filter = useAppStore((state) => state.filter);
   const setFilter = useAppStore((state) => state.setFilter);
   const locale = useLocale();
+  const sortOrder = useAppStore((state) => state.sortOrder);
+  const setSortOrder = useAppStore((state) => state.setSortOrder);
 
   const counts: Partial<Record<ListFilter, number>> = {
     all: tasks.length,
@@ -34,6 +36,14 @@ export function FilterBar() {
           onSelect={() => setFilter(item.key)}
         />
       ))}
+      <label className="list-sort">
+        {locale === "en" ? "Sort" : "排序"}
+        <select aria-label={locale === "en" ? "Download order" : "下载排序"} value={sortOrder}
+          onChange={(event) => setSortOrder(event.target.value === "oldest" ? "oldest" : "newest")}>
+          <option value="newest">{locale === "en" ? "Newest first" : "最新优先"}</option>
+          <option value="oldest">{locale === "en" ? "Oldest first" : "最早优先"}</option>
+        </select>
+      </label>
     </div>
   );
 }

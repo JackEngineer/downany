@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { AppSettings } from "../lib/types";
@@ -27,20 +27,21 @@ beforeEach(() => {
   useAppStore.setState({
     tasks: [],
     filter: "all",
+    sortOrder: "newest",
     searchQuery: "",
     searchMode: "filter",
   });
 });
 
 describe("TaskList media density", () => {
-  it("puts a high-priority task ahead of an earlier normal task", () => {
+  it("sorts by creation time independently of execution priority", () => {
     useAppStore.setState({ tasks: [
-      taskFixture({ id: "normal", queue_order: 0 }),
+      taskFixture({ id: "normal", queue_order: 0, created_at: "2026-09-01T00:00:00Z" }),
       taskFixture({ id: "high", queue_order: 8, priority: 1 }),
     ] });
     const { container } = render(<TaskList />);
     expect(Array.from(container.querySelectorAll(".download-list > li")).map((element) => element.id))
-      .toEqual(["task-high", "task-normal"]);
+      .toEqual(["task-normal", "task-high"]);
   });
 
   it("shows reorder controls only on active top-level units, not on group children or results", () => {
@@ -156,4 +157,17 @@ describe("TaskList media density", () => {
       "D:/Downloads/恢复后的合集/001 - 第一集.mp4",
     ]);
   });
+});
+
+
+it("updates visible order immediately on selection and new task arrival", () => {
+  useAppStore.setState({ tasks: [taskFixture({ id: "old", created_at: "2026-01-01T00:00:00Z" }), taskFixture({ id: "new", created_at: "2026-02-01T00:00:00Z" })] });
+  const { container } = render(<TaskList />);
+  const ids = () => Array.from(container.querySelectorAll(".download-list > li")).map(e => e.id);
+  expect(ids()).toEqual(["task-new", "task-old"]);
+  act(() => useAppStore.getState().setSortOrder("oldest"));
+  expect(ids()).toEqual(["task-old", "task-new"]);
+  act(() => useAppStore.getState().setSortOrder("newest"));
+  act(() => useAppStore.setState({ tasks: [...useAppStore.getState().tasks, taskFixture({ id: "latest", created_at: "2026-03-01T00:00:00Z" })] }));
+  expect(ids()).toEqual(["task-latest", "task-new", "task-old"]);
 });

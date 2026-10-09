@@ -12,6 +12,7 @@ beforeEach(() => {
   localStorage.clear();
   useAppStore.setState({
     filter: "all",
+    sortOrder: "newest",
     tasks: [
       taskFixture({ id: "1", status: "downloading" }),
       taskFixture({ id: "2", status: "paused" }),
@@ -41,4 +42,15 @@ describe("FilterBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "进行中 2" }));
     expect(useAppStore.getState().filter).toBe("active");
   });
+});
+
+
+it("shows newest first by default and changes only display order", () => {
+  render(<FilterBar />);
+  const sort = screen.getByRole("combobox", { name: "下载排序" });
+  expect(sort).toHaveValue("newest");
+  const tasks = useAppStore.getState().tasks;
+  fireEvent.change(sort, { target: { value: "oldest" } });
+  expect(useAppStore.getState().sortOrder).toBe("oldest");
+  expect(useAppStore.getState().tasks).toBe(tasks);
 });

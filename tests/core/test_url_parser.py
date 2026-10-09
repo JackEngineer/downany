@@ -61,7 +61,7 @@ def test_build_parse_command_includes_cookie_sources(tmp_path):
     assert cmd[cmd.index("--cookies") + 1] == str(cookiefile)
 
 
-def test_build_parse_command_prefers_bundled_ytdlp_in_packaged_environment(
+def test_build_parse_command_uses_same_library_even_when_standalone_exists(
     tmp_path,
     monkeypatch,
 ):
@@ -74,9 +74,10 @@ def test_build_parse_command_prefers_bundled_ytdlp_in_packaged_environment(
 
     cmd = build_parse_command("https://example.com/video")
 
-    assert cmd[0] == str(executable.resolve())
-    assert cmd[1] == "--dump-single-json"
-    assert "-m" not in cmd
+    assert cmd[:7] == [sys.executable, "-m", "src.sidecar", "--engine-cli", "--engine-id", "bundled", "--"]
+    assert str(executable.resolve()) not in cmd
+    assert "--dump-single-json" in cmd
+    assert "--ignore-config" in cmd
 
 
 def test_successful_parse(monkeypatch):
@@ -111,20 +112,20 @@ def test_successful_parse_decodes_raw_utf8_output_on_windows(monkeypatch):
     assert result.info.title == "做自媒体6年了，我想说…"
 
 
-def test_parse_child_removes_inherited_pyinstaller_environment(monkeypatch):
+def test_same_runtime_parse_child_retains_pyinstaller_worker_environment(monkeypatch):
     monkeypatch.setenv("_PYI_ARCHIVE_FILE", r"C:\Downany\DownanySidecar.exe")
     monkeypatch.setenv("_PYI_PARENT_PROCESS_LEVEL", "1")
     monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
     payload = {
         **FAKE_INFO,
-        "title": "leaked",
+        "title": "missing-runtime",
     }
     code = (
         "import json, os; "
         f"payload = {payload!r}; "
-        "blocked = ['_PYI_ARCHIVE_FILE', '_PYI_PARENT_PROCESS_LEVEL', "
-        "'PYINSTALLER_RESET_ENVIRONMENT']; "
-        "payload['title'] = 'leaked' if any(os.environ.get(key) for key in blocked) else 'clean'; "
+        "needed = ['_PYI_ARCHIVE_FILE', '_PYI_PARENT_PROCESS_LEVEL']; "
+        "payload['title'] = 'same-runtime' if all(os.environ.get(key) for key in needed) "
+        "and not os.environ.get('PYINSTALLER_RESET_ENVIRONMENT') else 'missing-runtime'; "
         "print(json.dumps(payload))"
     )
     monkeypatch.setattr(
@@ -135,20 +136,14 @@ def test_parse_child_removes_inherited_pyinstaller_environment(monkeypatch):
 
     result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
 
-    assert result.info.title == "clean"
+    assert result.info.title == "same-runtime"
 
 
-def test_frozen_windows_parse_resets_dll_directory_around_spawn(monkeypatch):
+def test_same_runtime_parse_starts_in_frozen_windows_context(monkeypatch):
     bundle_dir = r"C:\Downany\resources\sidecar\DownanySidecar\_internal"
-    dll_directory_calls = []
-    monkeypatch.setattr(url_parser.sys, "platform", "win32")
-    monkeypatch.setattr(url_parser.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(url_parser.sys, "_MEIPASS", bundle_dir, raising=False)
-    monkeypatch.setattr(
-        url_parser,
-        "_set_windows_dll_directory",
-        lambda path: dll_directory_calls.append(path),
-    )
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", bundle_dir, raising=False)
     monkeypatch.setattr(
         url_parser,
         "build_parse_command",
@@ -158,7 +153,6 @@ def test_frozen_windows_parse_resets_dll_directory_around_spawn(monkeypatch):
     result = ParseSession("https://www.youtube.com/watch?v=x", timeout=10).run()
 
     assert result.info.title == "测试视频"
-    assert dll_directory_calls == [None, bundle_dir]
 
 
 def test_parse_child_does_not_inherit_sidecar_protocol_stdin(monkeypatch):

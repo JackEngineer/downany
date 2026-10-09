@@ -1,6 +1,6 @@
 /** Chrome MV3：媒体嗅探 + 有效性验证 + HTTP 桥入队，失败再回退 downany://。 */
 
-importScripts("shared.js", "sniff-core.js");
+importScripts("shared.js", "sniff-core.js", "delivery-state.js");
 
 const {
   classifyUrl,
@@ -43,7 +43,7 @@ const MAX_ITEMS_PER_TAB = 40;
 
 /** 已发送任务（扩展侧跟踪，供弹窗/页内按钮看进度） */
 const SENT_TASKS_KEY = "sentTasks";
-const SENT_TASKS_MAX = 20;
+const SENT_TASKS_MAX = 50;
 const POLL_INTERVAL_MS = 1500;
 const POLL_BACKOFF_MS = 5000;
 const POLL_MAX_AGE_MS = 30 * 60 * 1000;
@@ -328,7 +328,12 @@ function upsertMedia(tabId, item) {
     groupKey: item.groupKey || (prev && prev.groupKey) || "",
     enrichKind: item.enrichKind || (prev && prev.enrichKind) || "",
     detectedAt: (prev && prev.detectedAt) || Date.now(),
-    title: item.title || (prev && prev.title) || "",
+    title: item.media_title_verified ? item.title || "" : (prev?.media_title_verified ? prev.title : ""),
+    media_title_verified: !!item.media_title_verified || !!prev?.media_title_verified,
+    matched: !!item.matched || !!prev?.matched,
+    thumbnail_url: item.thumbnail_url || prev?.thumbnail_url || "",
+    width: item.width || prev?.width || 0,
+    height: item.height || prev?.height || 0,
   };
   if (prev && prev.source === "network" && item.source === "dom") {
     merged.source = "network";
@@ -359,7 +364,11 @@ async function ingestCandidate(tabId, item) {
   const key = normalizeMediaKey(item.url);
   const verifyLock = `${tabId}:${key}`;
   const bucket = getTabBucket(tabId);
-  if (bucket.has(key) || pendingVerify.has(verifyLock)) return;
+  if (bucket.has(key)) {
+    if (item.matched && bucket.get(key).url === item.url) upsertMedia(tabId, item);
+    return;
+  }
+  if (pendingVerify.has(verifyLock)) return;
   if (tabItemCount(tabId) >= MAX_ITEMS_PER_TAB) return;
 
   // 记录代际：验证期间页面导航/关闭的话，结果直接丢弃（防旧条目复活）
@@ -368,34 +377,14 @@ async function ingestCandidate(tabId, item) {
 
   const ctx = resolvePageContext(tabId, item.pageUrl || "");
   const pageUrl = ctx.url;
-  const cardTitle = ctx.title || item.title || "";
+  const cardTitle = item.media_title_verified ? item.title || "" : "";
 
   // X 主页/时间线：未挂到 /status/{id} 的 twimg HLS 不入库（否则全是无标题 m3u8）
   if (isOrphanTwitterCdn(item.url, pageUrl)) {
     return;
   }
 
-  // 已关联到 yt-dlp 详情页的条目：同一视频只保留一条
-  // （实际发送的是页面链接，多条直链毫无区别）；
-  // 例外：新候选可能是 master 清单，放行验证替换（拿多码率/时长信息）
-  let pageDupKey = null;
-  if (isYtdlpPreferredPage(pageUrl)) {
-    const wantKey = videoIdentityKey(pageUrl);
-    for (const [k, v] of bucket) {
-      if (v.pageUrl && videoIdentityKey(v.pageUrl) === wantKey) {
-        pageDupKey = k;
-        break;
-      }
-    }
-    if (pageDupKey != null) {
-      const fileName = item.url.split("/").pop()?.split("?")[0] || "";
-      const upgradeable =
-        isPlaylistCandidate(item.url, item.type) &&
-        /^(index|master|playlist)\.m3u8/i.test(fileName) &&
-        bucket.get(pageDupKey)?.enrichKind !== "master";
-      if (!upgradeable) return;
-    }
-  }
+  const pageDupKey = null;
 
   if (isPlaylistCandidate(item.url, item.type)) {
     const groupKey = playlistGroupKey(item.url);
@@ -532,7 +521,7 @@ function countActiveDownloads(tasks) {
   let n = 0;
   for (const t of tasks || []) {
     const s = String(t?.status || "").toLowerCase();
-    if (s === "downloading" || s === "pending" || s === "paused") n += 1;
+    if (s === "downloading" || s === "pending") n += 1;
   }
   return n;
 }
@@ -706,18 +695,8 @@ function isTerminalStatus(status) {
   return TERMINAL_STATUSES.has(String(status || "").toLowerCase());
 }
 
-function friendlyTaskError(error) {
-  const raw = String(error || "").trim();
-  if (!raw) return "";
-  const lower = raw.toLowerCase();
-  if (
-    /cookie|login|登录|登陆|sign.?in|auth|通行证|未登录|需要登录/.test(
-      lower,
-    )
-  ) {
-    return "需要登录 / Cookie，请刷新页面后重试";
-  }
-  return raw;
+function friendlyTaskError(error, errorCode) {
+  return VideoDlShared.taskFailureMessage(error, errorCode);
 }
 
 async function loadSentTasks() {
@@ -730,14 +709,19 @@ async function loadSentTasks() {
   }
 }
 
+let sentTasksWriteQueue = Promise.resolve();
 async function saveSentTasks(list) {
-  try {
-    await chrome.storage.session.set({
-      [SENT_TASKS_KEY]: list.slice(0, SENT_TASKS_MAX),
-    });
-  } catch {
-    // ignore
-  }
+  const operation = sentTasksWriteQueue.then(async () => {
+    const current = new Map((await loadSentTasks()).map(t => [t.taskId, t]));
+    for (const task of list) {
+      const existing = current.get(task.taskId);
+      // A poll from before a retry cannot overwrite the newer attempt.
+      if (!existing || (task.sentAt || 0) >= (existing.sentAt || 0)) current.set(task.taskId, task);
+    }
+    await chrome.storage.session.set({[SENT_TASKS_KEY]: [...current.values()].sort((a,b) => (b.sentAt || 0)-(a.sentAt || 0)).slice(0,SENT_TASKS_MAX)});
+  });
+  sentTasksWriteQueue = operation.catch(() => {});
+  await operation;
 }
 
 /**
@@ -746,8 +730,7 @@ async function saveSentTasks(list) {
 async function recordSentTasks({ taskIds, items, tabId = -1 }) {
   if (!Array.isArray(taskIds) || taskIds.length === 0) return;
   const now = Date.now();
-  const prev = await loadSentTasks();
-  const byId = new Map(prev.map((t) => [t.taskId, t]));
+  const byId = new Map();
   for (let i = 0; i < taskIds.length; i++) {
     const taskId = String(taskIds[i] || "").trim();
     if (!taskId) continue;
@@ -756,6 +739,8 @@ async function recordSentTasks({ taskIds, items, tabId = -1 }) {
       taskId,
       url: item.url || "",
       title: item.title || "",
+      route: item.route,
+      ...VideoDlDelivery.outputOptions(item),
       pageUrl: item.pageUrl || "",
       tabId: typeof tabId === "number" ? tabId : -1,
       sentAt: now,
@@ -765,6 +750,7 @@ async function recordSentTasks({ taskIds, items, tabId = -1 }) {
       retryUrl: item.url || "",
       retryTitle: item.title || "",
       retryPageUrl: item.pageUrl || "",
+      route: item.route || "page",
     });
   }
   const next = [...byId.values()]
@@ -784,7 +770,7 @@ function pushTaskStatusToTab(entry) {
       status: entry.status,
       progress: entry.progress,
       title: entry.title,
-      error: friendlyTaskError(entry.error),
+      error: friendlyTaskError(entry.error, entry.errorCode),
       url: entry.url,
       pageUrl: entry.pageUrl || entry.retryPageUrl || "",
     })
@@ -867,8 +853,10 @@ async function pollSentTasksOnce() {
     const nextProgress =
       typeof remote.progress === "number" ? remote.progress : entry.progress;
     const nextTitle = remote.title || entry.title || "";
-    const nextError = remote.error || entry.error || "";
+    const nextError = ["failed", "unknown"].includes(nextStatus) ? remote.error || "" : "";
+    const nextErrorCode = ["failed", "unknown"].includes(nextStatus) ? remote.errorCode || remote.error_code || "" : "";
     const didChange =
+      nextErrorCode !== entry.errorCode ||
       nextStatus !== entry.status ||
       nextProgress !== entry.progress ||
       nextTitle !== entry.title ||
@@ -878,6 +866,7 @@ async function pollSentTasksOnce() {
       entry.progress = nextProgress;
       entry.title = nextTitle;
       entry.error = nextError;
+      entry.errorCode = nextErrorCode;
       changed = true;
     }
     // 非终态必须心跳推送：解析阶段可长时间停在 0%，若只在 changed 时推，
@@ -924,12 +913,12 @@ function ensurePollRunning() {
 /**
  * @param {{url: string, title?: string, headers?: Record<string,string>, pageUrl?: string, thumbnail_url?: string}[]} items
  */
-async function enqueueViaBridge(items) {
+async function enqueueViaBridge(items, requestId) {
   try {
     const res = await fetchWithTimeout(`${BRIDGE_BASE}/enqueue`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, requestId }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data && data.ok) {
@@ -1061,8 +1050,8 @@ async function waitForBridgeReady({
  * @param {{url: string, title?: string, headers?: Record<string,string>}[]} items
  * @param {{ onStatus?: (msg: string) => void }} [opts]
  */
-async function enqueueViaBridgeOrWake(items, { onStatus } = {}) {
-  let bridge = await enqueueViaBridge(items);
+async function enqueueViaBridgeOrWake(items, { onStatus, requestId } = {}) {
+  let bridge = await enqueueViaBridge(items, requestId);
   if (bridge.ok) return bridge;
   if (!bridge.retryable && !bridge.bridgeDown) return bridge;
 
@@ -1094,7 +1083,7 @@ async function enqueueViaBridgeOrWake(items, { onStatus } = {}) {
   }
 
   onStatus?.("正在重新发送…");
-  bridge = await enqueueViaBridge(items);
+  bridge = await enqueueViaBridge(items, requestId);
   if (bridge.ok) return { ...bridge, woke: true };
   return {
     ok: false,
@@ -1118,15 +1107,27 @@ async function enqueueViaProtocol(pageUrl) {
 }
 
 // ---- 入队策略 ----
+async function sendItemsToDownloader(rawItems, options = {}) {
+  if (options.requestId) return performSendItems(rawItems, options);
+  const results = [];
+  for (const raw of rawItems) {
+    const page = raw.route === "page" || (!raw.route && (options.skipVerify || isYtdlpPreferredPage(raw.pageUrl || raw.url) || raw.forcePage));
+    const item = {...raw, route: raw.route || (page ? "page" : "media"), url: page ? normalizeYtdlpPageUrl(raw.pageUrl || raw.url) : raw.url};
+    if (!isHttpUrl(item.url)) continue;
+    results.push(await deliveryStore.send(item, requestId => performSendItems([item], {...options, requestId, skipVerify: page})));
+  }
+  return {ok: results.length > 0 && results.every(r=>r.ok), count: results.length, taskIds: results.flatMap(r=>r.taskIds || []), error: results.find(r=>!r.ok)?.error, woke: results.some(r=>r.woke)};
+}
+
 
 /**
  * @param {{url: string, title?: string, pageUrl?: string, type?: string}[]} rawItems
  * @param skipVerify 用户主动发送的页面/链接（非嗅探结果）跳过媒体有效性验证
  * @returns {{ ok: true, via?: string, count?: number, expired?: number } | { ok: false, error: string }}
  */
-async function sendItemsToDownloader(
+async function performSendItems(
   rawItems,
-  { silent = false, skipVerify = false, tabId = -1 } = {},
+  { silent = false, skipVerify = false, tabId = -1, requestId } = {},
 ) {
   const prepared = [];
   for (const raw of rawItems) {
@@ -1154,25 +1155,25 @@ async function sendItemsToDownloader(
       (isYtdlpPreferredPage(url) && url) ||
       "";
     const viaPage =
-      !skipVerify && (!!preferredPage || !!raw.forcePage);
+      raw.route === "page" || (!raw.route && !skipVerify && (!!preferredPage || !!raw.forcePage));
     let finalUrl = url;
     if (viaPage) {
       finalUrl = normalizeYtdlpPageUrl(preferredPage || pageUrl || url);
-    } else if (isYtdlpPreferredPage(url) || skipVerify) {
+    } else if (raw.route !== "media" && (isYtdlpPreferredPage(url) || skipVerify)) {
       // 「仅发送页面链接」等：入队前把 modal_id 改写成 /video/{id}
       finalUrl = normalizeYtdlpPageUrl(url);
     }
-    const headers = await buildHeadersForUrl(
-      finalUrl,
-      normalizeYtdlpPageUrl(pageUrl || finalUrl),
-    );
+    const headers = pageUrl ? {Referer: normalizeYtdlpPageUrl(pageUrl)} : {};
     prepared.push({
       url: finalUrl,
-      title: raw.title || "",
+      title: raw.route === "media" && raw.media_title_verified !== true ? "" : raw.title || "",
       pageUrl,
       thumbnail_url: raw.thumbnail_url || raw.thumbnailUrl || "",
       type: raw.type || "",
       viaPage,
+      route: raw.route || (viaPage || skipVerify ? "page" : "media"),
+      media_title_verified: raw.media_title_verified === true,
+      ...VideoDlDelivery.outputOptions(raw),
       headers,
     });
   }
@@ -1234,6 +1235,7 @@ async function sendItemsToDownloader(
   };
 
   const bridge = await enqueueViaBridgeOrWake(valid, {
+    requestId,
     onStatus: (msg) => {
       pushWakeStatus(msg);
       if (!silent) {
@@ -1276,9 +1278,7 @@ async function sendItemsToDownloader(
   // 绝不把协议投递当成成功 — 否则页内按钮会闪「已入队」却什么都没发生。
   const error = String(bridge.error || APP_MISSING_ERROR);
   await flashBadge("!", "#dc2626", tabId);
-  if (bridge.needApp) {
-    void openInstallGuide();
-  }
+
   // 页内 silent 也要提示：否则用户以为点了没反应
   notify("需要连接百纳", error);
   return {
@@ -1429,7 +1429,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
 
   if (message.type === "getBridgeHealth") {
-    void probeBridgeHealth().then((health) => sendResponse(health));
+    void probeBridgeHealth().then((health) => sendResponse({...health, backgroundVersion: chrome.runtime.getManifest().version, healthProtocol: 1, outputProtocol: 1})).catch(() => sendResponse({ok:false,error:"后台健康检查失败",healthProtocol:1}));
     return true;
   }
 
@@ -1440,6 +1440,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const items = message.items || [];
       for (const item of items) {
         void ingestCandidate(tabId, {
+          ...item,
           url: item.url,
           type: item.type || classifyUrl(item.url || ""),
           source: item.source || "dom",
@@ -1494,6 +1495,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "getDeliveries") {
+    void deliveryStore.list().then(entries => sendResponse({ ok: true, entries }));
+    return true;
+  }
+  if (message.type === "enqueueExplicit") {
+    void (async () => {
+      const results = [];
+      for (const raw of (Array.isArray(message.items) ? message.items : []).slice(0, MAX_ITEMS_PER_TAB)) {
+        if (!isHttpUrl(raw.url) || !["media", "page"].includes(raw.route)) continue;
+        const result = await deliveryStore.send(raw, requestId => sendItemsToDownloader([raw], {
+          silent: true, skipVerify: raw.route === "page", tabId: message.tabId ?? -1, requestId,
+        }));
+        results.push(result);
+        if (!result.ok) break;
+      }
+      sendResponse({ ok: results.length > 0 && results.every(r => r.ok), results });
+    })().catch(() => sendResponse({ ok: false, error: "发送中断，请查看发送记录后重试" }));
+    return true;
+  }
+  if (message.type === "focusTask") {
+    void taskAction("focus", message.taskId).then(sendResponse);
+    return true;
+  }
   if (message.type === "enqueue") {
     const items = Array.isArray(message.items)
       ? message.items
@@ -1576,7 +1600,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ok: true,
         tasks: tasks.map((t) => ({
           ...t,
-          error: friendlyTaskError(t.error),
+          error: friendlyTaskError(t.error, t.errorCode),
         })),
       });
     })();
@@ -1585,36 +1609,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "retrySend") {
     void (async () => {
-      const taskId = String(message.taskId || "").trim();
-      const tasks = await loadSentTasks();
-      const entry = tasks.find((t) => t.taskId === taskId);
-      const url = String(
-        message.url || entry?.retryUrl || entry?.url || "",
-      ).trim();
-      if (!url) {
-        sendResponse({ ok: false, error: "找不到可重试的链接" });
-        return;
+      const result = await taskAction("retry", message.taskId);
+      if (result.ok) {
+        const tasks = await loadSentTasks();
+        const task = tasks.find(t => t.taskId === message.taskId);
+        if (task) { task.status = "pending"; task.error = ""; task.sentAt = Date.now(); await saveSentTasks([task]); }
+        ensurePollRunning();
       }
-      const pageUrl = String(
-        message.pageUrl || entry?.retryPageUrl || entry?.pageUrl || "",
-      );
-      const title = String(
-        message.title || entry?.retryTitle || entry?.title || "",
-      );
-      const tabId =
-        typeof message.tabId === "number"
-          ? message.tabId
-          : typeof entry?.tabId === "number"
-            ? entry.tabId
-            : -1;
-      const result = await sendItemsToDownloader(
-        [{ url, pageUrl, title }],
-        {
-          silent: true,
-          skipVerify: isYtdlpPreferredPage(url) || isYtdlpPreferredPage(pageUrl),
-          tabId,
-        },
-      );
       sendResponse(result);
     })();
     return true;
@@ -1636,7 +1637,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_MEDIA) {
     const src = info.srcUrl || "";
     void sendItemsToDownloader(
-      [{ url: src, pageUrl: info.pageUrl || tab?.url || "" }],
+      [{ url: src, route: "media", pageUrl: info.pageUrl || tab?.url || "" }],
       {},
     );
     return;
@@ -1656,3 +1657,15 @@ void loadSentTasks().then((tasks) => {
     ensurePollRunning();
   }
 });
+
+// Only non-credential receipt metadata is stored; Cookie/header values remain in flight.
+const deliveryStore = VideoDlDelivery.createStore(chrome.storage.session);
+async function taskAction(action, taskId) {
+  try {
+    const response = await fetchWithTimeout(`${BRIDGE_BASE}/task/${action}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId }),
+    });
+    const result = await response.json();
+    return response.ok ? result : { ok: false, error: result.error || "请更新并连接百纳桌面端" };
+  } catch { return { ok: false, error: "未连接百纳，请打开桌面端后重试" }; }
+}

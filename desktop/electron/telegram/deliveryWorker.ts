@@ -127,6 +127,8 @@ export class TelegramDeliveryWorker {
   private active: Promise<void> | null = null;
   private activeAbort: AbortController | null = null;
   private generation = 0;
+  private frozen = false;
+  private claimInFlight = 0;
 
   constructor(
     private readonly request: SidecarRequest,
@@ -135,6 +137,16 @@ export class TelegramDeliveryWorker {
     private readonly onError: (error: Error) => void = () => undefined,
     private readonly videoSegmenter?: VideoSegmenter,
   ) {}
+
+  tryFreeze(): boolean {
+    if (this.claimInFlight > 0 || this.active) return false;
+    this.frozen = true;
+    return true;
+  }
+
+  unfreeze(): void {
+    this.frozen = false;
+  }
 
   start(): void {
     if (this.running) return;
@@ -167,6 +179,10 @@ export class TelegramDeliveryWorker {
   private async runLoop(generation: number): Promise<void> {
     while (this.running && this.generation === generation) {
       try {
+        if (this.frozen) {
+          await this.delay(1200);
+          continue;
+        }
         const accountId = this.getAccountId();
         const client = this.getClient();
         if (!accountId || !client) {
@@ -174,20 +190,29 @@ export class TelegramDeliveryWorker {
           continue;
         }
         const leaseId = randomUUID();
-        const claimResult = (await this.request("telegram.claimNext", {
-          accountId,
-          leaseId,
-          now: nowIso(),
-          leaseExpiresAt: isoIn(120),
-        })) as { claim?: TelegramClaim | null };
-        if (!claimResult.claim) {
-          await this.delay(1200);
-          continue;
+        let claimed = false;
+        let active: Promise<void> | null = null;
+        // 包含领取 await、发送及终态回写，避免 active 尚未赋值的空窗。
+        // 计数也保留已停止代次尚未结束的请求，不能被新 loop 清零。
+        this.claimInFlight += 1;
+        try {
+          const claimResult = (await this.request("telegram.claimNext", {
+            accountId,
+            leaseId,
+            now: nowIso(),
+            leaseExpiresAt: isoIn(120),
+          })) as { claim?: TelegramClaim | null };
+          if (claimResult.claim) {
+            claimed = true;
+            active = this.processClaim(client, claimResult.claim, generation);
+            this.active = active;
+            await active;
+          }
+        } finally {
+          if (this.active === active) this.active = null;
+          this.claimInFlight -= 1;
         }
-        const claim = claimResult.claim;
-        this.active = this.processClaim(client, claim, generation);
-        await this.active;
-        if (this.generation === generation) this.active = null;
+        if (!claimed) await this.delay(1200);
       } catch (error) {
         if (this.generation === generation) {
           this.active = null;

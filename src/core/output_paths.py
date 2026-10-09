@@ -44,7 +44,7 @@ _INVALID_COMPONENT_RE = re.compile(r"[\\/:*?\"<>|\x00-\x1f\x7f]")
 _WHITESPACE_RE = re.compile(r"\s+")
 _DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]:")
 _LEADING_INDEX_RE = re.compile(r"^(\d{3,} - )")
-_COLLISION_SUFFIX_RE = re.compile(r"( \([2-9][0-9]*\))$")
+_COLLISION_SUFFIX_RE = re.compile(r"( \((?:[2-9]|[1-9][0-9]+)\))$")
 _SOURCE_SUFFIX_RE = re.compile(r"( \[[^\[\]]+\])$")
 _EXTENSION_RE = re.compile(r"(\.[A-Za-z0-9][A-Za-z0-9_-]{0,15})$")
 
@@ -274,11 +274,6 @@ def build_final_path_plan(
         raise OutputPathInvalid("成品目录不可用")
 
     stem, main_extension = _split_rendered_leaf(rendered_leaf)
-    safe_key = safe_component(source_key, fallback="unknown", max_units=81)
-    if safe_key.casefold() not in stem.casefold():
-        stem = f"{stem} [{safe_key}]"
-    if int(copy_index) > 1:
-        stem = f"{stem} ({int(copy_index)})"
 
     subtitle_suffixes: list[str] = []
     for language, extension in subtitle_specs:
@@ -306,13 +301,34 @@ def build_final_path_plan(
     stem_budget = component_budget - longest_suffix
     if stem_budget < 1:
         raise OutputPathInvalid("下载位置过长，请选择更短的目录")
-    common_stem = safe_component(stem, fallback=f"video [{safe_key}]", max_units=stem_budget)
-    if safe_key.casefold() not in common_stem.casefold():
-        common_stem = safe_component(
-            f"{stem} [{safe_key}]",
-            fallback=f"video [{safe_key}]",
-            max_units=stem_budget,
-        )
+    # Build structural suffixes once: truncation must never consume the copy
+    # number or a source key, including Generic ids containing long URL queries.
+    existing_source = _SOURCE_SUFFIX_RE.search(stem)
+    if existing_source:
+        stem = stem[:existing_source.start()]
+    raw_key = _clean_component(source_key) or "unknown"
+    collision = f" ({int(copy_index)})" if int(copy_index) > 1 else ""
+    key_budget = min(81, stem_budget - utf16_units(collision) - 4)
+    if key_budget < 16:
+        raise OutputPathInvalid("文件名可用长度不足")
+    if utf16_units(raw_key) > key_budget or len(raw_key.encode("utf-8")) > key_budget * 2:
+        digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:16]
+        safe_key = digest
+    else:
+        safe_key = safe_component(raw_key, fallback="unknown", max_units=key_budget)
+    suffix = f" [{safe_key}]{collision}"
+    body_budget = stem_budget - utf16_units(suffix)
+    # macOS components also have a 255-byte UTF-8 limit; UTF-16 alone is
+    # insufficient for CJK text and combining characters.
+    longest_suffix_bytes = max((len(x.encode("utf-8")) for x in suffixes), default=0)
+    body_byte_budget = 255 - longest_suffix_bytes - len(suffix.encode("utf-8"))
+    if body_budget < 1 or body_byte_budget < 1:
+        raise OutputPathInvalid("文件名可用长度不足")
+    body = safe_component(stem, fallback="video", max_units=body_budget)
+    while len(body.encode("utf-8")) > body_byte_budget:
+        body = body[:-1]
+    body = body.rstrip(" .") or "v"
+    common_stem = f"{body}{suffix}"
 
     candidates = [
         directory / f"{common_stem}{main_extension}",

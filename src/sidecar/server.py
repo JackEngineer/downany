@@ -272,13 +272,15 @@ class SidecarServer:
             if self.ctx.shutdown_requested:
                 break
 
-        self._cleanup()
-        return 0
+        return 0 if self._cleanup() else 1
 
-    def _cleanup(self) -> None:
+    def _cleanup(self) -> bool:
         if self._unsubscribe:
             self._unsubscribe()
             self._unsubscribe = None
+        parsers_stopped = self.ctx.cancel_parse_jobs()
+        if not parsers_stopped:
+            logger.error("链接解析未能全部停止")
         try:
             self.ctx.manager.stop()
         except Exception as exc:
@@ -286,6 +288,7 @@ class SidecarServer:
         finally:
             with self._event_lock:
                 self._last_progress_emit.clear()
+        return parsers_stopped
 
 
 def _write_early_hello(stdout: TextIO) -> None:

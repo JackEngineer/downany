@@ -538,18 +538,9 @@ def test_export_diagnostics_failure_does_not_expose_internal_exception(
 
 def test_check_ytdlp_handler(tmp_path, monkeypatch):
     ctx, _ = _ctx(tmp_path)
-
-    def fake_check(_paths):
-        return {
-            "currentVersion": "1.0.0",
-            "latestVersion": "2.0.0",
-            "updateAvailable": True,
-            "downloadUrl": "https://example.com/yt-dlp",
-        }
-
-    monkeypatch.setattr("src.sidecar.ytdlp_updater.check_update", fake_check)
+    monkeypatch.setattr(ctx.engine_updates, "start_check", lambda: {"jobId": "check-job"})
     result = dispatch(ctx, Method.UPDATER_CHECK_YTDLP.value, {})
-    assert result["updateAvailable"] is True
+    assert result == {"jobId": "check-job"}
 
 
 def test_unknown_method(tmp_path):

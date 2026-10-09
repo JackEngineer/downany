@@ -238,3 +238,54 @@ def test_windows_path_budget_truncates_every_bundle_member_to_240_units(
         for path in (plan.main_file, *plan.subtitle_files)
     )
     assert plan.main_file.stem in plan.subtitle_files[0].name
+
+
+@pytest.mark.parametrize("copy_index", [2, 9, 10, 19, 20, 99, 100, 1000])
+@pytest.mark.parametrize("title", ["旅行" * 100, "😀é漢" * 80, "x" * 300])
+def test_long_source_keeps_copy_and_component_budgets(tmp_path, copy_index, title):
+    source = "generic-" + "query=" * 100
+    plan = build_final_path_plan(tmp_path, "", f"{title} [{source}].mp4", source,
+                                 (("zh-Hans", "vtt"),), copy_index=copy_index)
+    assert plan.main_file.name.endswith(f" ({copy_index}).mp4")
+    assert plan.subtitle_files[0].name.endswith(f" ({copy_index}).zh-Hans.vtt")
+    for path in (plan.main_file, *plan.subtitle_files):
+        assert utf16_units(path.name) <= 120
+        assert len(path.name.encode("utf-8")) <= 255
+    assert plan.main_file.stem in plan.subtitle_files[0].name
+
+
+def test_source_digest_distinguishes_ids_with_identical_truncated_prefix(tmp_path):
+    names = [build_final_path_plan(tmp_path, "", "旅行.mp4", "a" * 200 + tail, ()).main_file
+             for tail in ("one", "two")]
+    assert names[0] != names[1]
+
+
+def test_all_thousand_copy_candidates_are_distinct(tmp_path):
+    source = "generic-" + "a" * 600
+    names = [build_final_path_plan(tmp_path, "", f"{'漢' * 200} [{source}].mp4", source, (), copy_index=i).main_file
+             for i in range(1, 1001)]
+    assert len(set(names)) == 1000
+
+
+def test_windows_minimum_leaf_budget_keeps_digest_and_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(output_paths, "IS_WINDOWS", True)
+    base = tmp_path.resolve()
+    padding = 199 - utf16_units(str(base)) - 1
+    root = base / ("r" * padding)
+    plan = build_final_path_plan(root, "", "😀" * 100 + ".mp4", "id" * 100, (), copy_index=1000)
+    assert utf16_units(str(plan.main_file)) <= 240
+    assert plan.main_file.name.endswith(" (1000).mp4")
+
+
+@pytest.mark.parametrize("ext", ["mp4", "webm", "m4a"])
+def test_utf8_boundary_keeps_extension(tmp_path, ext):
+    plan = build_final_path_plan(tmp_path, "", "漢" * 119 + "." + ext, "site-id", ())
+    assert plan.main_file.suffix == "." + ext
+    assert len(plan.main_file.name.encode("utf-8")) <= 255
+    assert utf16_units(plan.main_file.name) <= 120
+
+
+@pytest.mark.parametrize("index", [10, 19, 100, 199, 1000])
+def test_safe_component_protects_copy_numbers_starting_with_one(index):
+    suffix = f" [site-id] ({index}).mp4"
+    assert safe_component("标题" * 100 + suffix, fallback="video").endswith(suffix)

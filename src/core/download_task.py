@@ -50,6 +50,7 @@ class VideoInfo:
     platform: Platform = Platform.UNKNOWN
     file_size: int = 0  # 字节
     formats: List[Dict[str, Any]] = field(default_factory=list)  # 可用格式列表
+    media_title_verified: bool = False  # Exact player-to-candidate title association
 
 
 @dataclass
@@ -69,6 +70,8 @@ class DownloadOptions:
     postprocess_script: str = ""  # postprocessing=script 时执行的 shell 脚本
     cookies_from_browser: str = ""  # yt-dlp cookiesfrombrowser 浏览器名
     cookiefile: str = ""  # Netscape cookie 文件路径
+    browser_extension: bool = False  # 扩展任务只使用随入队请求提供的会话，不读取其他 App
+    direct_media: bool = False  # 嗅探媒体保持原 URL，不以页面元信息替换
     embed_metadata: bool = True  # 嵌入封面/元数据/章节
     subtitle_langs: str = ""  # 字幕语言（逗号分隔；空则沿用 download_subtitles）
     embed_subs: bool = False  # 将字幕嵌入视频
@@ -134,6 +137,9 @@ class DownloadTask:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     run_intent: TaskRunIntent = TaskRunIntent.RUN
+    requires_embedded_session: bool = False
+    # Runtime only: never included in snapshots, queue rows, history or diagnostics.
+    embedded_media_url: str = field(default="", repr=False)
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

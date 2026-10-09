@@ -11,6 +11,7 @@ from src.core.download_task import DownloadOptions, DownloadTask, Platform, Vide
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
 from src.core.error_codes import OutputVerificationFailed
 from src.core.output_contract import SubtitleMode, compile_output_plan
+from src.core.output_commit import commit_output_bundle
 from src.sidecar.bin_paths import MediaToolchain
 
 
@@ -40,7 +41,7 @@ class FakeYDL:
         return False
 
     def extract_info(self, url: str, *, download: bool):
-        assert download is True
+        assert isinstance(download, bool)
         self.factory.urls.append(url)
         if self.factory.emit_progress:
             for hook in self.options["progress_hooks"]:
@@ -58,6 +59,11 @@ class FakeYDL:
         if callable(self.effect):
             return self.effect(self)
         return self.effect
+
+    def process_ie_result(self, info, *, download):
+        assert download is True
+        self.factory.processed_info = info
+        return info
 
     def evaluate_outtmpl(self, template: str, info: dict, *, sanitize: bool):
         self.evaluate_calls.append((template, info, sanitize))
@@ -634,8 +640,50 @@ def test_twitter_fallback_reuses_plan_toolchain_and_staging(tmp_path):
     assert result.info["uploader"] == "推文作者"
     assert result.info["duration"] == 12
     assert downloader.last_info is fallback_info
+    assert factory.processed_info["title"] == fallback_info.title
+    assert factory.processed_info["thumbnail"] == fallback_info.thumbnail_url
     assert factory.urls == [url, "https://video.twimg.com/direct.mp4"]
     assert factory.option_snapshots[0]["outtmpl"] == factory.option_snapshots[1]["outtmpl"]
     assert factory.option_snapshots[0]["postprocessors"] == (
         factory.option_snapshots[1]["postprocessors"]
     )
+
+
+@pytest.mark.parametrize(("direct", "preferred", "expected"), [
+    (True, "作品标题", "作品标题"), (False, "任意输入", "引擎网页标题"),
+    (True, "未命名视频", "引擎网页标题"), (True, "", "引擎网页标题"),
+])
+def test_confirmed_direct_media_title_is_used_in_final_leaf(tmp_path, direct, preferred, expected):
+    staging = tmp_path / "stage"
+    staging.mkdir()
+    main = staging / "media.mp4"
+    main.write_bytes(b"media")
+    url = "https://cdn.example.invalid/asset-without-extension?signature=controlled"
+    factory = FakeYDLFactory(_info(main, title="引擎网页标题", extractor="generic", id="long-query" * 30, direct=direct))
+    result = Downloader(ydl_factory=factory).download(url, _video_plan(url=url),
+                toolchain=_toolchain(tmp_path), staging_dir=staging, preferred_title=preferred)
+    assert result.info["title"] == expected
+    assert result.rendered_leaf.startswith(expected + " ")
+    if direct:
+        assert result.source_key.startswith("url-")
+        assert len(result.source_key) == 12
+
+
+def test_same_title_different_direct_sources_and_repeat_keep_distinct_outputs(tmp_path):
+    results = []
+    for i in range(2):
+        staging = tmp_path / f"stage{i}"
+        staging.mkdir()
+        main = staging / "media.mp4"
+        main.write_bytes(bytes([i + 1]))
+        url = f"https://cdn.example.invalid/asset{i}?signature=controlled"
+        factory = FakeYDLFactory(_info(main, direct=True, extractor="generic", title="hash"))
+        results.append(Downloader(ydl_factory=factory).download(url, _video_plan(url=url),
+                         toolchain=_toolchain(tmp_path), staging_dir=staging, preferred_title="同名作品"))
+    output = tmp_path / "output"
+    files = [commit_output_bundle(download_root=output, playlist_folder="", result=result).main_file
+             for result in [results[0], results[1], results[0]]]
+    assert len(set(files)) == 3
+    assert all(p.name.startswith("同名作品 [url-") for p in files)
+    assert files[-1].name.endswith(" (2).mp4")
+    assert [p.read_bytes() for p in files] == [bytes([1]), bytes([2]), bytes([1])]

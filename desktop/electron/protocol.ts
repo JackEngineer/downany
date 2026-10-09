@@ -30,6 +30,9 @@ export const Methods = [
   "settings.checkDownloadDir",
   "updater.checkYtDlp",
   "updater.updateYtDlp",
+  "updater.getEngineState",
+  "updater.freezeEngine",
+  "updater.unfreezeEngine",
 ] as const;
 
 export type Method = (typeof Methods)[number];

@@ -24,8 +24,12 @@ type YtDlpInfo = {
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
-  downloadUrl?: string;
+  pendingVersion?: string;
 };
+
+type EngineStateInfo = { recoveryRequired?: unknown; current?: { version?: unknown; selection?: unknown }; pending?: { version?: unknown; sha256?: unknown } | null };
+type EngineUpdateResult = { ok?: unknown; state?: unknown; version?: unknown; currentVersion?: unknown };
+type EngineUpdateOutcome = "prepared" | "rolled_back" | "failed" | null;
 
 type TabKey = "general" | "quality" | "postprocess" | "appearance" | "telegram";
 
@@ -415,6 +419,10 @@ export function SettingsApp() {
   const [ytInfo, setYtInfo] = useState<YtDlpInfo | null>(null);
   const [ytBusy, setYtBusy] = useState(false);
   const [ytError, setYtError] = useState("");
+  const [ytChecked, setYtChecked] = useState(false);
+  const [ytOutcome, setYtOutcome] = useState<EngineUpdateOutcome>(null);
+  const ytReadGeneration = useRef(0);
+  const ytStateRequested = useRef(false);
   const [migration, setMigration] = useState<MigrationResult | null>(null);
   const [diagBusy, setDiagBusy] = useState(false);
   const [diagPath, setDiagPath] = useState("");
@@ -465,6 +473,29 @@ export function SettingsApp() {
       .catch(() => undefined);
   }, [connection]);
 
+  useEffect(() => {
+    if (connection !== "connected" && connection !== "failed" && ytStateRequested.current) return;
+    ytStateRequested.current = true;
+    const generation = ++ytReadGeneration.current;
+    void request<EngineStateInfo>("updater.getEngineState", {}).then((state) => {
+      if (!mounted.current || generation !== ytReadGeneration.current) return;
+      if (state?.recoveryRequired === true) {
+        setYtInfo(null);
+        setYtOutcome("failed");
+        setYtError("");
+        return;
+      }
+      const currentVersion = safeVersion(state?.current?.version);
+      if (!currentVersion) return;
+      setYtInfo((previous) => ({
+        currentVersion,
+        latestVersion: previous?.latestVersion || "",
+        updateAvailable: previous?.updateAvailable || false,
+        pendingVersion: state.pending?.sha256 === state.current?.selection ? undefined : safeVersion(state.pending?.version) || undefined,
+      }));
+    }).catch(() => undefined);
+  }, [connection]);
+
   const persist = async (next: AppSettings, version: number) => {
     try {
       const updated = await request<AppSettings>("settings.update", next);
@@ -506,11 +537,19 @@ export function SettingsApp() {
   };
 
   const checkYtDlp = async () => {
+    ytReadGeneration.current += 1;
     setYtBusy(true);
     setYtError("");
     try {
       const info = await request<YtDlpInfo>("updater.checkYtDlp", {});
-      setYtInfo(info);
+      if (!mounted.current) return;
+      const currentVersion = safeVersion(info?.currentVersion);
+      const latestVersion = safeVersion(info?.latestVersion);
+      if (!currentVersion || typeof info?.updateAvailable !== "boolean" || (info.updateAvailable && !latestVersion)) {
+        throw new Error("invalid tool check result");
+      }
+      setYtInfo({ currentVersion, latestVersion, updateAvailable: info.updateAvailable, pendingVersion: safeVersion(info.pendingVersion) || undefined });
+      setYtChecked(true);
       pushToast({
         kind: "info",
         title: info.updateAvailable
@@ -520,37 +559,44 @@ export function SettingsApp() {
     } catch {
       setYtError(t("settings.toolCheckFailed"));
     } finally {
+      ytReadGeneration.current += 1;
       setYtBusy(false);
     }
   };
 
   const updateYtDlp = async () => {
+    ytReadGeneration.current += 1;
     setYtBusy(true);
     setYtError("");
+    setYtOutcome(null);
     try {
-      const result = await request<{ ok: boolean; version: string }>(
-        "updater.updateYtDlp",
-        ytInfo?.downloadUrl ? { downloadUrl: ytInfo.downloadUrl } : {},
-      );
-      if (!result.ok || !safeVersion(result.version)) throw new Error("invalid tool update result");
-      setYtInfo((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentVersion: result.version,
-              updateAvailable: false,
-            }
-          : {
-              currentVersion: result.version,
-              latestVersion: result.version,
-              updateAvailable: false,
-            },
-      );
-      pushToast({ kind: "success", title: t("settings.toolUpdated", undefined, { version: result.version }) });
+      const result = await request<EngineUpdateResult>("updater.updateYtDlp", {});
+      if (!mounted.current) return;
+      const version = safeVersion(result?.version);
+      if (!version) throw new Error("invalid tool update result");
+      if (result.ok === true && result.state === "activated") {
+        setYtInfo({ currentVersion: version, latestVersion: version, updateAvailable: false });
+        pushToast({ kind: "success", title: t("settings.toolUpdated", undefined, { version }) });
+      } else if (result.ok === true && result.state === "current") {
+        setYtInfo({ currentVersion: version, latestVersion: version, updateAvailable: false });
+        setYtChecked(true);
+        pushToast({ kind: "info", title: t("settings.toolCurrentResult", undefined, { version }) });
+      } else if (result.ok === false && (result.state === "prepared" || result.state === "rolled_back")) {
+        const currentVersion = safeVersion(result.currentVersion);
+        if (!currentVersion) throw new Error("invalid current engine version");
+        setYtInfo({ currentVersion, latestVersion: version, updateAvailable: true, pendingVersion: version });
+        setYtOutcome(result.state);
+      } else if (result.ok === false && result.state === "failed") {
+        setYtInfo({ currentVersion: "", latestVersion: version, updateAvailable: false });
+        setYtOutcome("failed");
+      } else {
+        throw new Error("invalid tool update result");
+      }
     } catch {
       setYtError(t("settings.toolUpdateFailed"));
       pushToast({ kind: "error", title: t("settings.toolUpdateFailed") });
     } finally {
+      ytReadGeneration.current += 1;
       setYtBusy(false);
     }
   };
@@ -593,7 +639,7 @@ export function SettingsApp() {
     }
   };
 
-  if (connection === "failed") {
+  if (connection === "failed" && !ytBusy && ytOutcome !== "failed") {
     return (
       <>
         <ConnectionGate />
@@ -605,7 +651,9 @@ export function SettingsApp() {
   if (!draft) {
     return (
       <div className="settings-shell">
-        <p className="muted">{t("settings.loading", locale)}</p>
+        {ytOutcome === "failed"
+          ? <p className="field-error" role="alert">{t("settings.toolServiceFailed", locale)}</p>
+          : <p className="muted">{t("settings.loading", locale)}</p>}
       </div>
     );
   }
@@ -664,29 +712,38 @@ export function SettingsApp() {
           <section className="settings-section">
             <h2>{t("settings.downloadTool", locale)}</h2>
             <p className="muted">
-              {t("settings.toolCurrent", locale, { version: safeVersion(ytInfo?.currentVersion) || t("settings.toolUnknown", locale) })}
+              {t("settings.toolCurrent", locale, { version: ytOutcome === "failed" ? t("settings.toolUnavailable", locale) : safeVersion(ytInfo?.currentVersion) || t("settings.toolUnknown", locale) })}
               {ytInfo?.updateAvailable
                 ? t("settings.toolAvailable", locale, { version: safeVersion(ytInfo.latestVersion) || "—" })
-                : ytInfo
+                : ytChecked && ytOutcome !== "failed"
                   ? t("settings.toolLatest", locale)
                   : ""}
             </p>
+            {ytOutcome === "failed" ? (
+              <p className="field-error" role="status">{t("settings.toolServiceFailed", locale)}</p>
+            ) : ytInfo?.pendingVersion ? (
+              <p className={ytOutcome === "rolled_back" ? "field-error" : "muted"} role="status">
+                {t(ytOutcome === "rolled_back" ? "settings.toolRolledBack" : "settings.toolPrepared", locale, {
+                  version: safeVersion(ytInfo.pendingVersion), currentVersion: safeVersion(ytInfo.currentVersion),
+                })}
+              </p>
+            ) : null}
             {ytError && <p className="field-error">{ytError}</p>}
             <div className="settings-control">
               <button
                 id="settings-focus-download-tool"
                 type="button"
-                disabled={disabled || ytBusy}
+                disabled={disabled || ytBusy || ytOutcome === "failed"}
                 onClick={() => void checkYtDlp()}
               >
                 {t("settings.toolCheck", locale)}
               </button>
               <button
                 type="button"
-                disabled={disabled || ytBusy || !ytInfo?.updateAvailable}
+                disabled={disabled || ytBusy || ytOutcome === "failed" || (!ytInfo?.pendingVersion && !ytInfo?.updateAvailable)}
                 onClick={() => void updateYtDlp()}
               >
-                {t("settings.toolUpdate", locale)}
+                {t(ytBusy ? "settings.toolProcessing" : ytInfo?.pendingVersion ? "settings.toolActivate" : "settings.toolUpdate", locale)}
               </button>
             </div>
           </section>

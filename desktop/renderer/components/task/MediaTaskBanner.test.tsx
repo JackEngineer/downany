@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setLocale } from "../../i18n";
 import { useAppStore } from "../../store/appStore";
 import { taskFixture } from "../../test/taskFixture";
 import { MediaTaskBanner } from "./MediaTaskBanner";
@@ -177,6 +178,7 @@ vi.mock("../../lib/api", () => ({
 
 afterEach(() => {
   cleanup();
+  setLocale("zh-CN");
   vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-reduce-transparency");
@@ -776,6 +778,8 @@ describe("MediaTaskBanner", () => {
 
   it.each([
     ["need_login", ["选择登录状态", "网页识别"]],
+    ["cookie_unavailable", ["选择登录状态", "网页识别"]],
+    ["site_response_unavailable", ["网页识别", "导出诊断"]],
     ["private", ["选择登录状态", "网页识别"]],
     ["geo_blocked", ["检查网络设置"]],
     ["network", ["检查网络设置"]],
@@ -800,6 +804,53 @@ describe("MediaTaskBanner", () => {
         container.querySelectorAll(".media-task-banner__recovery-action"),
       ).map((element) => element.textContent?.trim() || "");
       expect(actual).toEqual(labels);
+    },
+  );
+
+  it.each([
+    ["cookie_unavailable", "zh-CN", "无法读取所选登录状态，请重新选择登录来源后重试", "选择登录状态", "cookies", "网页识别", "重试"],
+    ["cookie_unavailable", "en", "Could not read the selected login session. Choose your login source again, then retry.", "Choose browser login", "cookies", "Recognize page", "Retry"],
+    ["site_response_unavailable", "zh-CN", "暂时无法读取视频信息，请尝试网页识别；仍失败时可导出诊断", "导出诊断", "diagnostics", "网页识别", "重试"],
+    ["site_response_unavailable", "en", "Could not read the video information right now. Try page recognition; if it still fails, export diagnostics.", "Export diagnostics", "diagnostics", "Recognize page", "Retry"],
+  ] as const)(
+    "keeps %s recovery safe and actionable in %s",
+    async (errorCode, locale, detail, recoveryLabel, recoveryAction, recognizeLabel, retryLabel) => {
+      setLocale(locale);
+      requestMock.mockImplementation(async (method) => method === "app.exportDiagnostics"
+        ? { ok: true, path: "/tmp/diagnostics.zip" }
+        : { tasks: [], settings: null });
+      const task = taskFixture({
+        id: "task-recovery-original",
+        url: "https://example.com/original-video",
+        status: "failed",
+        error_code: errorCode,
+        error_message: "Cookie: PRIVATE_TOKEN C:\\Users\\PRIVATE_USER\\response.json",
+      });
+      const { container } = render(<MediaTaskBanner task={task} />);
+
+      expect(screen.getByText(detail)).toBeInTheDocument();
+      expect(container.innerHTML).not.toMatch(/PRIVATE_TOKEN|PRIVATE_USER|response\.json/);
+      expect(container.querySelector(".media-task-banner__detail")).not.toHaveAttribute("title");
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: recoveryLabel }));
+      if (recoveryAction === "cookies") {
+        expect(openSettingsMock).toHaveBeenCalledTimes(1);
+        expect(openSettingsMock).toHaveBeenCalledWith("cookies");
+      } else {
+        expect(requestMock).toHaveBeenCalledWith("app.exportDiagnostics", {});
+        await waitFor(() => expect(showItemInFolderMock).toHaveBeenCalledWith("/tmp/diagnostics.zip"));
+        expect(openSettingsMock).not.toHaveBeenCalled();
+      }
+      fireEvent.click(screen.getByRole("button", { name: recognizeLabel }));
+      expect(openExtractWindowMock).toHaveBeenCalledTimes(1);
+      expect(openExtractWindowMock).toHaveBeenCalledWith(task.url);
+      expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
+
+      fireEvent.click(screen.getByRole("button", { name: retryLabel }));
+      await waitFor(() => expect(requestMock).toHaveBeenCalledWith("download.retry", { taskId: task.id }));
+      expect(requestMock.mock.calls.filter(([method]) => method === "download.retry")).toHaveLength(1);
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     },
   );
 
@@ -1453,4 +1504,15 @@ describe("MediaTaskBanner", () => {
       }),
     );
   });
+});
+
+it("offers explicit built-in retry only for an exact failed Douyin video", async () => {
+  const retry = vi.fn().mockResolvedValue({ ok: false, code: "unavailable" });
+  window.api.retryEmbeddedDouyin = retry;
+  const { rerender } = render(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://www.douyin.com/video/123", error_code: "site_response_unavailable" })} />);
+  fireEvent.click(screen.getByRole("button", { name: "使用内置登录重试" }));
+  await waitFor(() => expect(retry).toHaveBeenCalledWith("task-1"));
+  expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
+  rerender(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://evil.com/video/123", error_code: "site_response_unavailable" })} />);
+  expect(screen.queryByRole("button", { name: "使用内置登录重试" })).toBeNull();
 });

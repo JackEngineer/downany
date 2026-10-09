@@ -129,8 +129,11 @@ function FailureRecoveryActions({
   if (presentTask(task).status !== "failed") return null;
   const view = failureRecoveryFor(task.error_code);
 
+  const canRetryEmbedded = /^https:\/\/www\.douyin\.com\/video\/\d+$/.test(task.url)
+    && ["need_login", "cookie_unavailable", "site_response_unavailable", "private", "embedded_session_required"].includes(task.error_code ?? "");
   return (
     <>
+      {canRetryEmbedded && <Button className="media-task-banner__recovery-action" size="small" variant="ghost" leadingIcon="capture" onClick={() => void commands.retryEmbeddedDouyin?.()}>{t("recovery.embeddedRetry", locale)}</Button>}
       {view.actions.map((action) => {
         const presentation = RECOVERY_ACTION_VIEWS[action];
         const label = t(presentation.labelKey, locale);

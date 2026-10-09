@@ -1,5 +1,7 @@
 """HistoryDB 连接与读写测试。"""
 from datetime import datetime
+from dataclasses import replace
+import pytest
 
 from src.data.database import HistoryDB
 from src.data.models import DownloadRecord
@@ -125,4 +127,19 @@ def test_completion_note_migrates_from_legacy_history_schema(tmp_path):
     db = HistoryDB(db_path=str(db_path))
 
     assert db.get_download_record("legacy").completion_note == ""
+    HistoryDB._instance = None
+
+
+def test_history_sort_is_global_stable_and_preserves_pagination_filters(tmp_path):
+    HistoryDB._instance = None
+    db = HistoryDB(db_path=str(tmp_path / "sort.db"))
+    for ident, day in [("z", 1), ("b", 2), ("a", 2), ("c", 3)]:
+        db.add_download_record(replace(_record(ident, ident), created_at=datetime(2026, 1, day)))
+    assert [r.id for r in db.list_download_records(limit=2)] == ["c", "a"]
+    assert [r.id for r in db.list_download_records(offset=2, limit=2)] == ["b", "z"]
+    assert [r.id for r in db.list_download_records(sort_order="oldest")] == ["z", "a", "b", "c"]
+    assert [r.id for r in db.list_download_records(sort_order="oldest", query="b", status="completed")] == ["b"]
+    with pytest.raises(ValueError):
+        db.list_download_records(sort_order="DESC; DROP TABLE download_history")
+    assert len(db.list_download_records()) == 4
     HistoryDB._instance = None

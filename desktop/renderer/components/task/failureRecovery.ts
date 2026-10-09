@@ -26,6 +26,17 @@ const FAILURE_VIEWS = {
     requiresRetryConfirmation: false,
     actions: ["login", "recognize"],
   },
+  cookie_unavailable: {
+    retryable: true,
+    requiresRetryConfirmation: false,
+    actions: ["login", "recognize"],
+  },
+  site_response_unavailable: {
+    retryable: true,
+    requiresRetryConfirmation: false,
+    actions: ["recognize", "diagnostics"],
+  },
+  embedded_session_required: { retryable: false, requiresRetryConfirmation: false, actions: ["recognize"] },
   private: {
     retryable: true,
     requiresRetryConfirmation: false,

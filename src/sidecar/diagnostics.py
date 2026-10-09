@@ -5,7 +5,6 @@ import json
 import platform
 import re
 import subprocess
-import sys
 import tempfile
 import zipfile
 from collections import Counter
@@ -15,10 +14,10 @@ from typing import Any, Dict, List, Optional
 
 from src.core.download_task import Platform, TaskStatus
 from src.core.error_codes import ALL_ERROR_CODES, UNKNOWN
+from src.core.ytdlp_runtime import current_engine
 from src.sidecar.bin_paths import resolve_ffmpeg_path, resolve_ffprobe_path
 from src.sidecar.paths import AppPaths
 from src.sidecar.protocol import APP_NAME, APP_VERSION
-from src.sidecar.ytdlp_updater import resolve_ytdlp_executable
 
 
 _LOG_LEVEL_RE = re.compile(r"\s-\s(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s-\s")
@@ -72,17 +71,15 @@ def _safe_ffprobe_version(value: str) -> str:
 
 
 def collect_environment(paths: AppPaths) -> Dict[str, Any]:
-    ytdlp = resolve_ytdlp_executable(paths)
+    try:
+        engine = current_engine()
+    except Exception:  # noqa: BLE001 — diagnostics must not expose runtime failures
+        engine = {}
+    raw_source = engine.get("source")
+    ytdlp_source = raw_source if raw_source in ("bundled", "updated") else "unknown"
+    ytdlp_version = _safe_version_token(engine.get("version", ""))
     ffmpeg = resolve_ffmpeg_path()
     ffprobe = resolve_ffprobe_path()
-    if ytdlp:
-        ytdlp_source = "bundled"
-        ytdlp_version = _safe_version_token(_run_version([ytdlp, "--version"]))
-    else:
-        ytdlp_source = "python_module"
-        ytdlp_version = _safe_version_token(
-            _run_version([sys.executable, "-m", "yt_dlp", "--version"])
-        )
     return {
         "app": APP_NAME,
         "app_version": APP_VERSION,

@@ -12,6 +12,7 @@ from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
+from yt_dlp.cookies import CookieLoadError
 
 from src.core.download_manager import DownloadManager, format_postprocess_command
 from src.core.download_task import (
@@ -1091,17 +1092,29 @@ def test_instagram_weak_title_backfilled_from_description(manager):
     assert task.video_info.title == "今日份小狗 #cute"
 
 
-def test_failure_sets_structured_error_code(manager):
+@pytest.mark.parametrize(
+    "failure,expected_code",
+    [
+        (DownloadError("Sign in to confirm your age"), ec.NEED_LOGIN),
+        (CookieLoadError("failed to load cookies"), ec.COOKIE_UNAVAILABLE),
+        (
+            DownloadError("Fresh cookies (not necessarily logged in) are needed"),
+            ec.SITE_RESPONSE_UNAVAILABLE,
+        ),
+    ],
+)
+def test_failure_sets_structured_error_code(manager, failure, expected_code):
     task = _make_task()
     with patch("src.core.download_manager.Downloader") as mock_cls, patch(
         "src.core.download_manager.VideoInfoExtractor.extract", return_value=None
     ):
         instance = MagicMock()
-        instance.download.side_effect = DownloadError("Sign in to confirm your age")
+        instance.download.side_effect = failure
         mock_cls.return_value = instance
         manager.add_task(task)
         assert _wait_until(lambda: task.status == TaskStatus.FAILED)
-    assert task.error_code == ec.NEED_LOGIN
+    assert task.error_code == expected_code
+    assert manager.get_task_snapshot(task.id).error_code == expected_code
 
 
 @pytest.mark.parametrize(

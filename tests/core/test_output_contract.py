@@ -383,3 +383,10 @@ def test_pinned_ytdlp_blank_language_selects_one_subtitle_in_product_order(
 
     assert selected is not None
     assert tuple(selected) == (expected,)
+
+
+def test_x_multi_video_post_selects_one_owned_output():
+    task = make_task(url="https://x.com/example/status/123", platform=Platform.TWITTER)
+    assert compile_output_plan(task).to_ydl_options()["playlist_items"] == "1"
+    task.playlist_index = 2
+    assert compile_output_plan(task).to_ydl_options()["playlist_items"] == "2"

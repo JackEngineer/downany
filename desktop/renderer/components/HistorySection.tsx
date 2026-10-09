@@ -13,6 +13,8 @@ export function HistorySection() {
   const connection = useAppStore((s) => s.connection);
   const searchQuery = useAppStore((s) => s.searchQuery);
   const searchMode = useAppStore((s) => s.searchMode);
+  const sortOrder = useAppStore((s) => s.sortOrder);
+  const generation = useRef(0);
   const effectiveQuery = searchMode === "filter" ? searchQuery : "";
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<HistoryItem[]>([]);
@@ -29,32 +31,37 @@ export function HistorySection() {
   const fetchPage = useCallback(
     async (nextOffset: number, reset: boolean) => {
       if (connection !== "connected") return;
+      const requestGeneration = ++generation.current;
       setLoading(true);
       try {
         const res = await request<{ items: HistoryItem[] }>("history.list", {
+          sort_order: sortOrder,
           offset: nextOffset,
           limit: PAGE_SIZE,
           query: queryRef.current || undefined,
           status: statusRef.current || undefined,
         });
+        if (requestGeneration !== generation.current) return;
         const batch = res.items || [];
         setItems((prev) => (reset ? batch : [...prev, ...batch]));
         setOffset(nextOffset + batch.length);
         setHasMore(batch.length >= PAGE_SIZE);
-        if (reset) setSelected(new Set());
+
       } catch (err) {
-        pushToast({ kind: "error", title: "加载历史失败", detail: String(err) });
+        if (requestGeneration === generation.current) pushToast({ kind: "error", title: "加载历史失败", detail: String(err) });
       } finally {
-        setLoading(false);
+        if (requestGeneration === generation.current) setLoading(false);
       }
     },
-    [connection, pushToast],
+    [connection, pushToast, sortOrder],
   );
 
   useEffect(() => {
     const handle = window.setTimeout(() => void fetchPage(0, true), 200);
-    return () => window.clearTimeout(handle);
+    return () => { window.clearTimeout(handle); generation.current++; };
   }, [effectiveQuery, status, connection, fetchPage]);
+
+  useEffect(() => { setSelected(new Set()); }, [effectiveQuery, status]);
 
   useEffect(() => {
     return window.api.onEvent((event) => {
@@ -76,6 +83,7 @@ export function HistorySection() {
     if (ids.length === 0) return;
     try {
       await request("history.delete", { ids });
+      setSelected(new Set());
       pushToast({ kind: "success", title: `已删除 ${ids.length} 条` });
       await fetchPage(0, true);
     } catch (err) {
@@ -86,6 +94,7 @@ export function HistorySection() {
   const clearAll = async () => {
     try {
       await request("history.clear", {});
+      setSelected(new Set());
       pushToast({ kind: "success", title: "历史已清空" });
       setConfirmClear(false);
       await fetchPage(0, true);

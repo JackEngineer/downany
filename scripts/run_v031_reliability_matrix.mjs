@@ -1,7 +1,7 @@
 /** 在隔离的最终候选包中执行 v0.3.1 真实网站矩阵；结果文件不记录 URL、路径或原始错误。 */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -19,10 +19,14 @@ import {
 } from "./windows_real_download_helpers.mjs";
 import { stopChildProcessTree } from "./package_smoke_helpers.mjs";
 import { validateReliabilityMatrix } from "./v031_acceptance_helpers.mjs";
+import { assertIndependentMatrixSamples } from "./v031_sample_independence.mjs";
 import {
-  buildSanitizedCaseResult,
+  assertCredentialSettings,
+  collectMatrixCase,
+  createMatrixCaseTask,
   mergeTargetResults,
   parseMatrixRunArguments,
+  removeAttemptState,
   resolveMatrixCases,
 } from "./v031_matrix_run_helpers.mjs";
 
@@ -77,63 +81,6 @@ function writeResults(resultsPath, results) {
   }
 }
 
-async function parseCollection(page, url) {
-  return page.evaluate(({ sourceUrl }) => new Promise((resolve, reject) => {
-    let parseId = "";
-    const timeout = setTimeout(() => {
-      unsubscribe();
-      reject(new Error("collection parse timed out"));
-    }, 120_000);
-    const unsubscribe = window.api.onEvent((event) => {
-      if (event.event !== "download.parseResult") return;
-      const payload = event.payload || {};
-      if (!parseId || payload.parseId !== parseId) return;
-      clearTimeout(timeout);
-      unsubscribe();
-      if (payload.ok) resolve(payload);
-      else reject(new Error("collection parse failed"));
-    });
-    window.api.request("download.parseUrls", {
-      urls: [sourceUrl],
-      allow_playlist: true,
-      timeout: 90,
-    }).then((reply) => {
-      parseId = reply.parseId;
-    }, () => {
-      clearTimeout(timeout);
-      unsubscribe();
-      reject(new Error("collection parse could not start"));
-    });
-  }), { sourceUrl: url });
-}
-
-async function createCaseTask(page, row, url) {
-  let urls = [url];
-  let items;
-  if (row.scenario === "collection") {
-    const parsed = await parseCollection(page, url);
-    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
-    const entry = entries.find((item) => item?.url && String(item.available ?? "1") !== "0");
-    assert.ok(entry, "Collection did not expose an available entry");
-    urls = [String(entry.url)];
-    items = [{
-      url: String(entry.url),
-      title: String(entry.title || entry.id || "集合样本"),
-      group_id: `acceptance-${row.id}`,
-      group_title: String(parsed.playlist?.title || "集合样本"),
-      playlist_index: Number(entry.index) || 1,
-    }];
-  }
-  const reply = await page.evaluate(({ taskUrls, taskItems }) =>
-    window.api.request("download.createTasks", {
-      urls: taskUrls,
-      items: taskItems,
-      expandPlaylists: false,
-    }), { taskUrls: urls, taskItems: items });
-  assert.equal(reply.taskIds?.length, 1, "Each matrix case must create exactly one task");
-  return reply.taskIds[0];
-}
-
 async function readTask(page, taskId) {
   const snapshot = await page.evaluate(() => window.api.request("app.getSnapshot", {}));
   return snapshot.tasks.find((task) => task.id === taskId) || null;
@@ -153,7 +100,7 @@ async function verifyArtifact(task, outputDir, binDir) {
   return { playable: true, sha256: file.sha256, bytes: file.bytes };
 }
 
-async function runMatrix(options) {
+export async function runMatrix(options) {
   assert.equal(options.target, expectedRuntimeTarget(), "Target does not match this operating system and architecture");
   assert.ok(fs.statSync(options.executable).isFile(), "Candidate executable is missing");
   assert.ok(fs.statSync(options.candidateArtifact).isFile(), "Candidate artifact is missing");
@@ -167,25 +114,57 @@ async function runMatrix(options) {
     throw new Error(`Missing URL environment keys: ${resolved.missing.join(", ")}`);
   }
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `downany-v031-${options.target}-`));
-  console.log(`Owned artifact directory: ${root}`);
-  const directories = prepareDownloadGateRoot(root);
-  if (options.cookiefile || options.cookiesFromBrowser) {
-    const configPath = path.join(directories.dataDir, "config.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    if (options.cookiefile) {
-      assert.ok(fs.statSync(options.cookiefile).isFile(), "Cookie file is missing");
-      config.cookiefile = options.cookiefile;
-    }
-    if (options.cookiesFromBrowser) config.cookies_from_browser = options.cookiesFromBrowser;
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-  }
-  const environment = buildDownloadGateEnvironment(process.env, directories.dataDir);
+  const selectedIds = new Set(selectedRows.map((row) => row.id));
+  // 单条续跑也检查同候选已有样本；替换用例的旧行不能阻止它用新输入真实复验。
+  const priorSamples = readExistingResults(options.resultsPath).filter((result) =>
+    result.target === options.target && result.candidateSha256 === candidateSha256 && !selectedIds.has(result.id));
+  assertIndependentMatrixSamples([
+    ...priorSamples,
+    ...resolved.cases.map(({ row, url }) => ({
+      target: options.target, id: row.id, sampleSha256: createHash("sha256").update(url).digest("hex"),
+    })),
+  ]);
+
+  const credentialSource = options.cookiefile ? "cookiefile" : options.cookiesFromBrowser ? "browser" : "none";
+  assert.ok(!selectedRows.some((row) => row.scenario === "login") || credentialSource !== "none",
+    "Login cases require one credential source");
+  if (options.cookiefile) assert.ok(fs.statSync(options.cookiefile).isFile(), "Cookie file is missing");
   const require = createRequire(path.join(options.playwrightModule, "package.json"));
   const playwright = require("playwright");
-  let app;
+  const binDir = packagedMediaBin(options.executable);
+  assert.ok(fs.statSync(mediaTool(binDir, "ffmpeg")).isFile(), "Packaged ffmpeg is missing");
+  assert.ok(fs.statSync(mediaTool(binDir, "ffprobe")).isFile(), "Packaged ffprobe is missing");
   const updates = [];
+  for (const { row, url } of resolved.cases) {
+    const result = await collectMatrixCase({
+      target: options.target, candidateSha256, row, url, credentialSource,
+      runAttempt: (attempt) => runIsolatedAttempt(options, playwright, binDir, attempt),
+    });
+    updates.push(result);
+    writeResults(options.resultsPath, mergeTargetResults(readExistingResults(options.resultsPath), [result]));
+    console.log(`${row.id}: ${result.outcome}${result.loginEvidence ? ` (anonymous: ${result.loginEvidence.anonymous.outcome})` : ""}`);
+  }
+  return updates;
+}
+
+export async function runIsolatedAttempt(options, playwright, binDir, { row, url, credentialSource, phase }) {
+  // 每个阶段独占数据、队列与 Electron profile；前一实例清理完成后才启动下一个。
+  const instanceId = randomUUID();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `downany-v031-${options.target}-${phase}-`));
+  console.log(`Owned artifact directory: ${root}`);
+  const directories = prepareDownloadGateRoot(root);
+  let app;
   try {
+    const credentials = {
+      cookiesFromBrowser: credentialSource === "browser" ? options.cookiesFromBrowser : "",
+      cookiefile: credentialSource === "cookiefile" ? options.cookiefile : "",
+    };
+    const configPath = path.join(directories.dataDir, "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    config.cookies_from_browser = credentials.cookiesFromBrowser;
+    config.cookiefile = credentials.cookiefile;
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    const environment = buildDownloadGateEnvironment(process.env, directories.dataDir);
     app = await playwright._electron.launch({
       executablePath: options.executable,
       args: [`--user-data-dir=${directories.profileDir}`],
@@ -197,46 +176,37 @@ async function runMatrix(options) {
     await page.waitForFunction(() => !!window.api, undefined, { timeout: 30_000 });
     const identity = await app.evaluate(({ app: electronApp }) => ({ version: electronApp.getVersion() }));
     assert.equal(identity.version, options.expectedVersion, "Candidate version does not match the requested release");
-    const binDir = packagedMediaBin(options.executable);
-    assert.ok(fs.statSync(mediaTool(binDir, "ffmpeg")).isFile(), "Packaged ffmpeg is missing");
-    assert.ok(fs.statSync(mediaTool(binDir, "ffprobe")).isFile(), "Packaged ffprobe is missing");
-
-    for (const { row, url } of resolved.cases) {
-      const taskId = await createCaseTask(page, row, url);
-      const task = await waitForTask(
-        () => readTask(page, taskId),
-        (current) => ["completed", "failed", "cancelled"].includes(current?.status),
-        { timeoutMs: options.timeoutMs, pollIntervalMs: 500 },
-      );
-      let artifact = { playable: false };
-      if (task.status === "completed") artifact = await verifyArtifact(task, directories.outputDir, binDir);
-      const result = buildSanitizedCaseResult({
-        target: options.target,
-        candidateSha256,
-        row,
-        task,
-        artifact,
-        recordedAt: new Date().toISOString(),
-      });
-      updates.push(result);
-      writeResults(options.resultsPath, mergeTargetResults(readExistingResults(options.resultsPath), [result]));
-      console.log(`${row.id}: ${result.outcome}`);
+    const settings = await page.evaluate(() => window.api.request("settings.get", {}));
+    assertCredentialSettings(settings, credentials);
+    const created = await createMatrixCaseTask(page, row, url);
+    if (created.failureStage === "collection_parse") {
+      return { failureStage: "collection_parse", instanceId, recordedAt: new Date().toISOString() };
     }
+    const { taskId } = created;
+    const task = await waitForTask(
+      () => readTask(page, taskId),
+      (current) => ["completed", "failed", "cancelled"].includes(current?.status),
+      { timeoutMs: options.timeoutMs, pollIntervalMs: 500 },
+    );
+    let artifact = { playable: false };
+    if (task.status === "completed") artifact = await verifyArtifact(task, directories.outputDir, binDir);
+    return { task, artifact, instanceId, recordedAt: new Date().toISOString() };
   } finally {
-    if (app) {
-      const child = app.process();
-      try { await app.close(); } finally { await stopChildProcessTree(child); }
+    try {
+      if (app) {
+        const child = app.process();
+        try { await app.close(); } finally { await stopChildProcessTree(child); }
+      }
+    } finally {
+      // 隔离运行目录可能包含 URL、Cookie 路径和原始错误；只保留成品与脱敏结果。
+      removeAttemptState(directories);
     }
-    // 隔离运行目录可能包含 URL、Cookie 路径和原始错误；只保留成品与脱敏结果。
-    fs.rmSync(directories.dataDir, { recursive: true, force: true });
-    fs.rmSync(directories.profileDir, { recursive: true, force: true });
   }
-  return updates;
 }
 
 async function main() {
   if (process.argv.includes("--help")) {
-    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --candidate-artifact=<absolute DMG or NSIS installer> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--cookies-from-browser=<browser[:profile]>] [--case=<case id>] [--timeout-minutes=15]");
+    console.log("node scripts/run_v031_reliability_matrix.mjs --executable=<absolute candidate> --candidate-artifact=<absolute DMG or NSIS installer> --playwright-module=<absolute playwright directory> --matrix=<absolute matrix.json> --results=<absolute results.json> --target=macos-arm64|windows-x64 [--expected-version=0.3.1] [--cookiefile=<absolute Netscape cookies.txt>] [--cookies-from-browser=<browser name>] [--case=<case id>] [--timeout-minutes=15]");
     return;
   }
   const options = parseMatrixRunArguments(process.argv.slice(2));

@@ -606,3 +606,24 @@ def test_external_subtitle_validation_rejects_empty_or_escaped_files(tmp_path):
         manager_module._verify_external_subtitles((empty,), root)
     with pytest.raises(OutputVerificationFailed):
         manager_module._verify_external_subtitles((escaped,), root)
+
+
+@pytest.mark.parametrize("verified", [True, False])
+def test_no_extension_cdn_progress_and_completion_title_provenance(tmp_path, monkeypatch, verified):
+    pipeline = _Pipeline(tmp_path)
+    pipeline.task.video_info.url = "https://cdn.example.invalid/no-extension"
+    pipeline.task.video_info.title = "可信作品标题" if verified else "任意标签"
+    pipeline.task.video_info.media_title_verified = verified
+    pipeline.result = replace(pipeline.result, info=MappingProxyType({"title": "cdn-hash", "direct": True}))
+    observed = []
+    def download(instance, *args, **kwargs):
+        assert kwargs.get("preferred_title") == ("可信作品标题" if verified else None)
+        instance.progress({"status": "downloading", "info_dict": {"title": "cdn-hash", "direct": True}})
+        observed.append(pipeline.task.video_info.title)
+        return pipeline.result
+    monkeypatch.setattr(_FakeDownloader, "download", download)
+    pipeline.run()
+    expected = "可信作品标题" if verified else "cdn-hash"
+    assert observed == [expected]
+    assert pipeline.task.video_info.title == expected
+    assert pipeline.task.status is TaskStatus.COMPLETED
