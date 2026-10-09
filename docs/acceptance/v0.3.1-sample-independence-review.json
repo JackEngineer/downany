@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {
+      "status": "rejected",
+      "reason": "duplicate_content",
+      "sampleSha256s": [
+        "bed5bd5657cbfa88fae7488c232acf5d0d8d6d79601315f4e63177d20f6add1e",
+        "cc3c81ccdbc6703441ee8460bcb72dc530eeec52b1513a9364fe4c9dfd064096"
+      ],
+      "evidence": {
+        "kind": "local_extractor_tests_and_packaged_media",
+        "target": "windows-x64",
+        "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+        "caseIds": [
+          "bilibili-01",
+          "bilibili-03"
+        ],
+        "extractorVideoIdSha256": "015f1483392228a70f2cf896e25309a519d2d547c5512127470fec0001057f4e",
+        "sameDefaultPart": true,
+        "sameDecodedMedia": true,
+        "decodedMediaSha256": "f1ccea06f69e78da2ddd50de32f3a804b1a5e9abc5a84a94dc132c22488bbb97"
+      }
+    }
+  ]
+}
