@@ -1,0 +1,50 @@
+[
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-01",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "cc2d22fe8113d77b5d8ddb6a26ee861514cb6848ad481243a5caf01d9aa177a5",
+    "artifactBytes": 2326163,
+    "recordedAt": "2026-10-09T17:27:08.794Z",
+    "sampleSha256": "bed5bd5657cbfa88fae7488c232acf5d0d8d6d79601315f4e63177d20f6add1e"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-02",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "15d9b94b2d14aebef22ddab9abc98299d970576591de5c56c969e61aad569df7",
+    "artifactBytes": 2410620,
+    "recordedAt": "2026-10-09T17:27:35.890Z",
+    "sampleSha256": "53dc66cadd9238575bc60da1c997963c979b3f11dc087e2b16da515dffc5dd7b"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-03",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "b4acd188764e8bf27bd4b3f22a5b4c06b62d59afd481a98b684f617c9dcea14a",
+    "artifactBytes": 8795592,
+    "recordedAt": "2026-10-09T17:28:03.398Z",
+    "sampleSha256": "d6250f9da3741a47d4b4a2616eb5202fc9ba882358bd409b6d62d1cf3b99ab0f"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "youtube-01",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "0d7087a4112c02f160d07162b5b6a11a58cf166e0ceb2f5f6e94c12b092f14a1",
+    "artifactBytes": 44860186,
+    "recordedAt": "2026-10-09T17:29:37.748Z",
+    "sampleSha256": "d84d89295c97256aa408701fcda4013058153c0fe578acfd438589f0b5b6fe3d"
+  }
+]
