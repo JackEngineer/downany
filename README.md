@@ -126,6 +126,8 @@ cd desktop && npm test && npm run build
 
 产品路线见 [docs/roadmap.md](docs/roadmap.md)；发布与签名见 [docs/RELEASE.md](docs/RELEASE.md)。
 
+Windows 0.3.1 候选的安装、升级、插件及网站验收步骤见 [Windows 验收交接](docs/WINDOWS-0.3.1-HANDOFF.md)。
+
 ## 许可证
 
 MIT
