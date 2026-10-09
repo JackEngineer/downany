@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { evaluateCandidateArtifacts } from "./v031_candidate_artifacts.mjs";
+import { candidateArtifactContract, createCandidateArtifactContract, evaluateCandidateArtifacts } from "./v031_candidate_artifacts.mjs";
 
 async function inspectArtifact(repositoryRoot, declaration) {
   if (!declaration?.path) return undefined;
@@ -43,7 +43,11 @@ if (!manifestArg) {
   ]) {
     if (declaration) inspections[label] = await inspectArtifact(repositoryRoot, declaration);
   }
-  const report = evaluateCandidateArtifacts(manifest, inspections);
+  const versionArg = args.find((arg) => arg.startsWith("--expected-version="))?.slice("--expected-version=".length);
+  const extensionArg = args.find((arg) => arg.startsWith("--expected-extension-version="))?.slice("--expected-extension-version=".length);
+  if (!!versionArg !== !!extensionArg) throw new Error("应用和插件版本必须同时指定");
+  const contract = versionArg ? createCandidateArtifactContract({ version: versionArg, extensionVersion: extensionArg }) : candidateArtifactContract;
+  const report = evaluateCandidateArtifacts(manifest, inspections, contract);
   console.log(JSON.stringify(report, null, 2));
   const passed = verifyAvailable ? report.integrityPassed : report.releaseReady;
   if (!passed) process.exitCode = 1;

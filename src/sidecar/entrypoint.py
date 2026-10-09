@@ -10,6 +10,10 @@ from src.core.ytdlp_runtime import activate_engine
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    # 参数、引擎激活和探测导入也会输出中文错误，须先固定管道编码。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = list(sys.argv[1:] if argv is None else argv)
     mode = "server"
     selection = None
@@ -41,10 +45,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         sys.stdout.write(json.dumps(engine, ensure_ascii=True) + "\n")
         return 0
     if mode == "cli":
-        # Windows 子进程同样固定 UTF-8，与 ParseSession 的读取编码一致。
-        for stream in (sys.stdout, sys.stderr):
-            if hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8")
         importlib.import_module("yt_dlp").main(cli_args)
         return 0
 

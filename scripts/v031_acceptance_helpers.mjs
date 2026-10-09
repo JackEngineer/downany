@@ -41,7 +41,7 @@ export function validateReliabilityMatrix(rows) {
   return { total: rows.length, byPlatform };
 }
 
-export function evaluateReliabilityResults(rows, results) {
+export function evaluateReliabilityResults(rows, results, { loadReview } = {}) {
   validateReliabilityMatrix(rows);
   const failures = [];
   const rowIds = new Set(rows.map((row) => row.id));
@@ -64,7 +64,7 @@ export function evaluateReliabilityResults(rows, results) {
   }
 
   const unverifiedSampleKeys = new Set();
-  for (const conflict of findReviewedSampleConflicts([...byTargetAndId.values()])) {
+  for (const conflict of findReviewedSampleConflicts([...byTargetAndId.values()], { loadReview })) {
     failures.push(`${conflict.target} sample independence review rejected duplicate content: ${conflict.ids.join(", ")}`);
     for (const id of conflict.ids) unverifiedSampleKeys.add(`${conflict.target}:${id}`);
   }

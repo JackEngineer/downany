@@ -28,7 +28,16 @@ def _archive(tmp_path, *, version=VERSION, init=None, omit=(), extra=None):
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in entries.items():
             if name not in omit:
-                archive.writestr(name, content)
+                # ZipInfo normally rewrites Windows separators and truncates NUL.
+                # Preserve malformed names so the fixture contains the raw input.
+                member = zipfile.ZipInfo(name)
+                member.filename = member.orig_filename = name
+                member.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(member, content)
+    with zipfile.ZipFile(temporary) as archive:
+        assert [member.orig_filename for member in archive.infolist()] == [
+            name for name in entries if name not in omit
+        ]
     digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
     directory = tmp_path / "engines" / digest
     directory.mkdir(parents=True, exist_ok=True)
@@ -168,11 +177,27 @@ def test_digest_mismatch_never_imports_unverified_archive(tmp_path, explicit):
     ({"/private.py": "pass"}, ()),
     ({"yt_dlp\\private.py": "pass"}, ()),
     ({"yt_dlp/version.py": "__version__ = get_version()\n"}, ()),
+    ({"yt_dlp/private.py\x00hidden.py": "pass"}, ()),
+    ({"C:/private.py": "pass"}, ()),
 ])
 def test_invalid_archive_structure_or_static_version_is_rejected(tmp_path, extra, omit):
     digest, _ = _archive(tmp_path, extra=extra, omit=omit)
     result = _run(tmp_path, f"print(json.dumps(activate_engine({digest!r})))")
     assert result == {"error": "invalid_archive", "errorType": "EngineActivationError"}
+
+
+@pytest.mark.parametrize("raw_name", ["yt_dlp\\private.py", "yt_dlp/private.py\x00hidden.py"])
+def test_raw_archive_name_failure_falls_back_without_importing_archive(tmp_path, raw_name):
+    digest, _ = _archive(tmp_path, extra={raw_name: "pass"})
+    _active(tmp_path, digest)
+    result = _run(tmp_path, """
+        info = activate_engine()
+        import yt_dlp
+        print(json.dumps({'info': info, 'synthetic': hasattr(yt_dlp, 'ENGINE_MARKER')}))
+    """)
+    assert result["info"]["source"] == "bundled"
+    assert result["info"]["fallbackReason"] == "invalid_archive"
+    assert result["synthetic"] is False
 
 
 def test_manifest_version_must_match_archive(tmp_path):

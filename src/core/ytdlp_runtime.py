@@ -99,8 +99,10 @@ def _verify_archive(root: Path, selection: str, expected_version: str | None) ->
                     or sum(member.file_size for member in members) > _MAX_EXPANDED_BYTES):
                 raise ValueError
             for member in members:
-                name = member.filename
-                if ("\\" in name or ":" in name or name.startswith("/")
+                # ZipInfo normalizes Windows separators and truncates NUL bytes.
+                # Check the original central-directory name before either change.
+                name = member.orig_filename
+                if (name != member.filename or "\\" in name or ":" in name or name.startswith("/")
                         or ".." in PurePosixPath(name).parts
                         or stat.S_ISLNK(member.external_attr >> 16)
                         or member.flag_bits & 1):

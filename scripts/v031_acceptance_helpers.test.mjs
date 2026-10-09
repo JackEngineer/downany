@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import test from "node:test";
 
 import {
-  evaluateReliabilityResults,
+  evaluateReliabilityResults as evaluateReviewedResults,
   validateReliabilityMatrix,
 } from "./v031_acceptance_helpers.mjs";
+import { createSyntheticSampleIndependenceReview, syntheticBilibiliAliases } from "./fixtures/v031_sample_independence.mjs";
+
+const evaluateReliabilityResults = (rows, results) => evaluateReviewedResults(rows, results, {
+  loadReview: createSyntheticSampleIndependenceReview,
+});
 
 function matrix() {
   const rows = [];
@@ -325,18 +331,13 @@ test("keeps historical results unchanged but cannot certify independent samples 
   assert.deepEqual(results, before);
 });
 
-const confirmedBilibiliAliases = [
-  "bc63ca78cb85158522232f66e9e986efb95aad4c448c115586925c019df200c6",
-  "afb79f2ce445828ecb999c89317eb6cdfe2de239c8b8fadd149002295019b51b",
-];
-
-test("default independence review excludes all confirmed URL aliases without rewriting downloads", () => {
+test("injected independence review excludes synthetic aliases without rewriting downloads", () => {
   const rows = matrix();
   const results = passingResults(rows);
   for (const target of ["macos-arm64", "windows-x64"]) {
     for (const [index, id] of ["bilibili-01", "bilibili-03"].entries()) {
       const result = results.find((item) => item.target === target && item.id === id);
-      result.sampleSha256 = confirmedBilibiliAliases[index];
+      result.sampleSha256 = syntheticBilibiliAliases[index];
       result.sampleIndependenceReview = { status: "passed" }; // A row cannot override the default review.
     }
   }
@@ -356,7 +357,18 @@ test("a genuinely rerun replacement URL hash does not inherit a previous alias e
   const rows = matrix();
   const results = passingResults(rows);
   for (const target of ["macos-arm64", "windows-x64"]) {
-    results.find((item) => item.target === target && item.id === "bilibili-01").sampleSha256 = confirmedBilibiliAliases[0];
+    results.find((item) => item.target === target && item.id === "bilibili-01").sampleSha256 = syntheticBilibiliAliases[0];
   }
   assert.equal(evaluateReliabilityResults(rows, results).passed, true);
+});
+
+test("default acceptance evaluation fails closed when the real review is missing", (t) => {
+  t.mock.method(fs, "readFileSync", () => { throw new Error("PRIVATE PATH"); });
+  assert.throws(() => evaluateReviewedResults(matrix(), []), /^Error: Sample independence review is missing or invalid$/);
+});
+
+test("acceptance evaluation rejects an invalid injected review", () => {
+  assert.throws(() => evaluateReviewedResults(matrix(), [], {
+    loadReview: () => ({ schemaVersion: 1, groups: [] }),
+  }), /^Error: Sample independence review is missing or invalid$/);
 });

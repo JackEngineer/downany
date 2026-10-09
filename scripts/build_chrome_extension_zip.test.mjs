@@ -10,7 +10,27 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const extensionVersion = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "browser-extension", "manifest.json"), "utf8")).version;
 const buildScript = path.join(repositoryRoot, "scripts", "build_chrome_extension_zip.sh");
 
-test("builds a versioned extension ZIP without tests or hidden files", () => {
+test("builds a versioned extension ZIP without tests or hidden files", (t) => {
+  const tools = spawnSync("bash", ["-c",
+    'for tool in zip unzip shasum; do if ! command -v "$tool" >/dev/null 2>&1; then printf "%s\n" "$tool"; fi; done'], {
+    encoding: "utf8", timeout: 10000, windowsHide: true,
+  });
+  if (tools.error?.code === "ENOENT") {
+    t.skip("扩展 ZIP shell 测试缺少 bash；工具齐全的平台仍验证真实打包字节。");
+    return;
+  }
+  assert.equal(tools.status, 0, `${tools.stdout}\n${tools.stderr}`);
+  const missingTools = tools.stdout.trim().split(/\r?\n/).filter(Boolean);
+  const unzip = spawnSync("unzip", ["-v"], {
+    encoding: "utf8", timeout: 10000, windowsHide: true,
+  });
+  if (unzip.error?.code === "ENOENT" && !missingTools.includes("unzip")) missingTools.push("unzip");
+  if (missingTools.length) {
+    t.skip(`扩展 ZIP shell 测试缺少 ${missingTools.join("、")}；工具齐全的平台仍验证真实打包字节。`);
+    return;
+  }
+  assert.equal(unzip.status, 0, `${unzip.stdout}\n${unzip.stderr}`);
+
   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "downany-extension-package-"));
   try {
     const relativeOutputDir = path.relative(repositoryRoot, outputDir);

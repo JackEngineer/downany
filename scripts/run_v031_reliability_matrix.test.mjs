@@ -7,6 +7,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { runIsolatedAttempt, runMatrix } from "./run_v031_reliability_matrix.mjs";
 import { collectMatrixCase, mergeTargetResults } from "./v031_matrix_run_helpers.mjs";
+import { createSyntheticSampleIndependenceReview } from "./fixtures/v031_sample_independence.mjs";
 
 const sourceUrl = "https://private.invalid/collection?secret=fixture";
 const row = { id: "douyin-08", scenario: "collection", expectation: "downloadable" };
@@ -16,6 +17,9 @@ const candidateSha256 = "b".repeat(64);
 function candidateFixture(t, { payload, unrelatedPayload, early = false, requestError, evaluateError, reply = { parseId: "parse-1" } } = {}) {
   const listeners = new Set();
   const requests = [];
+  const parseEvents = [];
+  const timers = new Map();
+  let timerId = 0;
   let root;
   let closed = false;
   let config;
@@ -32,7 +36,7 @@ function candidateFixture(t, { payload, unrelatedPayload, early = false, request
         assert.deepEqual(Array.from(params.urls), [sourceUrl]);
         assert.equal(params.allow_playlist, true);
         if (requestError) throw requestError;
-        if (early) emit(); else setImmediate(emit);
+        if (early) emit(); else parseEvents.push(emit);
         return reply;
       }
       if (method === "download.createTasks") return { taskIds: ["task-1"] };
@@ -40,13 +44,23 @@ function candidateFixture(t, { payload, unrelatedPayload, early = false, request
       throw new Error("Unexpected fixture method");
     },
   };
-  const context = vm.createContext({ window: { api }, setTimeout: (callback) => setTimeout(callback, 10), clearTimeout });
+  // 手动控制解析事件与计时器顺序；实际解析回调保留原来的超时和错误分支。
+  const context = vm.createContext({ window: { api },
+    setTimeout: (callback) => { const id = ++timerId; timers.set(id, callback); return id; },
+    clearTimeout: (id) => timers.delete(id),
+  });
   const page = {
     waitForFunction: async () => {},
     evaluate: async (callback, argument) => {
       if (evaluateError && argument?.sourceUrl) throw evaluateError;
       context.argument = argument;
-      return vm.runInContext(`(${callback.toString()})(argument)`, context);
+      const evaluated = vm.runInContext(`(${callback.toString()})(argument)`, context);
+      if (argument?.sourceUrl) setImmediate(() => {
+        // 确认回执的 Promise 先落定，再投递 late 事件；仅无结果时显式触发超时。
+        for (const deliver of parseEvents.splice(0)) deliver();
+        for (const [id, fire] of timers) { timers.delete(id); fire(); }
+      });
+      return evaluated;
     },
   };
   const playwright = { _electron: { launch: async ({ env }) => {
@@ -67,6 +81,7 @@ function candidateFixture(t, { payload, unrelatedPayload, early = false, request
       assert.equal(fs.existsSync(path.join(root, "downany-data")), false);
       assert.equal(fs.existsSync(path.join(root, "electron-profile")), false);
       assert.equal(listeners.size, 0);
+      assert.equal(timers.size, 0);
     },
   };
 }
@@ -128,10 +143,10 @@ for (const [label, options] of [
   });
 }
 
-for (const mode of ["batch", "resume", "replacement", "other_candidate", "other_target", "exact_url"]) {
+for (const mode of ["batch", "resume", "replacement", "other_candidate", "other_target", "exact_url", "default_missing", "invalid_review"]) {
   const caseOnly = !["batch", "exact_url"].includes(mode);
   const blocked = ["batch", "resume", "exact_url"].includes(mode);
-  test(`default independence preflight handles ${mode} without inventing evidence`, async (t) => {
+  test(`${mode === "default_missing" ? "default" : "injected"} independence preflight handles ${mode} without inventing evidence`, async (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "downany-alias-preflight-"));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const matrixPath = path.join(root, "matrix.json");
@@ -143,10 +158,8 @@ for (const mode of ["batch", "resume", "replacement", "other_candidate", "other_
     const target = process.platform === "darwin" ? "macos-arm64" : process.platform === "win32" ? "windows-x64" : `${process.platform}-${process.arch}`;
     const candidateSha = createHash("sha256").update("candidate").digest("hex");
     const urls = ["https://private.invalid/bv-alias", "https://private.invalid/av-alias"];
-    const review = JSON.parse(fs.readFileSync(new URL("../docs/acceptance/v0.3.1-sample-independence-review.json", import.meta.url), "utf8"));
+    const review = createSyntheticSampleIndependenceReview();
     review.groups[0].sampleSha256s = urls.map((url) => createHash("sha256").update(url).digest("hex"));
-    const originalRead = fs.readFileSync;
-    t.mock.method(fs, "readFileSync", (file, ...args) => String(file).endsWith("v0.3.1-sample-independence-review.json") ? JSON.stringify(review) : originalRead(file, ...args));
     for (const [index, row] of rows.entries()) {
       const old = process.env[row.urlSource];
       process.env[row.urlSource] = `https://private.invalid/unique-${index}`;
@@ -169,10 +182,22 @@ for (const mode of ["batch", "resume", "replacement", "other_candidate", "other_
     fs.writeFileSync(resultsPath, originalEvidence);
     // Blocked inputs never load Playwright or call runAttempt. A permitted replacement still
     // reaches the real execution boundary; it cannot acquire new evidence from old rows.
+    if (mode === "default_missing") {
+      const originalRead = fs.readFileSync;
+      t.mock.method(fs, "readFileSync", (file, ...args) => {
+        if (String(file).endsWith("v0.3.1-sample-independence-review.json")) throw new Error("PRIVATE PATH");
+        return originalRead(file, ...args);
+      });
+    }
+    const reviewInput = mode === "default_missing" ? undefined : {
+      loadReview: () => mode === "invalid_review" ? { schemaVersion: 1, groups: [] } : structuredClone(review),
+    };
     await assert.rejects(() => runMatrix({ target, executable, candidateArtifact, matrixPath, resultsPath,
       playwrightModule: path.join(root, "never-load-playwright"), cookiesFromBrowser: "chrome", expectedVersion: "0.3.1",
-      caseId: caseOnly ? "bilibili-01" : "" }), blocked
-        ? /^Error: Sample independence review rejected duplicate content$/ : /Cannot find module 'playwright'/);
+      caseId: caseOnly ? "bilibili-01" : "" }, reviewInput),
+    ["default_missing", "invalid_review"].includes(mode)
+      ? /^Error: Sample independence review is missing or invalid$/
+      : blocked ? /^Error: Sample independence review rejected duplicate content$/ : /Cannot find module 'playwright'/);
     assert.equal(fs.readFileSync(resultsPath, "utf8"), originalEvidence);
     assert.equal(fs.readdirSync(root).some((name) => name.includes(".tmp-") || name.endsWith(".bak")), false);
   });

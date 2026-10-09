@@ -49,8 +49,9 @@ export function loadSampleIndependenceReview() {
   }
 }
 
-export function findReviewedSampleConflicts(samples) {
-  const { groups } = loadSampleIndependenceReview();
+export function findReviewedSampleConflicts(samples, { loadReview = loadSampleIndependenceReview } = {}) {
+  // 显式注入只替换输入来源；任何来源仍须满足完整审核合同。
+  const { groups } = validateSampleIndependenceReview(loadReview());
   const groupByHash = new Map(groups.flatMap((group, index) => group.sampleSha256s.map((hash) => [hash, index])));
   const byTargetAndGroup = new Map();
   for (const sample of samples) {
@@ -65,9 +66,9 @@ export function findReviewedSampleConflicts(samples) {
     .map(({ target, ids }) => ({ target, ids: [...ids].sort(), status: "rejected", reason: "duplicate_content" }));
 }
 
-export function assertIndependentMatrixSamples(samples) {
+export function assertIndependentMatrixSamples(samples, { loadReview = loadSampleIndependenceReview } = {}) {
   // 先加载并校验默认复核数据，空输入也不能跳过损坏/缺失的复核文件。
-  const reviewed = findReviewedSampleConflicts(samples);
+  const reviewed = findReviewedSampleConflicts(samples, { loadReview });
   const exact = new Map();
   let repeated = false;
   for (const sample of samples) {

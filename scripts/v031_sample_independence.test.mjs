@@ -7,28 +7,30 @@ import {
   loadSampleIndependenceReview,
   validateSampleIndependenceReview,
 } from "./v031_sample_independence.mjs";
+import { createSyntheticSampleIndependenceReview } from "./fixtures/v031_sample_independence.mjs";
 
-const fixture = JSON.parse(fs.readFileSync(new URL("../docs/acceptance/v0.3.1-sample-independence-review.json", import.meta.url), "utf8"));
+const fixture = createSyntheticSampleIndependenceReview();
+const reviewOptions = { loadReview: createSyntheticSampleIndependenceReview };
 const aliases = fixture.groups[0].sampleSha256s;
 const sample = (id, hash, target = "macos-arm64") => ({ target, id, sampleSha256: hash });
 
-test("default review excludes both confirmed aliases on each target without modifying rows", () => {
+test("injected review excludes both synthetic aliases on each target without modifying rows", () => {
   const rows = [sample("bilibili-01", aliases[0]), sample("bilibili-03", aliases[1])];
   const before = structuredClone(rows);
-  assert.deepEqual(findReviewedSampleConflicts(rows), [{ target: "macos-arm64", ids: ["bilibili-01", "bilibili-03"], status: "rejected", reason: "duplicate_content" }]);
+  assert.deepEqual(findReviewedSampleConflicts(rows, reviewOptions), [{ target: "macos-arm64", ids: ["bilibili-01", "bilibili-03"], status: "rejected", reason: "duplicate_content" }]);
   assert.deepEqual(rows, before);
-  assert.throws(() => assertIndependentMatrixSamples(rows), /^Error: Sample independence review rejected duplicate content$/);
+  assert.throws(() => assertIndependentMatrixSamples(rows, reviewOptions), /^Error: Sample independence review rejected duplicate content$/);
 });
 
 test("review follows hashes across case IDs but does not combine different targets", () => {
-  assert.equal(findReviewedSampleConflicts([sample("bilibili-02", aliases[0]), sample("bilibili-05", aliases[1])]).length, 1);
-  assert.deepEqual(findReviewedSampleConflicts([sample("bilibili-01", aliases[0]), sample("bilibili-03", aliases[1], "windows-x64")]), []);
-  assert.doesNotThrow(() => assertIndependentMatrixSamples([sample("bilibili-01", aliases[0]), sample("bilibili-03", "f".repeat(64))]));
+  assert.equal(findReviewedSampleConflicts([sample("bilibili-02", aliases[0]), sample("bilibili-05", aliases[1])], reviewOptions).length, 1);
+  assert.deepEqual(findReviewedSampleConflicts([sample("bilibili-01", aliases[0]), sample("bilibili-03", aliases[1], "windows-x64")], reviewOptions), []);
+  assert.doesNotThrow(() => assertIndependentMatrixSamples([sample("bilibili-01", aliases[0]), sample("bilibili-03", "f".repeat(64))], reviewOptions));
 });
 
 test("preflight rejects exact URL reuse and invalid identities without exposing them", () => {
-  assert.throws(() => assertIndependentMatrixSamples([sample("youtube-01", "a".repeat(64)), sample("youtube-02", "a".repeat(64))]), /rejected duplicate content/);
-  assert.throws(() => assertIndependentMatrixSamples([sample("youtube-01", "PRIVATE URL")]), /^Error: Sample independence preflight requires valid sample identities$/);
+  assert.throws(() => assertIndependentMatrixSamples([sample("youtube-01", "a".repeat(64)), sample("youtube-02", "a".repeat(64))], reviewOptions), /rejected duplicate content/);
+  assert.throws(() => assertIndependentMatrixSamples([sample("youtube-01", "PRIVATE URL")], reviewOptions), /^Error: Sample independence preflight requires valid sample identities$/);
 });
 
 for (const [label, mutate] of [
@@ -60,5 +62,18 @@ for (const [label, read] of [
     t.mock.method(fs, "readFileSync", read);
     assert.throws(() => loadSampleIndependenceReview(), /^Error: Sample independence review is missing or invalid$/);
     assert.throws(() => findReviewedSampleConflicts([]), /^Error: Sample independence review is missing or invalid$/);
+    assert.throws(() => assertIndependentMatrixSamples([]), /^Error: Sample independence review is missing or invalid$/);
   });
 }
+
+
+test("the default file loader validates supplied file data", (t) => {
+  t.mock.method(fs, "readFileSync", () => JSON.stringify(fixture));
+  assert.deepEqual(loadSampleIndependenceReview(), fixture);
+});
+
+test("an injected loader cannot bypass review schema validation", () => {
+  const invalid = { loadReview: () => ({ schemaVersion: 1, groups: [] }) };
+  assert.throws(() => findReviewedSampleConflicts([], invalid), /^Error: Sample independence review is missing or invalid$/);
+  assert.throws(() => assertIndependentMatrixSamples([], invalid), /^Error: Sample independence review is missing or invalid$/);
+});

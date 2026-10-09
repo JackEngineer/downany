@@ -100,7 +100,7 @@ async function verifyArtifact(task, outputDir, binDir) {
   return { playable: true, sha256: file.sha256, bytes: file.bytes };
 }
 
-export async function runMatrix(options) {
+export async function runMatrix(options, { loadReview } = {}) {
   assert.equal(options.target, expectedRuntimeTarget(), "Target does not match this operating system and architecture");
   assert.ok(fs.statSync(options.executable).isFile(), "Candidate executable is missing");
   assert.ok(fs.statSync(options.candidateArtifact).isFile(), "Candidate artifact is missing");
@@ -123,7 +123,7 @@ export async function runMatrix(options) {
     ...resolved.cases.map(({ row, url }) => ({
       target: options.target, id: row.id, sampleSha256: createHash("sha256").update(url).digest("hex"),
     })),
-  ]);
+  ], { loadReview });
 
   const credentialSource = options.cookiefile ? "cookiefile" : options.cookiesFromBrowser ? "browser" : "none";
   assert.ok(!selectedRows.some((row) => row.scenario === "login") || credentialSource !== "none",

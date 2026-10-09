@@ -1,0 +1,9 @@
+{
+  "version": "0.3.2",
+  "extensionVersion": "0.9.2",
+  "installers": {
+    "macos-arm64": null,
+    "windows-x64": null
+  },
+  "extension": null
+}

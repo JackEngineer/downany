@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { run } from "./run_v031_windows_upgrade.mjs";
-import { assertWindowsNsisPreflight, collectWindowsNsisPreflight } from "./windows_nsis_preflight.mjs";
+import { assertWindowsNsisPreflight, collectWindowsNsisPreflight, evaluateWindowsNsisUninstall } from "./windows_nsis_preflight.mjs";
 
 const REGISTRY_IDS = ["hkcu", "hklm"].flatMap((hive) => ["32", "64"].flatMap((view) =>
   ["install", "uninstall", "protocol"].map((kind) => `registry.${hive}.${view}.${kind}`)));
@@ -74,7 +74,7 @@ test("collector invokes bounded noninteractive PowerShell and returns only the f
   });
   assert.deepEqual(report, cleanReport());
   assert.equal(invocation.file, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-  assert.deepEqual(invocation.args.slice(0, -1), ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"]);
+  assert.deepEqual(invocation.args.slice(0, -1), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
   assert.ok(Buffer.from(invocation.args.at(-1), "base64").toString("utf16le").length > 0);
   assert.equal(invocation.options.windowsHide, true);
   assert.equal(invocation.options.shell, false);
@@ -165,4 +165,66 @@ test("collector disables module progress before native compilation or CIM lookup
   const firstModuleCall = command.search(/^(?:Add-Type|\s*\$processes = @\(Get-CimInstance)\b/m);
   assert.ok(preference >= 0, "PowerShell command must silence progress records");
   assert.ok(firstModuleCall > preference, "Progress must be silenced before modules load");
+});
+
+
+test("uninstall evidence reports a retained installer cache without relaxing initial installation preflight", () => {
+  const report = cleanReport();
+  report.checks.find(({ id }) => id === "cache.installer").state = "present";
+  const evidence = evaluateWindowsNsisUninstall(report);
+  assert.equal(evidence.uninstallVerified, true);
+  assert.equal(evidence.installerCache, "retained");
+  assert.deepEqual(evidence.blocked, []);
+  assert.throws(() => assertWindowsNsisPreflight(report), /preflight blocked/);
+});
+
+for (const id of IDS) {
+  test(`uninstall verification refuses unreadable or remaining ${id}`, () => {
+    for (const state of id === "cache.installer" ? ["error"] : ["present", "error"]) {
+      const report = cleanReport(); report.checks.find((check) => check.id === id).state = state;
+      const evidence = evaluateWindowsNsisUninstall(report);
+      assert.equal(evidence.uninstallVerified, false);
+      assert.deepEqual(evidence.blocked, [id]);
+      if (id === "cache.installer") assert.equal(evidence.installerCache, "unverified");
+    }
+  });
+}
+
+test("uninstall verification preserves complete fixed-report validation", () => {
+  for (const report of [null, { ...cleanReport(), checks: [] }, {
+    ...cleanReport(), error: "PRIVATE_SENTINEL",
+  }, { ...cleanReport(), checks: cleanReport().checks.slice(1) }]) {
+    assert.throws(() => evaluateWindowsNsisUninstall(report), (error) => {
+      assert.match(error.message, /invalid or incomplete report/);
+      assert.doesNotMatch(error.message, /PRIVATE_SENTINEL/);
+      return true;
+    });
+  }
+});
+
+test("collector detects installers of every version using only process names", async () => {
+  let command;
+  await collect(async (_file, args) => {
+    command = Buffer.from(args.at(-1), "base64").toString("utf16le");
+    assert.ok(!args.includes("-ExecutionPolicy"));
+    return { stdout: JSON.stringify(wireReport()), stderr: "" };
+  });
+  assert.match(command, /-Property Name -Filter "[^"\n]*Name LIKE 'Downany-%\.exe'/);
+  assert.doesNotMatch(command, /CommandLine|ExecutablePath|Name='Downany-0\./);
+});
+
+test("collector can obey the remaining bounded uninstall verification budget", async () => {
+  let timeout;
+  await collectWindowsNsisPreflight({ platform: "win32", arch: "x64", systemRoot: "C:\\Windows", timeoutMs: 15,
+    runPowerShell: async (_file, _args, options) => {
+      timeout = options.timeout;
+      return { stdout: JSON.stringify(wireReport()), stderr: "" };
+    },
+  });
+  assert.equal(timeout, 15);
+  for (const timeoutMs of [0, -1, 20_001, Infinity]) {
+    await assert.rejects(collectWindowsNsisPreflight({ platform: "win32", arch: "x64", systemRoot: "C:\\Windows", timeoutMs,
+      runPowerShell: async () => { throw new Error("Unexpected execution"); },
+    }), /preflight unavailable/);
+  }
 });

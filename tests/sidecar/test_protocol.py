@@ -27,7 +27,7 @@ def test_candidate_version_matches_desktop_package():
         "lockfile": lockfile["version"],
         "lockfile_root": lockfile["packages"][""]["version"],
         "sidecar": APP_VERSION,
-    } == dict.fromkeys(("desktop", "lockfile", "lockfile_root", "sidecar"), "0.3.1")
+    } == dict.fromkeys(("desktop", "lockfile", "lockfile_root", "sidecar"), "0.3.2")
 
 
 def test_protocol_version_is_one():

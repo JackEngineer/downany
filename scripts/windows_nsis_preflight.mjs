@@ -83,7 +83,7 @@ Add-PathCheck 'directory.programFilesX86' 'ProgramFilesX86' 'Downany'
 Add-PathCheck 'cache.installer' 'LocalApplicationData' 'downany-desktop-updater\installer.exe'
 $state = 'error'
 try {
-    $processes = @(Get-CimInstance -ClassName Win32_Process -Property Name -Filter "Name='Downany.exe' OR Name='DownanySidecar.exe' OR Name='Uninstall Downany.exe' OR Name='Downany-0.3.0-win-x64.exe' OR Name='Downany-0.3.1-win-x64.exe'" -ErrorAction Stop)
+    $processes = @(Get-CimInstance -ClassName Win32_Process -Property Name -Filter "Name='Downany.exe' OR Name='DownanySidecar.exe' OR Name='Uninstall Downany.exe' OR Name LIKE 'Downany-%.exe'" -ErrorAction Stop)
     $state = if ($processes.Count -eq 0) { 'absent' } else { 'present' }
 } catch { $state = 'error' }
 $checks.Add(@{ id = 'process.downany'; state = $state })
@@ -129,18 +129,34 @@ export function assertWindowsNsisPreflight(report) {
   return report;
 }
 
+/** 卸载后允许 electron-builder 保留安装器缓存；其余安装状态必须已消失。 */
+export function evaluateWindowsNsisUninstall(report) {
+  if (!validReport(report)) throw new Error("Windows uninstall verification blocked: invalid or incomplete report");
+  const blocked = report.checks.filter((check) => check.id === "cache.installer"
+    ? check.state === "error" : check.state !== "absent");
+  const cacheState = report.checks.find((check) => check.id === "cache.installer").state;
+  return {
+    uninstallVerified: blocked.length === 0,
+    installerCache: cacheState === "present" ? "retained" : cacheState === "absent" ? "absent" : "unverified",
+    checks: report.checks.map(({ id, state }) => ({ id, state })),
+    blocked: blocked.map(({ id }) => id),
+  };
+}
+
 export async function collectWindowsNsisPreflight({
   runPowerShell = runFile, platform = process.platform, arch = process.arch, systemRoot = process.env.SystemRoot,
+  timeoutMs = 20_000,
 } = {}) {
   try {
     if (platform !== "win32" || arch !== "x64" || typeof systemRoot !== "string" || !path.win32.isAbsolute(systemRoot)) {
       throw new Error("Unsupported probe host");
     }
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 20_000) throw new Error("Invalid probe bound");
     const executable = path.win32.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     const { stdout, stderr } = await runPowerShell(executable, [
-      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand",
       Buffer.from(PROBE, "utf16le").toString("base64"),
-    ], { windowsHide: true, shell: false, timeout: 20_000, maxBuffer: 64 * 1024, encoding: "utf8" });
+    ], { windowsHide: true, shell: false, timeout: timeoutMs, maxBuffer: 64 * 1024, encoding: "utf8" });
     if (typeof stdout !== "string" || typeof stderr !== "string" || stderr.trim()) throw new Error("Invalid probe output");
     const report = normalizeProbeReport(JSON.parse(stdout.trim()));
     if (!validReport(report)) throw new Error("Incomplete probe report");

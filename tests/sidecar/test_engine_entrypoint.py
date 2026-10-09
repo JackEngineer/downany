@@ -22,14 +22,15 @@ def _run_engine(tmp_path, *arguments):
     for marker in (".migration_v1_done", ".migration_videodownloader_done"):
         (data / marker).write_text("isolated-engine-test\n")
     env = {**os.environ, "DOWNANY_DATA_DIR": str(data)}
+    # 子进程使用本机默认 locale，不能由测试环境替入口修复编码。
+    env.pop("PYTHONIOENCODING", None)
+    env.pop("PYTHONUTF8", None)
     return subprocess.run(
         [sys.executable, "-m", "src.sidecar", *arguments],
         cwd=Path(__file__).resolve().parents[2],
         env=env,
-        input="",
+        input=b"",
         capture_output=True,
-        text=True,
-        encoding="utf-8",
         timeout=20,
         check=False,
     )
@@ -39,7 +40,7 @@ def test_engine_cli_reports_imported_library_without_starting_sidecar(tmp_path):
     result = _run_engine(tmp_path, "--engine-cli", "--engine-id", "bundled", "--", "--version")
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == __version__
+    assert result.stdout.strip() == __version__.encode("ascii")
     assert not (tmp_path / "data" / "history.db").exists()
     assert not (tmp_path / "data" / "config.json").exists()
 
@@ -70,25 +71,29 @@ def test_probe_rejects_an_archive_that_cannot_load_downany_consumers(tmp_path):
 
     result = _run_engine(tmp_path, "--engine-probe", "--engine-id", digest)
 
-    assert result.returncode != 0
-    assert result.stdout == ""
-    assert str(tmp_path) not in result.stderr
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert result.stderr == ("新版下载工具与当前应用不兼容。" + os.linesep).encode("utf-8")
+    assert str(tmp_path).encode("utf-8") not in result.stderr
     assert not (tmp_path / "data" / "history.db").exists()
 
 
-@pytest.mark.parametrize("arguments", [
-    ("--engine-cli", "--engine-id", "../private-path", "--", "--version"),
-    ("--engine-probe", "--engine-id", "0" * 64),
-    ("--engine-cli", "--version"),
-    ("--unrecognized-option",),
+@pytest.mark.parametrize(("arguments", "message"), [
+    (("--engine-cli", "--engine-id", "../private-path", "--", "--version"),
+     "无法启动下载引擎，请重新更新后重试。"),
+    (("--engine-probe", "--engine-id", "0" * 64),
+     "无法启动下载引擎，请重新更新后重试。"),
+    (("--engine-cli", "--version"), "无法识别启动参数。"),
+    (("--unrecognized-option",), "无法识别启动参数。"),
 ])
-def test_invalid_tool_request_fails_without_protocol_or_private_output(tmp_path, arguments):
+def test_invalid_tool_request_fails_without_protocol_or_private_output(tmp_path, arguments, message):
     result = _run_engine(tmp_path, *arguments)
 
-    assert result.returncode != 0
-    assert result.stdout == ""
-    assert "private-path" not in result.stderr
-    assert str(tmp_path) not in result.stderr
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert result.stderr == (message + os.linesep).encode("utf-8")
+    assert b"private-path" not in result.stderr
+    assert str(tmp_path).encode("utf-8") not in result.stderr
     assert not (tmp_path / "data" / "history.db").exists()
 
 

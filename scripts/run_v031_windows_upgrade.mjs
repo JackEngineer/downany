@@ -1,4 +1,4 @@
-/** 在临时 Windows 安装目录中验证正式 v0.3.0 NSIS 覆盖升级到 v0.3.1 候选。 */
+/** 在专用 Windows 环境中验证正式基线的首次安装、候选覆盖升级与真实卸载。 */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -8,6 +8,7 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   addFromInput,
@@ -18,7 +19,7 @@ import {
   verifyCompletedMedia,
 } from "./test_windows_real_downloads.mjs";
 import { assertBridgeUnused } from "./package_smoke_helpers.mjs";
-import { assertWindowsNsisPreflight, collectWindowsNsisPreflight } from "./windows_nsis_preflight.mjs";
+import { assertWindowsNsisPreflight, collectWindowsNsisPreflight, evaluateWindowsNsisUninstall } from "./windows_nsis_preflight.mjs";
 import { createMediaFaultServer } from "./windows_media_fault_server.mjs";
 import {
   buildDownloadGateEnvironment,
@@ -93,14 +94,122 @@ async function installNsis(installer, installRoot) {
   return executable;
 }
 
-async function uninstallNsis(installRoot) {
-  const uninstaller = path.join(installRoot, "Uninstall Downany.exe");
-  if (!fs.existsSync(uninstaller)) return;
-  await runFile(uninstaller, ["/S", "/currentuser"], {
-    windowsHide: true,
-    timeout: 5 * 60_000,
-    maxBuffer: 1024 * 1024,
+const ownedUpgradeRoots = new WeakSet();
+const PROGRAM_FILES = Object.freeze([
+  ["program.main", "Downany.exe"],
+  ["program.uninstaller", "Uninstall Downany.exe"],
+  ["program.app", "resources/app.asar"],
+  ["program.sidecar", "resources/sidecar/DownanySidecar/DownanySidecar.exe"],
+  ["program.ffmpeg", "resources/bin/ffmpeg.exe"],
+  ["program.ffprobe", "resources/bin/ffprobe.exe"],
+]);
+
+export function createOwnedUpgradeRoot(parent = os.tmpdir()) {
+  assert.ok(path.isAbsolute(parent), "Owned root parent must be absolute");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(parent, "downany-windows-upgrade-")));
+  const stat = fs.lstatSync(root);
+  const ownership = Object.freeze({ root, device: stat.dev, inode: stat.ino });
+  ownedUpgradeRoots.add(ownership);
+  return ownership;
+}
+
+function assertOwnedRoot(ownership) {
+  assert.ok(ownedUpgradeRoots.has(ownership), "Windows upgrade root ownership is unknown");
+  const stat = fs.lstatSync(ownership.root);
+  assert.ok(stat.isDirectory() && !stat.isSymbolicLink()
+    && stat.dev === ownership.device && stat.ino === ownership.inode
+    && fs.realpathSync(ownership.root) === ownership.root, "Windows upgrade root identity changed");
+}
+
+function assertOwnedPath(ownership, target) {
+  assertOwnedRoot(ownership);
+  const relative = path.relative(ownership.root, path.resolve(target));
+  assert.ok(relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+    "Windows upgrade target escaped its owned root");
+  let current = ownership.root;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    let stat;
+    try { stat = fs.lstatSync(current); }
+    catch (error) { if (error.code === "ENOENT") return; throw error; }
+    assert.ok(!stat.isSymbolicLink() && fs.realpathSync(current) === current,
+      "Windows upgrade target contains a reparse point or redirected path");
+  }
+}
+
+export function assertOwnedUpgradeTree(ownership) {
+  assertOwnedRoot(ownership);
+  const pending = [ownership.root];
+  while (pending.length) {
+    const directory = pending.pop();
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      assertOwnedPath(ownership, target);
+      if (fs.lstatSync(target).isDirectory()) pending.push(target);
+    }
+  }
+  return ownership.root;
+}
+
+function inspectProgramFiles(ownership, installRoot) {
+  assertOwnedPath(ownership, installRoot);
+  return PROGRAM_FILES.map(([id, relative]) => {
+    const target = path.join(installRoot, relative);
+    assertOwnedPath(ownership, target);
+    try { fs.lstatSync(target); return { id, state: "present" }; }
+    catch (error) { return { id, state: error.code === "ENOENT" ? "absent" : "error" }; }
   });
+}
+
+export async function uninstallNsis(installRoot, {
+  ownership, collectPreflight = collectWindowsNsisPreflight, execute = runFile,
+  wait = delay, now = () => performance.now(), timeoutMs = 60_000, pollIntervalMs = 250,
+} = {}) {
+  assert.ok(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 60_000, "Invalid uninstall wait bound");
+  assert.ok(Number.isInteger(pollIntervalMs) && pollIntervalMs > 0, "Invalid uninstall poll interval");
+  // 卸载器自身会递归删除安装文件，执行前也必须拒绝重解析点。
+  assertOwnedUpgradeTree(ownership);
+  assertOwnedPath(ownership, installRoot);
+  const uninstaller = path.join(installRoot, "Uninstall Downany.exe");
+  let uninstallerStat;
+  try { uninstallerStat = fs.statSync(uninstaller); }
+  catch { throw new Error("Required uninstaller is missing or unreadable; uninstall is unverified"); }
+  assert.ok(uninstallerStat.isFile(), "Required uninstaller is missing or unreadable; uninstall is unverified");
+  await execute(uninstaller, ["/S", "/currentuser"], {
+    windowsHide: true, timeout: 5 * 60_000, maxBuffer: 1024 * 1024,
+  });
+  const deadline = now() + timeoutMs;
+  let blocked = [];
+  for (;;) {
+    const remaining = deadline - now();
+    if (remaining <= 0) throw new Error(`Windows uninstall verification timed out: ${blocked.join(", ")}`);
+    const report = await collectPreflight({ timeoutMs: Math.max(1, Math.min(20_000, Math.floor(remaining))) });
+    const inspection = evaluateWindowsNsisUninstall(report);
+    const programFiles = inspectProgramFiles(ownership, installRoot);
+    if ([...inspection.checks, ...programFiles].some(({ state }) => state === "error")) {
+      throw new Error("Windows uninstall verification unavailable; evidence retained");
+    }
+    blocked = [...inspection.blocked, ...programFiles.filter(({ state }) => state !== "absent").map(({ id }) => id)];
+    if (now() > deadline) throw new Error("Windows uninstall verification exceeded its wait bound");
+    if (!blocked.length) return {
+      ...inspection,
+      installerExecutionVerified: true,
+      programFilesRemoved: true,
+      programFileChecks: programFiles,
+    };
+    const waitRemaining = deadline - now();
+    if (waitRemaining <= 0) throw new Error(`Windows uninstall verification timed out: ${blocked.join(", ")}`);
+    await wait(Math.min(pollIntervalMs, waitRemaining));
+  }
+}
+
+export function removeOwnedUpgradeRoot(ownership, uninstallReports) {
+  assert.ok(Array.isArray(uninstallReports) && uninstallReports.length === 2
+    && uninstallReports.every((report) => report?.uninstallVerified === true && report.programFilesRemoved === true),
+  "Verified upgrade and fresh-install uninstalls are required before cleanup");
+  const root = assertOwnedUpgradeTree(ownership);
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
+  ownedUpgradeRoots.delete(ownership);
 }
 
 async function generateMedia(executable, target) {
@@ -147,7 +256,7 @@ function assertInside(root, target, label) {
   assert.ok(relative && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `${label} escaped isolated root`);
 }
 
-async function verifyFreshCandidateInstall({ options, playwright, root }) {
+async function verifyFreshCandidateInstall({ options, playwright, root, ownership, collectPreflight }) {
   const firstRoot = path.join(root, "first-install");
   const dataDir = path.join(firstRoot, "downany-data");
   const profileDir = path.join(firstRoot, "electron-profile");
@@ -165,6 +274,8 @@ async function verifyFreshCandidateInstall({ options, playwright, root }) {
     environment: buildFreshInstallEnvironment(process.env, dataDir, homeDir),
     pageErrors: [], stderr: "", cases: [], launches: [], app: null, browser: null,
   };
+  let firstInstallEvidence;
+  let uninstall;
   try {
     assert.deepEqual(fs.readdirSync(dataDir), [], "First-install data directory must begin empty");
     session.executable = await installNsis(options.candidateArtifact, installRoot);
@@ -184,7 +295,7 @@ async function verifyFreshCandidateInstall({ options, playwright, root }) {
       .waitFor({ state: "visible", timeout: 15_000 });
     assertInside(firstRoot, completed.path, "Downloaded file");
     assert.deepEqual(session.pageErrors, [], "Renderer emitted page errors during first download");
-    return {
+    firstInstallEvidence = {
       installerExecutionVerified: true,
       candidateLaunchVerified: true,
       candidateFilesMatchUnpacked: candidateFiles,
@@ -205,10 +316,11 @@ async function verifyFreshCandidateInstall({ options, playwright, root }) {
   } finally {
     try { await closeGateApp(session); } finally {
       try { await session.faultServer?.close(); } finally {
-        await uninstallNsis(installRoot);
+        uninstall = await uninstallNsis(installRoot, { ownership, collectPreflight });
       }
     }
   }
+  return { ...firstInstallEvidence, uninstall };
 }
 
 export async function run(options, { collectPreflight = collectWindowsNsisPreflight } = {}) {
@@ -223,7 +335,8 @@ export async function run(options, { collectPreflight = collectWindowsNsisPrefli
   assert.equal(sha256File(options.sourceArtifact), OFFICIAL_V030_WINDOWS_SHA256, "Source installer is not the official v0.3.0 release");
   await assertBridgeUnused();
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "downany-v031-windows-upgrade-"));
+  const ownership = createOwnedUpgradeRoot();
+  const root = ownership.root;
   const directories = prepareDownloadGateRoot(root);
   const installRoot = path.join(root, "Applications", "Downany");
   fs.mkdirSync(path.dirname(installRoot));
@@ -326,36 +439,35 @@ export async function run(options, { collectPreflight = collectWindowsNsisPrefli
     await closeGateApp(session);
     await session.faultServer.close();
     session.faultServer = null;
-    await uninstallNsis(installRoot);
+    const uninstall = await uninstallNsis(installRoot, { ownership, collectPreflight });
     await assertBridgeUnused();
     const firstInstall = await verifyFreshCandidateInstall({
       options,
       playwright: session.playwright,
-      root,
+      root, ownership, collectPreflight,
     });
     await assertBridgeUnused();
-    verified = { ...upgradeEvidence, firstInstall };
+    // 两次卸载都已独立确认；只清理本脚本唯一创建且未被重定向的证据根。
+    removeOwnedUpgradeRoot(ownership, [uninstall, firstInstall.uninstall]);
+    verified = { ...upgradeEvidence, uninstall, firstInstall, temporaryRootCleanupVerified: true };
     fs.mkdirSync(path.dirname(options.resultsPath), { recursive: true });
     fs.writeFileSync(options.resultsPath, `${JSON.stringify(verified, null, 2)}\n`);
-    // NSIS can leave its self-delete helper holding the install directory for
-    // a brief moment after the uninstaller process exits on Windows.
-    fs.rmSync(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
     return verified;
   } catch (error) {
-    console.error(`Windows upgrade evidence retained for diagnosis: ${root}`);
+    if (fs.existsSync(root)) console.error(`Windows upgrade evidence retained for diagnosis: ${root}`);
     throw error;
   } finally {
     try { await closeGateApp(session); } catch {}
     try { await session.faultServer?.close(); } catch {}
     if (!verified) {
-      try { await uninstallNsis(installRoot); } catch {}
+      try { await uninstallNsis(installRoot, { ownership, collectPreflight }); } catch {}
     }
   }
 }
 
 async function main() {
   if (process.argv.includes("--help")) {
-    console.log("node scripts/run_v031_windows_upgrade.mjs --source-artifact=<absolute v0.3.0 NSIS> --candidate-artifact=<absolute v0.3.1 NSIS> --candidate-executable=<absolute unpacked Downany.exe> --playwright-module=<absolute Playwright directory> --results=<absolute results.json>");
+    console.log("node scripts/run_v031_windows_upgrade.mjs --source-artifact=<absolute official baseline NSIS> --candidate-artifact=<absolute candidate NSIS> --candidate-version=<major.minor.patch> --candidate-executable=<absolute unpacked Downany.exe> --playwright-module=<absolute Playwright directory> --results=<absolute results.json>");
     return;
   }
   const report = await run(parseArguments(process.argv.slice(2)));

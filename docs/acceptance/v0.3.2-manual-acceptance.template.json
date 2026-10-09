@@ -1,0 +1,38 @@
+{
+  "version": "0.3.2",
+  "firstUseTrials": [],
+  "packageRecords": [
+    {
+      "target": "macos-arm64",
+      "candidateSha256": null,
+      "recordedAt": null,
+      "manual": false,
+      "checks": {
+        "firstInstall": false,
+        "upgradeFrom030": false,
+        "settingsPreserved": false,
+        "queuePreserved": false,
+        "pauseResume": false,
+        "playback": false,
+        "noOverwrite": false
+      },
+      "notes": ""
+    },
+    {
+      "target": "windows-x64",
+      "candidateSha256": null,
+      "recordedAt": null,
+      "manual": false,
+      "checks": {
+        "firstInstall": false,
+        "upgradeFrom030": false,
+        "settingsPreserved": false,
+        "queuePreserved": false,
+        "pauseResume": false,
+        "playback": false,
+        "noOverwrite": false
+      },
+      "notes": ""
+    }
+  ]
+}

@@ -3,10 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { recordCandidateArtifact } from "./v031_candidate_artifacts.mjs";
+import { candidateArtifactContract, createCandidateArtifactContract, recordCandidateArtifact } from "./v031_candidate_artifacts.mjs";
 
 function parseArguments(rawArguments) {
-  const allowed = new Set(["--manifest", "--target", "--artifact"]);
+  const allowed = new Set(["--manifest", "--target", "--artifact", "--expected-version", "--expected-extension-version"]);
   const parsed = new Map();
   for (const argument of rawArguments) {
     const separator = argument.indexOf("=");
@@ -16,10 +16,17 @@ function parseArguments(rawArguments) {
     if (!allowed.has(name) || parsed.has(name) || !value) throw new Error(`未知、重复或空参数：${name}`);
     parsed.set(name, value);
   }
-  for (const name of allowed) {
+  for (const name of ["--manifest", "--target", "--artifact"]) {
     if (!parsed.has(name)) throw new Error(`缺少参数：${name}`);
   }
+  if (parsed.has("--expected-version") !== parsed.has("--expected-extension-version")) {
+    throw new Error("应用和插件版本必须同时指定");
+  }
+  const contract = parsed.has("--expected-version") ? createCandidateArtifactContract({
+    version: parsed.get("--expected-version"), extensionVersion: parsed.get("--expected-extension-version"),
+  }) : candidateArtifactContract;
   return {
+    contract,
     manifestPath: parsed.get("--manifest"),
     target: parsed.get("--target"),
     artifactPath: parsed.get("--artifact"),
@@ -60,7 +67,7 @@ try {
     artifactPath,
     sha256: await sha256(artifactPath),
     bytes: stat.size,
-  });
+  }, args.contract);
   const temporaryPath = `${manifestPath}.tmp`;
   fs.writeFileSync(temporaryPath, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
   fs.renameSync(temporaryPath, manifestPath);

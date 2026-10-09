@@ -75,6 +75,10 @@ jobs:
           ../scripts/package_smoke_helpers.test.mjs
           ../scripts/test_packaged_media_tools.test.mjs
           ../scripts/windows_media_lock.test.mjs
+          ../scripts/windows_nsis_preflight.test.mjs
+          ../scripts/run_v031_windows_upgrade.test.mjs
+          ../scripts/v031_candidate_artifacts.test.mjs
+          ../scripts/v031_manual_acceptance.test.mjs
 
   browser-extension:
     runs-on: macos-latest
@@ -129,6 +133,32 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Read locked release versions
+        id: release_versions
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { createCandidateArtifactContract } from './scripts/v031_candidate_artifacts.mjs';
+          const app = JSON.parse(fs.readFileSync('desktop/package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('desktop/package-lock.json', 'utf8'));
+          const extension = JSON.parse(fs.readFileSync('browser-extension/manifest.json', 'utf8'));
+          const contract = createCandidateArtifactContract({ version: app.version, extensionVersion: extension.version });
+          const protocol = fs.readFileSync('src/sidecar/protocol.py', 'utf8').match(/APP_VERSION = "([^"]+)"/)?.[1];
+          if (lock.version !== app.version || lock.packages[''].version !== app.version || protocol !== app.version) {
+            throw new Error('Release source versions do not match');
+          }
+          if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${app.version}`) {
+            throw new Error('Release tag does not match the source version');
+          }
+          const manifest = `docs/acceptance/v${app.version}-candidate-artifacts.json`;
+          const declaration = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+          if (declaration.version !== app.version || declaration.extensionVersion !== extension.version) {
+            throw new Error('Candidate manifest versions do not match');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            `version=${app.version}\nextension=${extension.version}\nmanifest=${manifest}\nupgrade_results=docs/acceptance/v${app.version}-windows-upgrade-results.json\n`);
+          NODE
       - name: Verify retained Windows media lock
         if: matrix.target == 'win32-x64'
         env:
@@ -297,17 +327,19 @@ jobs:
             Select-Object -First 1
           if (-not $electron) { throw "packaged Downany.exe not found" }
           node scripts/test_packaged_electron.mjs "--executable=$($electron.FullName)"
-      - name: Record v0.3.1 Windows candidate
+      - name: Record Windows release candidate
         if: matrix.target == 'win32-x64'
         shell: pwsh
         run: >-
           node scripts/record_v031_candidate_artifact.mjs
-          --manifest=docs/acceptance/v0.3.1-candidate-artifacts.json
+          --manifest=${{ steps.release_versions.outputs.manifest }}
           --target=windows-x64
-          --artifact=desktop\release\Downany-0.3.1-win-x64.exe
+          --artifact=desktop\release\Downany-${{ steps.release_versions.outputs.version }}-win-x64.exe
+          --expected-version=${{ steps.release_versions.outputs.version }}
+          --expected-extension-version=${{ steps.release_versions.outputs.extension }}
       - name: Install Windows upgrade gate runtime
         id: windows_upgrade_runtime
-        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+        if: matrix.target == 'win32-x64'
         shell: pwsh
         run: |
           $root = Join-Path $env:RUNNER_TEMP "v031-playwright"
@@ -316,7 +348,7 @@ jobs:
           "module=$root\node_modules\playwright" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Download official v0.3.0 Windows installer
         id: windows_upgrade_source
-        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+        if: matrix.target == 'win32-x64'
         shell: pwsh
         run: |
           $source = Join-Path $env:RUNNER_TEMP "Downany-0.3.0-win-x64.exe"
@@ -326,16 +358,17 @@ jobs:
             throw "Official v0.3.0 installer checksum mismatch"
           }
           "artifact=$source" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-      - name: Verify v0.3.0 to v0.3.1 Windows upgrade
-        if: matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch'
+      - name: Verify official v0.3.0 Windows installation and upgrade
+        if: matrix.target == 'win32-x64'
         shell: pwsh
         run: >-
           node scripts/run_v031_windows_upgrade.mjs
           "--source-artifact=${{ steps.windows_upgrade_source.outputs.artifact }}"
-          "--candidate-artifact=$env:GITHUB_WORKSPACE\desktop\release\Downany-0.3.1-win-x64.exe"
+          "--candidate-artifact=$env:GITHUB_WORKSPACE\desktop\release\Downany-${{ steps.release_versions.outputs.version }}-win-x64.exe"
           "--candidate-executable=$env:GITHUB_WORKSPACE\desktop\release\win-unpacked\Downany.exe"
           "--playwright-module=${{ steps.windows_upgrade_runtime.outputs.module }}"
-          "--results=$env:GITHUB_WORKSPACE\docs\acceptance\v0.3.1-windows-upgrade-results.json"
+          "--candidate-version=${{ steps.release_versions.outputs.version }}"
+          "--results=$env:GITHUB_WORKSPACE\${{ steps.release_versions.outputs.upgrade_results }}"
       - name: Smoke-test packaged Electron (macOS)
         if: matrix.target == 'darwin-arm64'
         shell: bash
@@ -343,6 +376,16 @@ jobs:
           electron="$(find "$GITHUB_WORKSPACE/desktop/release" -type f -path '*/Downany.app/Contents/MacOS/Downany' -perm -111 -print -quit)"
           test -n "$electron"
           node scripts/test_packaged_electron.mjs --executable="$electron"
+      - name: Record macOS release candidate
+        if: matrix.target == 'darwin-arm64'
+        shell: bash
+        run: >-
+          node scripts/record_v031_candidate_artifact.mjs
+          --manifest=${{ steps.release_versions.outputs.manifest }}
+          --target=macos-arm64
+          --artifact=desktop/release/Downany-${{ steps.release_versions.outputs.version }}-mac.dmg
+          --expected-version=${{ steps.release_versions.outputs.version }}
+          --expected-extension-version=${{ steps.release_versions.outputs.extension }}
       - name: Upload native resources
         uses: actions/upload-artifact@v7
         if: github.event_name == 'workflow_dispatch' && inputs.package_mode == 'native'
@@ -359,5 +402,5 @@ jobs:
           if-no-files-found: error
           path: |
             desktop/release/**
-            ${{ matrix.target == 'win32-x64' && 'docs/acceptance/v0.3.1-candidate-artifacts.json' || '' }}
-            ${{ matrix.target == 'win32-x64' && github.event_name == 'workflow_dispatch' && 'docs/acceptance/v0.3.1-windows-upgrade-results.json' || '' }}
+            ${{ steps.release_versions.outputs.manifest }}
+            ${{ matrix.target == 'win32-x64' && steps.release_versions.outputs.upgrade_results || '' }}

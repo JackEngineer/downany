@@ -35,7 +35,10 @@ function collectPrivateEvidence(value, failures, location = "evidence") {
   }
 }
 
-export function evaluateManualAcceptance(evidence) {
+export function evaluateManualAcceptance(evidence, { expectedVersion = "0.3.1" } = {}) {
+  if (typeof expectedVersion !== "string" || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(expectedVersion)) {
+    throw new Error("Expected version must be major.minor.patch");
+  }
   const failures = [];
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
     return {
@@ -45,7 +48,7 @@ export function evaluateManualAcceptance(evidence) {
       failures: ["Manual acceptance evidence must be an object"],
     };
   }
-  if (evidence.version !== "0.3.1") failures.push("Evidence version must be 0.3.1");
+  if (evidence.version !== expectedVersion) failures.push(`Evidence version must be ${expectedVersion}`);
   collectPrivateEvidence(evidence, failures);
 
   // 首次试用门槛已由用户取消；历史字段只作记录，仍参与上方全证据隐私扫描。

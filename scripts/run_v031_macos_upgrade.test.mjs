@@ -54,8 +54,16 @@ test("isolated installation preserves relative framework symlinks", (t) => {
   fs.mkdirSync(path.dirname(executable), { recursive: true });
   fs.mkdirSync(path.join(framework, "Versions", "A", "Resources"), { recursive: true });
   fs.writeFileSync(executable, "binary");
-  fs.symlinkSync("A", path.join(framework, "Versions", "Current"));
-  fs.symlinkSync("Versions/Current/Resources", path.join(framework, "Resources"));
+  try {
+    fs.symlinkSync("A", path.join(framework, "Versions", "Current"));
+    fs.symlinkSync("Versions/Current/Resources", path.join(framework, "Resources"));
+  } catch (error) {
+    if (process.platform === "win32" && ["EPERM", "EACCES"].includes(error.code)) {
+      t.skip("Windows 当前权限无法创建 macOS framework 复制测试所需的相对符号链接；macOS CI 保留实跑。");
+      return;
+    }
+    throw error;
+  }
 
   const installedApp = path.join(root, "installed", "Downany.app");
   copyInstalledApp(executable, installedApp, root);

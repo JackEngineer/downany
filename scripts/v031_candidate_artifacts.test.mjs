@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
+  createCandidateArtifactContract,
   evaluateCandidateArtifacts,
   recordCandidateArtifact,
 } from "./v031_candidate_artifacts.mjs";
@@ -133,4 +134,28 @@ test("refuses unknown targets and artifacts outside the repository", () => {
     sha256: WIN_HASH,
     bytes: 200,
   }), /inside the repository/i);
+});
+
+test("new release contracts bind installer and extension names without accepting historical packages", () => {
+  const contract = createCandidateArtifactContract({ version: "0.3.2", extensionVersion: "0.9.2" });
+  const manifest = completeManifest();
+  manifest.version = contract.version; manifest.extensionVersion = contract.extensionVersion;
+  for (const target of ["macos-arm64", "windows-x64"]) {
+    manifest.installers[target].path = `artifacts/${contract.artifactFilenames[target]}`;
+  }
+  manifest.extension.path = `artifacts/${contract.artifactFilenames.extension}`;
+  assert.equal(evaluateCandidateArtifacts(manifest, matchingInspections(), contract).releaseReady, true);
+  assert.equal(evaluateCandidateArtifacts(manifest, matchingInspections()).releaseReady, false);
+  manifest.installers["windows-x64"] = null;
+  const record = { target: "windows-x64", repositoryRoot: "/repo", sha256: WIN_HASH, bytes: 200,
+    artifactPath: "/repo/desktop/release/Downany-0.3.2-win-x64.exe" };
+  assert.equal(recordCandidateArtifact(manifest, record, contract).installers["windows-x64"].sha256, WIN_HASH);
+  assert.throws(() => recordCandidateArtifact(manifest, { ...record,
+    artifactPath: "/repo/desktop/release/Downany-0.3.1-win-x64.exe" }, contract), /filename/);
+});
+
+test("release contract versions cannot insert unsafe artifact names", () => {
+  for (const version of ["../0.3.2", "0.3.2/private", "0.3.2\\private", "", "00.3.2"]) {
+    assert.throws(() => createCandidateArtifactContract({ version, extensionVersion: "0.9.2" }), /major.minor.patch/);
+  }
 });

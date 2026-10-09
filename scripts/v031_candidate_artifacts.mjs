@@ -1,12 +1,24 @@
 import path from "node:path";
 
 const INSTALLER_TARGETS = ["macos-arm64", "windows-x64"];
-const REQUIRED_VERSION = "0.3.1";
-const REQUIRED_EXTENSION_VERSION = "0.8.3";
-const ARTIFACT_FILENAMES = Object.freeze({
-  "macos-arm64": `Downany-${REQUIRED_VERSION}-mac.dmg`,
-  "windows-x64": `Downany-${REQUIRED_VERSION}-win-x64.exe`,
-  extension: `Downany-chrome-extension-${REQUIRED_EXTENSION_VERSION}.zip`,
+export function createCandidateArtifactContract({ version, extensionVersion }) {
+  const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  if (!versionPattern.test(version || "") || !versionPattern.test(extensionVersion || "")) {
+    throw new Error("Candidate artifact versions must be major.minor.patch");
+  }
+  return Object.freeze({
+    installerTargets: Object.freeze([...INSTALLER_TARGETS]), version, extensionVersion,
+    artifactFilenames: Object.freeze({
+      "macos-arm64": `Downany-${version}-mac.dmg`,
+      "windows-x64": `Downany-${version}-win-x64.exe`,
+      extension: `Downany-chrome-extension-${extensionVersion}.zip`,
+    }),
+  });
+}
+
+// 保留历史 0.3.1 清单的默认合同；新版本必须显式指定已锁定的版本。
+export const candidateArtifactContract = createCandidateArtifactContract({
+  version: "0.3.1", extensionVersion: "0.8.3",
 });
 
 function isSha256(value) {
@@ -22,7 +34,7 @@ function isSafeRelativePath(value) {
     && !value.split("/").includes("..");
 }
 
-function validateDeclaration(label, declaration, failures) {
+function validateDeclaration(label, declaration, failures, contract) {
   if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) {
     failures.push(`${label} artifact declaration is invalid`);
     return false;
@@ -30,8 +42,8 @@ function validateDeclaration(label, declaration, failures) {
   if (!isSafeRelativePath(declaration.path)) {
     failures.push(`${label} path must be repository-relative`);
   }
-  if (ARTIFACT_FILENAMES[label] && path.posix.basename(declaration.path || "") !== ARTIFACT_FILENAMES[label]) {
-    failures.push(`${label} filename must be ${ARTIFACT_FILENAMES[label]}`);
+  if (contract.artifactFilenames[label] && path.posix.basename(declaration.path || "") !== contract.artifactFilenames[label]) {
+    failures.push(`${label} filename must be ${contract.artifactFilenames[label]}`);
   }
   if (!isSha256(declaration.sha256)) failures.push(`${label} SHA-256 is invalid`);
   if (!Number.isInteger(declaration.bytes) || declaration.bytes <= 0) {
@@ -52,7 +64,8 @@ function compareInspection(label, declaration, inspection, failures, verified) {
   }
 }
 
-export function evaluateCandidateArtifacts(manifest, inspections = {}) {
+export function evaluateCandidateArtifacts(manifest, inspections = {}, versions = candidateArtifactContract) {
+  const contract = createCandidateArtifactContract(versions);
   const failures = [];
   const releaseBlockers = [];
   const verified = [];
@@ -65,9 +78,9 @@ export function evaluateCandidateArtifacts(manifest, inspections = {}) {
       failures: ["Candidate manifest must be an object"],
     };
   }
-  if (manifest.version !== REQUIRED_VERSION) failures.push(`version must be ${REQUIRED_VERSION}`);
-  if (manifest.extensionVersion !== REQUIRED_EXTENSION_VERSION) {
-    failures.push(`extensionVersion must be ${REQUIRED_EXTENSION_VERSION}`);
+  if (manifest.version !== contract.version) failures.push(`version must be ${contract.version}`);
+  if (manifest.extensionVersion !== contract.extensionVersion) {
+    failures.push(`extensionVersion must be ${contract.extensionVersion}`);
   }
 
   const installers = manifest.installers && typeof manifest.installers === "object"
@@ -79,12 +92,12 @@ export function evaluateCandidateArtifacts(manifest, inspections = {}) {
       releaseBlockers.push(`${target} installer is not available`);
       continue;
     }
-    if (validateDeclaration(target, declaration, failures)) {
+    if (validateDeclaration(target, declaration, failures, contract)) {
       compareInspection(target, declaration, inspections[target], failures, verified);
     }
   }
 
-  if (validateDeclaration("extension", manifest.extension, failures)) {
+  if (validateDeclaration("extension", manifest.extension, failures, contract)) {
     compareInspection("extension", manifest.extension, inspections.extension, failures, verified);
   }
 
@@ -98,13 +111,14 @@ export function evaluateCandidateArtifacts(manifest, inspections = {}) {
   };
 }
 
-export function recordCandidateArtifact(manifest, record) {
+export function recordCandidateArtifact(manifest, record, versions = candidateArtifactContract) {
+  const contract = createCandidateArtifactContract(versions);
   const target = record?.target;
   if (![...INSTALLER_TARGETS, "extension"].includes(target)) {
     throw new Error("Candidate artifact target is invalid");
   }
-  if (manifest?.version !== REQUIRED_VERSION || manifest?.extensionVersion !== REQUIRED_EXTENSION_VERSION) {
-    throw new Error("Candidate manifest versions do not match the v0.3.1 contract");
+  if (manifest?.version !== contract.version || manifest?.extensionVersion !== contract.extensionVersion) {
+    throw new Error("Candidate manifest versions do not match the locked artifact contract");
   }
   if (!manifest.installers || typeof manifest.installers !== "object" || Array.isArray(manifest.installers)) {
     throw new Error("Candidate manifest installers are invalid");
@@ -118,8 +132,8 @@ export function recordCandidateArtifact(manifest, record) {
   if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     throw new Error("Candidate artifact must be inside the repository");
   }
-  if (path.basename(artifactPath) !== ARTIFACT_FILENAMES[target]) {
-    throw new Error(`Candidate artifact filename must be ${ARTIFACT_FILENAMES[target]}`);
+  if (path.basename(artifactPath) !== contract.artifactFilenames[target]) {
+    throw new Error(`Candidate artifact filename must be ${contract.artifactFilenames[target]}`);
   }
   const declaration = {
     path: relativePath.split(path.sep).join("/"),
@@ -131,10 +145,3 @@ export function recordCandidateArtifact(manifest, record) {
   else updated.installers[target] = declaration;
   return updated;
 }
-
-export const candidateArtifactContract = Object.freeze({
-  installerTargets: INSTALLER_TARGETS,
-  version: REQUIRED_VERSION,
-  extensionVersion: REQUIRED_EXTENSION_VERSION,
-  artifactFilenames: ARTIFACT_FILENAMES,
-});
