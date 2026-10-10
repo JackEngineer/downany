@@ -58,6 +58,16 @@ interface AppState {
 }
 
 const defaultSettings = null;
+const SORT_ORDER_STORAGE_KEY = "downany.download-sort-order";
+
+function loadSortOrder(): DownloadSortOrder {
+  try {
+    return localStorage.getItem(SORT_ORDER_STORAGE_KEY) === "oldest" ? "oldest" : "newest";
+  } catch {
+    // Unavailable preference storage must not prevent opening the queue.
+    return "newest";
+  }
+}
 
 interface PendingSnapshotRefresh {
   sequence: number;
@@ -113,8 +123,15 @@ function reconcileSnapshotTasks(
 export const useAppStore = create<AppState>((set, get) => ({
   connection: "connecting",
   filter: "all",
-  sortOrder: "newest",
-  setSortOrder: (sortOrder) => set({ sortOrder }),
+  sortOrder: loadSortOrder(),
+  setSortOrder: (sortOrder) => {
+    try {
+      localStorage.setItem(SORT_ORDER_STORAGE_KEY, sortOrder);
+    } catch {
+      // Keep the selected order usable if storage is blocked or full.
+    }
+    set({ sortOrder });
+  },
   searchQuery: "",
   searchMode: "filter",
   netSearchId: "",

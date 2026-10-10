@@ -20,7 +20,7 @@
     "artifactPlayable": true,
     "artifactSha256": "15d9b94b2d14aebef22ddab9abc98299d970576591de5c56c969e61aad569df7",
     "artifactBytes": 2410620,
-    "recordedAt": "2026-10-09T17:27:35.890Z",
+    "recordedAt": "2026-10-09T17:27:35.89Z",
     "sampleSha256": "53dc66cadd9238575bc60da1c997963c979b3f11dc087e2b16da515dffc5dd7b"
   },
   {
@@ -46,5 +46,29 @@
     "artifactBytes": 44860186,
     "recordedAt": "2026-10-09T17:29:37.748Z",
     "sampleSha256": "d84d89295c97256aa408701fcda4013058153c0fe578acfd438589f0b5b6fe3d"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-04",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "36a3c402be9f5e10a381bf24a6e397a706ee692a3e99167e7442b81082437602",
+    "artifactBytes": 2531816,
+    "recordedAt": "2026-10-10T03:51:32.807Z",
+    "sampleSha256": "c157e2260dff21d016fff6e95b8ddc6c4267057d8e4f1c0ebc99fcf0ec7619c8"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-05",
+    "outcome": "completed",
+    "errorCode": "",
+    "artifactPlayable": true,
+    "artifactSha256": "c63325c65d3f2f568b8222f0e2d26ea4fa7a3fa8bb8dccfb351d845197ce598b",
+    "artifactBytes": 2061357,
+    "recordedAt": "2026-10-10T03:51:57.19Z",
+    "sampleSha256": "3553a48b693719834c8e06c55d472f7da19d25a2a0a84d964823f914db2a841b"
   }
 ]
