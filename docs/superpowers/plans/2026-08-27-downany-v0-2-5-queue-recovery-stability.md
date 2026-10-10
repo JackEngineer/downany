@@ -1,6 +1,6 @@
 # Downany v0.2.5 队列与恢复稳定性 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementation stays sequential. The mandatory requesting-code-review skill may use one independent read-only reviewer; do not delegate implementation without explicit user authorization.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Do not delegate unless the user explicitly authorizes delegation.
 
 **Goal:** 让长时间队列在暂停、退出、Sidecar 异常、Electron 重启或系统重启后保持任务、分组、顺序与成品一致，并确保 Telegram 发送失败不改变下载完成结果。
 
@@ -16,17 +16,6 @@
 
 - 计划日期：2026-08-27。
 - 代码审计基线是 v0.2.4 候选工作树 `c7709bc`。按用户最新要求，不等手动验收：使用该 HEAD 加已核对候选差异创建独立本地基线，记录源码校验并重新跑完整自动化；不得把此基线写成已提交或已集成。
-
-### 执行修订与证据索引（2026-08-27）
-
-- 任务 1–12 的本地实现、审查与自动化门槛均已完成；逐项 RED/GREEN 原始记录位于隔离工作树 `.build/v025-execution/progress.md`，可共享的验证结果位于 `docs/acceptance/v0.2.5-queue-recovery-stability.md`。下面设计期命令与可选提交/人工步骤保留作参考，不表示这些未授权动作已执行。
-- 当前依赖通过已核对 junction 复用。构建不用会运行 `npm ci` 或清理旧 release 目录的整套脚本；直接运行等价的 PyInstaller、生产构建和 electron-builder 步骤，并禁用依赖重建与发布。媒体工具复用已验证文件，复制前后核对 SHA-256。
-- 第一轮包已完成真实旧版迁移和 5 轮包级恢复，但随后审查发现边界问题，因此保留为 R1 历史记录，不再作为最终候选。修订包写入独立 `desktop/release-v0.2.5-queue-recovery-reviewed/`；源码/资源清单与哈希写入 `.build/v025-execution/r2/`，不覆盖第一轮证据。
-- 优先级切换也执行组连续归一化；受影响的外组顺序与组优先级在同一事务中写入或回滚。
-- 重排响应仅合并现存任务的排序字段，不以旧全量快照覆盖生命周期。组/全部操作刷新保留请求期间收到的完成、移除、新任务、进度与设置变化；请求记录有界且在成功或失败后释放。
-- 包级 Electron smoke 强制设置仅测试使用的 `DOWNANY_SKIP_PROTOCOL_REGISTRATION=1`，避免即使用临时数据目录仍改写系统 `downany://` 关联；正常用户启动行为不变。
-- 独立只读审查发现的两个 Important 均已复现、修复并通过复核；修订后 758 项 Python、410 项桌面测试、Windows 包级迁移/恢复/媒体/启动门槛均已实际通过。审查不代替测试，也不产生提交/发布授权。
-- 本版本形成可追溯的本地候选后即可推进后续阶段，不等待人工安装、Mac 或未经授权的提交/合并。
 
 ### 进入条件与授权边界
 
@@ -654,7 +643,6 @@ git commit -m "fix(queue): align visible order with scheduling"
 
 - 新建：`src/core/progress_buffer.py`
 - 新建：`tests/core/test_progress_buffer.py`
-- 新建：`tests/core/test_progress_persistence.py`
 - 修改：`src/core/download_manager.py`
 - 修改：`src/data/queue_store.py`
 - 修改：`src/sidecar/server.py`
@@ -701,7 +689,7 @@ python -m pytest tests/core/test_progress_buffer.py tests/core/test_download_man
 
 - `ProgressBuffer` 内部用一个 lock、一个 `dict[task_id, ProgressUpdate]` 和单个 `next_flush_at`。
 - `drain_due` 原子取走当前最新值；`requeue` 只在该 ID 没有更晚值时放回，并把下次尝试推迟一个 interval，避免 0.3 秒 scheduler 循环持续打库。
-- manager 新增 `_persistence_lock`，所有路径统一先取 manager lock、再取 persistence lock，避免锁顺序反转。`_flush_progress_due` 在两把锁内 drain + `update_progress_many`；full `_persist` 在同一临界区 upsert 成功后 discard，保证终态写最后生效，同时保留失败/回滚操作的待保存进度。
+- manager 新增 `_persistence_lock`。`_flush_progress_due` 在此锁内 drain + `update_progress_many`；任何 full `_persist` 也在此锁内先 discard 再 upsert，保证终态写最后生效。
 - scheduler 每轮最多调用一次 `_flush_progress_due`；progress callback 只更新内存、put 最新值、发事件，不直接开 SQLite 连接。
 - `stop()` 在持久化锁内一次保存所有需保存的任务并清空 buffer。
 - 进度热路径不写 INFO；异常只写有界 ERROR/WARNING，不记录 URL、Cookie 或响应正文。
