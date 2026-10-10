@@ -7,7 +7,11 @@ afterEach(() => {
 });
 
 describe("App content contract", () => {
-  it("keeps the Windows installer available when GitHub rate limits releases", async () => {
+  it.each([
+    ["下载 Apple Silicon Mac", "Downany-0.3.2-mac.dmg"],
+    ["下载 Windows x64", "Downany-0.3.2-win-x64.exe"],
+    ["下载 Chrome 扩展", "Downany-chrome-extension-0.9.2.zip"],
+  ])("keeps %s available when GitHub rate limits releases", async (name, assetName) => {
     vi.stubGlobal(
       "fetch",
       async () =>
@@ -19,15 +23,17 @@ describe("App content contract", () => {
     render(<App />);
 
     await waitFor(() => {
-      const windowsLinks = screen.getAllByRole("link", { name: "下载 Windows 版" });
-      expect(windowsLinks).toHaveLength(2);
-      for (const link of windowsLinks) {
+      const downloadLinks = screen.getAllByRole("link", { name });
+      expect(downloadLinks).toHaveLength(2);
+      for (const link of downloadLinks) {
         expect(link).toHaveAttribute(
           "href",
-          "https://github.com/JackEngineer/downany/releases/download/v0.3.0/Downany-0.3.0-win-x64.exe",
+          `https://github.com/JackEngineer/downany/releases/download/v0.3.2/${assetName}`,
         );
         expect(link).toHaveAttribute("data-download-status", "ready");
+        expect(link).toHaveAttribute("data-release-source", "fallback");
       }
+      expect(screen.getByText("可下载版本 v0.3.2")).toBeVisible();
     });
   });
 
@@ -72,11 +78,11 @@ describe("App content contract", () => {
     expect(screen.getByRole("heading", { name: "下载 Downany" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "常见问题" })).toBeVisible();
     expect(
-      screen.getByText("下载完成后，可自动发送到已绑定的聊天、群组或频道。"),
+      screen.getByText("下载完成后发送到已绑定的聊天；云端单文件上限 50 MB，较大视频可分段发送。"),
     ).toBeVisible();
     expect(screen.queryByText("随下一版本提供。")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("img", { name: "Downany 界面预览" })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Downany 主窗口：粘贴链接、网页识别和下载列表" })).toHaveAttribute(
       "src",
       "/assets/downany-app-preview.png",
     );
@@ -87,8 +93,19 @@ describe("App content contract", () => {
     expect(screen.getByRole("list", { name: "Downany 功能" }).children).toHaveLength(6);
     expect(screen.getByRole("link", { name: "了解网页识别" })).toHaveAttribute(
       "href",
-      "https://github.com/JackEngineer/downany/tree/main/browser-extension",
+      "https://github.com/JackEngineer/downany#功能",
     );
     expect(screen.getByRole("contentinfo")).toHaveTextContent("Downany · 百纳");
+
+    await waitFor(() => {
+      expect(screen.getByText("最新正式版 v0.1.0")).toBeVisible();
+      for (const name of ["前往 Apple Silicon Mac 下载页", "前往 Windows x64 下载页", "前往 Chrome 扩展下载页"]) {
+        for (const link of screen.getAllByRole("link", { name })) {
+          expect(link).toHaveAttribute("href", "https://github.com/JackEngineer/downany/releases/tag/v0.1.0");
+          expect(link).toHaveAttribute("data-download-status", "missing");
+          expect(link).toHaveAttribute("data-release-source", "live");
+        }
+      }
+    });
   });
 });

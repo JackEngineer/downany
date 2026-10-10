@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RELEASES_URL,
+  isGithubRelease,
+  PUBLIC_RELEASE_FALLBACK,
   resolveReleaseAssets,
   type GithubRelease,
 } from "./releases";
@@ -29,6 +31,25 @@ const release: GithubRelease = {
 };
 
 describe("resolveReleaseAssets", () => {
+  it("provides the verified desktop and extension downloads from the same release", () => {
+    expect(resolveReleaseAssets(PUBLIC_RELEASE_FALLBACK)).toEqual({
+      tagName: "v0.3.2",
+      releasePage: "https://github.com/JackEngineer/downany/releases/tag/v0.3.2",
+      macos: {
+        status: "ready",
+        url: "https://github.com/JackEngineer/downany/releases/download/v0.3.2/Downany-0.3.2-mac.dmg",
+      },
+      windows: {
+        status: "ready",
+        url: "https://github.com/JackEngineer/downany/releases/download/v0.3.2/Downany-0.3.2-win-x64.exe",
+      },
+      extension: {
+        status: "ready",
+        url: "https://github.com/JackEngineer/downany/releases/download/v0.3.2/Downany-chrome-extension-0.9.2.zip",
+      },
+    });
+  });
+
   it("returns the exact public URL for each recognized asset", () => {
     const links = resolveReleaseAssets(release);
 
@@ -50,17 +71,20 @@ describe("resolveReleaseAssets", () => {
     });
   });
 
-  it("marks Windows missing instead of borrowing an unrelated asset URL", () => {
+  it.each([
+    ["windows", "win-x64"],
+    ["macos", "mac.dmg"],
+    ["extension", "chrome-extension"],
+  ] as const)("sends a missing %s asset to its own release page without borrowing fallback assets", (target, namePart) => {
     const links = resolveReleaseAssets({
       ...release,
-      assets: release.assets.filter((asset) => !asset.name.toLowerCase().includes("win-x64")),
+      assets: release.assets.filter((asset) => !asset.name.toLowerCase().includes(namePart)),
     });
 
-    expect(links.windows).toEqual({
+    expect(links[target]).toEqual({
       status: "missing",
       url: release.html_url,
     });
-    expect(links.macos.status).toBe("ready");
   });
 
   it("falls back to the releases index when no release payload is available", () => {
@@ -78,5 +102,31 @@ describe("resolveReleaseAssets", () => {
 
     expect(resolveReleaseAssets(null, fallbackUrl).releasePage).toBe(fallbackUrl);
     expect(resolveReleaseAssets(null, fallbackUrl).macos.url).toBe(fallbackUrl);
+  });
+});
+
+describe("isGithubRelease", () => {
+  it("accepts valid release data, including a release with no assets", () => {
+    expect(isGithubRelease(release)).toBe(true);
+    expect(isGithubRelease({ ...release, assets: [] })).toBe(true);
+  });
+
+  it.each([
+    null,
+    [],
+    {},
+    { ...release, tag_name: 32 },
+    { ...release, tag_name: " " },
+    { ...release, html_url: null },
+    { ...release, html_url: "not a URL" },
+    { ...release, html_url: "javascript:alert(1)" },
+    { ...release, assets: null },
+    { ...release, assets: {} },
+    { ...release, assets: [null] },
+    { ...release, assets: [{ name: "file.zip" }] },
+    { ...release, assets: [{ name: " ", browser_download_url: "https://example.test/file.zip" }] },
+    { ...release, assets: [{ name: "file.zip", browser_download_url: "javascript:alert(1)" }] },
+  ])("rejects invalid release data %j", (payload) => {
+    expect(isGithubRelease(payload)).toBe(false);
   });
 });

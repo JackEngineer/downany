@@ -18,7 +18,15 @@ export function DownloadPanel({ releaseState, platform }: DownloadPanelProps) {
         <h2>{siteContent.download.title}</h2>
         <p>{siteContent.download.description}</p>
         {publicVersion ? (
-          <p className="download-panel__version">当前公开版 {publicVersion}</p>
+          <p
+            className="download-panel__version"
+            data-release-source={releaseState.status === "ready" ? releaseState.source : undefined}
+          >
+            {releaseState.status === "ready" && releaseState.source === "live"
+              ? "最新正式版"
+              : "可下载版本"}{" "}
+            {publicVersion}
+          </p>
         ) : null}
       </div>
       <div className="download-panel__actions">

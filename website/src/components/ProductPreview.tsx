@@ -2,11 +2,11 @@ export function ProductPreview() {
   return (
     <figure className="product-preview">
       <img
-        alt="Downany 界面预览"
+        alt="Downany 主窗口：粘贴链接、网页识别和下载列表"
         decoding="async"
-        height="1014"
+        height="695"
         src="/assets/downany-app-preview.png"
-        width="1551"
+        width="1104"
       />
     </figure>
   );

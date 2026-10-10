@@ -16,7 +16,7 @@ export function RecognitionSpotlight() {
         <div className="recognition__glass">
           <h2>{siteContent.recognition.title}</h2>
           <p>{siteContent.recognition.description}</p>
-          <a className="text-link text-link--accent" href={siteLinks.extension}>
+          <a className="text-link text-link--accent" href={siteLinks.recognition}>
             {siteContent.recognition.action}
             <CaretRight aria-hidden="true" size={17} weight="regular" />
           </a>
