@@ -142,6 +142,7 @@ export const zhCN = {
   "actionReport.separator": "，",
   "error.action": "操作失败",
   "error.actionRetry": "暂时无法完成操作，请检查连接后重试。",
+  "error.removeTaskRetry": "任务暂时无法移除，请稍后重试。",
   "error.updateTask": "更新失败",
   "error.updateTaskRetry": "暂时无法更新任务，请检查输入和连接后重试。",
   "error.retryLater": "请稍后重试",

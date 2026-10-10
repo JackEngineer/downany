@@ -38,7 +38,11 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
   const run = useCallback<TaskCommands["run"]>(
     async (method) => {
       try {
-        await request(method, { taskId: task.id });
+        const reply = await request<{ ok?: boolean } | undefined>(method, { taskId: task.id });
+        if (method === "download.remove" && reply?.ok === false) {
+          pushToast({ kind: "error", title: t("error.action"), detail: t("error.removeTaskRetry") });
+          return;
+        }
         await refreshQueueAfterChange();
       } catch {
         pushToast({ kind: "error", title: t("error.action"), detail: t("error.actionRetry") });

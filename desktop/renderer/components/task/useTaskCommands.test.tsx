@@ -96,3 +96,25 @@ it("built-in retry reports a fixed message without leaking transport secrets", a
   expect(JSON.stringify(useAppStore.getState().toasts)).not.toMatch(/secret|private/);
   expect(useAppStore.getState().toasts[0].kind).toBe("error");
 });
+
+it("reports an explicitly refused task removal without pretending it applied", async () => {
+  request.mockResolvedValueOnce({ ok: false });
+  const task = taskFixture({ status: "cancelled" });
+  useAppStore.setState({ tasks: [task], toasts: [] });
+  const { result } = renderHook(() => useTaskCommands(task));
+  await act(async () => { await result.current.run("download.remove"); });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledWith("download.remove", { taskId: task.id });
+  expect(useAppStore.getState().tasks).toEqual([task]);
+  expect(useAppStore.getState().toasts).toEqual([
+    expect.objectContaining({ kind: "error", detail: "任务暂时无法移除，请稍后重试。" }),
+  ]);
+});
+
+it("keeps an applied removal successful if only the later snapshot refresh fails", async () => {
+  request.mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new Error("snapshot offline"));
+  const { result } = renderHook(() => useTaskCommands(taskFixture({ status: "completed" })));
+  await act(async () => { await result.current.run("download.remove"); });
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(useAppStore.getState().toasts.map(({ kind }) => kind)).toEqual(["info"]);
+});

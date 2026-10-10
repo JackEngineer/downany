@@ -70,5 +70,35 @@
     "artifactBytes": 2061357,
     "recordedAt": "2026-10-10T03:51:57.19Z",
     "sampleSha256": "3553a48b693719834c8e06c55d472f7da19d25a2a0a84d964823f914db2a841b"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "bilibili-10",
+    "outcome": "expected_error",
+    "errorCode": "unsupported",
+    "artifactPlayable": false,
+    "recordedAt": "2026-10-10T04:17:39.939Z",
+    "sampleSha256": "097fe7fd541f7861d85d7fa150d907773f7764d1a9f5432200d7a7b08726ae6b"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "douyin-10",
+    "outcome": "expected_error",
+    "errorCode": "unsupported",
+    "artifactPlayable": false,
+    "recordedAt": "2026-10-10T04:17:51.061Z",
+    "sampleSha256": "4f77cf62c3213bcfd735af660efb2bde7399aae7f24fd396d52651812d68e1e4"
+  },
+  {
+    "target": "windows-x64",
+    "candidateSha256": "18a3b6146e2d0935ac07ebf9bb36da5d80eb57ac73868fdab86d5f3d0c0a6ca4",
+    "id": "youtube-10",
+    "outcome": "expected_error",
+    "errorCode": "removed",
+    "artifactPlayable": false,
+    "recordedAt": "2026-10-10T04:17:30.116Z",
+    "sampleSha256": "9ca91dc18fbd9a19460e0b352617e5282bfb647641c17a68fd2db42516b0203f"
   }
 ]

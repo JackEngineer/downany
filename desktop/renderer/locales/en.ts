@@ -144,6 +144,7 @@ export const en = {
   "actionReport.separator": "; ",
   "error.action": "Action failed",
   "error.actionRetry": "Could not complete the action. Check the connection and retry.",
+  "error.removeTaskRetry": "The task could not be removed. Try again shortly.",
   "error.updateTask": "Update failed",
   "error.updateTaskRetry": "Could not update this task. Check your input and connection, then retry.",
   "error.retryLater": "Try again shortly.",
