@@ -1,8 +1,8 @@
 # 发布与签名
 
-## v0.3.2 候选准备
+## v0.3.2 发布
 
-桌面 / Sidecar 0.3.2 与 Chrome 扩展 0.9.2 正在补齐 Windows 发布证据；当前不是公开正式版。见 [发布准备记录](acceptance/v0.3.2-release-readiness.md) 和 [候选说明](RELEASE-NOTES-0.3.2.md)。CI 同源版本合同支持手动 cloud-only 预检与 tag 构建，Windows 会先实际新装 / 0.3.0 升级 / 卸载验收，再上传候选。
+桌面 / Sidecar 0.3.2 与 Chrome 扩展 0.9.2 按维护者 2026-10-10 的发布指令进入正式交付流程。完整网站、普通 Chrome 原生操作和干净 Windows 人工安装仍有缺口，保持记录，不宣称全部验收通过。见 [验证记录](acceptance/v0.3.2-release-readiness.md) 和 [发布说明](RELEASE-NOTES-0.3.2.md)；公开状态以 GitHub Releases 为准。CI 同源版本合同支持手动 cloud-only 预检与 tag 构建，Windows 会先实际新装 / 0.3.0 升级 / 卸载，再上传安装包。
 
 正式交付仍要求同一 annotated tag 的全部成功 CI、DMG + NSIS + 扩展 ZIP 三项资产、草稿下载核验和公开未认证下载核验；完整网站及最终人工验收缺口不由源码单测代替。本次原有 v0.3.1 Mac 预发布保持原状。
 
