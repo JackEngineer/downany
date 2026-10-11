@@ -7,6 +7,13 @@ const api = {
     const params = new URLSearchParams(window.location.search);
     return params.get("url") || "";
   },
+  isRecovery(): boolean { return new URLSearchParams(window.location.search).get("recovery") === "1"; },
+  retryOriginal(): Promise<{ ok: boolean; code?: string }> { return ipcRenderer.invoke("extract:retryOriginal"); },
+  onRecovery(handler: (active: boolean) => void): () => void {
+    const listener = (_: Electron.IpcRendererEvent, active: boolean) => handler(active);
+    ipcRenderer.on("extract:recovery", listener);
+    return () => ipcRenderer.removeListener("extract:recovery", listener);
+  },
   onNavigate(handler: (url: string) => void): () => void {
     const listener = (_: Electron.IpcRendererEvent, url: string) => handler(url);
     ipcRenderer.on("extract:navigate", listener);

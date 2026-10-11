@@ -6,6 +6,8 @@
   let selected = new Set();
   let scope = 'current';
   let busy = false;
+  const retryOriginal = $('retryOriginal');
+  const showRecovery = active => { retryOriginal.hidden = !active; if (active) setStatus('请在上方网页正常播放原作品；如要求登录或验证，请本人完成，再点击“重试原任务”。下载浏览器当前播放的清晰度。'); };
   const setStatus = (text, kind = '') => { status.textContent = text; status.className = 'status ' + kind; };
   const safeHost = url => { try { return new URL(url).hostname; } catch { return '未知来源'; } };
   const kind = item => item.kind === 'audio' || item.type === 'audio' ? '音频' : item.kind === 'video' || item.contentType?.startsWith('video/') ? '视频' : item.type === 'hls' ? 'HLS 视频流' : item.type === 'dash' ? 'DASH 媒体流' : '媒体';
@@ -115,7 +117,20 @@
     snapshot = next; render();
   });
   window.extractApi.onNavigate(navigate);
+  webview.addEventListener('did-stop-loading', () => { if (!busy) setStatus(retryOriginal.hidden ? '页面已加载，请在网页播放目标媒体。' : '请本人完成网页要求的登录或验证，正常播放原作品，再点击“重试原任务”。'); });
+  webview.addEventListener('did-fail-load', event => { if (event.errorCode !== -3) setStatus('网页加载失败，请检查网络后重新前往；本次没有开始下载。', 'error'); });
   webview.addEventListener('did-navigate', event => { urlInput.value = event.url; });
+  retryOriginal.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true; retryOriginal.disabled = true;
+    try {
+      const result = await window.extractApi.retryOriginal();
+      setStatus(result.ok ? '原任务已重试，请在主窗口查看进度' : result.code === 'busy' ? '原任务状态已改变，请在主窗口查看' : '尚未取得原作品的播放媒体和名称。请本人完成登录或验证并播放原作品，再重试；本次没有创建新任务。', result.ok ? 'ok' : 'error');
+    } catch { setStatus('原任务重试未能开始，请查看主窗口', 'error'); }
+    finally { busy = false; retryOriginal.disabled = false; }
+  });
+  window.extractApi.onRecovery?.(showRecovery);
   const initial = window.extractApi.getInitialUrl();
   render(); if (initial) navigate(initial);
+  showRecovery(window.extractApi.isRecovery?.() === true);
 })();

@@ -111,6 +111,10 @@ export function collectLoadedMedia(): MediaObservation[] {
     if (!title && region && region.querySelectorAll("video,audio").length === 1) title = region.querySelector("figcaption,h1,h2,h3")?.textContent || "";
     // A dedicated single-video detail page is a stronger relation than a generic page title.
     if (!title && visibleVideos.length === 1 && visibleVideos[0] === el && /^\/video\/\d+\/?$/.test(location.pathname) && document.querySelectorAll("h1").length === 1) title = document.querySelector("h1")?.textContent || "";
+    if (!title && location.hostname === "www.douyin.com" && /^\/video\/\d+\/?$/.test(location.pathname) && visibleVideos.length === 1 && visibleVideos[0] === el) {
+      const pageTitle = document.title.replace(/\s*[-|_]\s*抖音.*$/, "").trim();
+      if (pageTitle && !/^(抖音|记录美好生活|Douyin)$/i.test(pageTitle)) title = pageTitle;
+    }
     return {
       url: el.currentSrc || el.src,
       elementKey: `media-${index}`,

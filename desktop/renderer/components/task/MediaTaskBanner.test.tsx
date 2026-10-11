@@ -1510,9 +1510,9 @@ it("offers explicit built-in retry only for an exact failed Douyin video", async
   const retry = vi.fn().mockResolvedValue({ ok: false, code: "unavailable" });
   window.api.retryEmbeddedDouyin = retry;
   const { rerender } = render(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://www.douyin.com/video/123", error_code: "site_response_unavailable" })} />);
-  fireEvent.click(screen.getByRole("button", { name: "使用内置登录重试" }));
+  fireEvent.click(screen.getByRole("button", { name: "播放后重试原任务" }));
   await waitFor(() => expect(retry).toHaveBeenCalledWith("task-1"));
   expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
   rerender(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://evil.com/video/123", error_code: "site_response_unavailable" })} />);
-  expect(screen.queryByRole("button", { name: "使用内置登录重试" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "播放后重试原任务" })).toBeNull();
 });

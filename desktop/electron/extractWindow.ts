@@ -12,6 +12,8 @@ import {
 
 import { installExtractGuestPolicy, installExtractSessionPolicy, isExtractWebUrl, isExtractNavigationUrl } from "./extractNavigation";
 
+import { capturedDouyinVideo, type ResolvedDouyinVideo } from "./embeddedDouyinRetry";
+
 export const EXTRACT_PARTITION = "persist:extract";
 
 export type { ExtractMediaItem } from "./extractMedia";
@@ -21,6 +23,7 @@ let extractWindow: BrowserWindow | null = null;
 let sniffInstalled = false;
 let mediaStore = new ExtractMediaStore();
 let extractGuest: WebContents | null = null;
+let recoveryTaskId: string | null = null;
 let observationTimer: ReturnType<typeof setInterval> | null = null;
 let observing = false;
 const requests = new Map<number, number>();
@@ -150,18 +153,50 @@ export function getExtractWindow(): BrowserWindow | null {
   return extractWindow;
 }
 
-export function openExtractWindow(url: string): BrowserWindow {
+export function getExtractRecoveryTaskId(): string | null { return recoveryTaskId; }
+
+export async function getPlayedDouyinVideo(original: string): Promise<ResolvedDouyinVideo | undefined> {
+  const guest = extractGuest;
+  if (!guest || guest.isDestroyed()) return undefined;
+  try {
+    const observations = await guest.executeJavaScriptInIsolatedWorld(1001, [{ code: `(() => {
+      const blockers = [...document.querySelectorAll('[role="dialog"],[aria-modal="true"],[class*="login"],[id*="login"],[class*="captcha"],[class*="verify"]')];
+      if (blockers.some(el => {
+        const rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+        return rect.width > 40 && rect.height > 40 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) !== 0 && /扫码登录|验证码登录|请完成验证|拖动滑块|安全验证/.test(el.textContent || '');
+      })) return [];
+      const loaded = (${collectLoadedMedia.toString()})();
+      return loaded.map(item => {
+        const videos = [...document.querySelectorAll('video')].filter(v => (v.currentSrc || v.src) === item.url);
+        const video = videos.length === 1 ? videos[0] : null;
+        const rect = video?.getBoundingClientRect();
+        return {url:item.url,title:item.title,currentTime:video?.currentTime || 0,readyState:video?.readyState || 0,visible:!!rect && rect.width > 80 && rect.height > 60 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth};
+      });
+    })()` }]);
+    return capturedDouyinVideo(original, guest.getURL(), observations);
+  } catch { return undefined; }
+}
+
+export function openExtractWindow(url: string, taskId: string | null = null): BrowserWindow {
   const trimmed = url.trim();
   if (!isExtractWebUrl(trimmed)) {
     throw new Error("请输入有效的 HTTP 或 HTTPS 网页地址");
   }
 
+  recoveryTaskId = taskId;
   const ses = session.fromPartition(EXTRACT_PARTITION);
   installSniffHandlers(ses);
 
   if (extractWindow && !extractWindow.isDestroyed()) {
     extractWindow.focus();
-    extractWindow.webContents.send("extract:navigate", trimmed);
+    extractWindow.webContents.send("extract:recovery", !!recoveryTaskId);
+    // Repeated recovery clicks must not reload a login/verification in progress.
+    let alreadyAtTarget = false;
+    try {
+      const current = new URL(extractGuest?.getURL() || "");
+      alreadyAtTarget = !!taskId && current.origin + current.pathname === trimmed;
+    } catch { /* A guest still being created needs the requested navigation. */ }
+    if (!alreadyAtTarget) extractWindow.webContents.send("extract:navigate", trimmed);
     notifyList(extractWindow);
     return extractWindow;
   }
@@ -213,7 +248,7 @@ export function openExtractWindow(url: string): BrowserWindow {
 
   const htmlPath = extractHtmlPath();
   void extractWindow.loadFile(htmlPath, {
-    query: { url: trimmed },
+    query: { url: trimmed, recovery: taskId ? "1" : "0" },
   });
 
   extractWindow.webContents.on("did-finish-load", () => {
@@ -222,6 +257,7 @@ export function openExtractWindow(url: string): BrowserWindow {
 
   extractWindow.on("closed", () => {
     extractWindow = null;
+    recoveryTaskId = null;
     extractGuest = null;
     if (observationTimer) clearInterval(observationTimer);
     observationTimer = null;

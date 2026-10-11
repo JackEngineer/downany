@@ -122,8 +122,8 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
         try {
           const result = await window.api.retryEmbeddedDouyin(task.id);
           if (!result.ok) {
-            const key = result.code === "session_required" ? "embeddedRetry.sessionRequired" : result.code === "rejected" ? "embeddedRetry.rejected" : result.code === "busy" ? "embeddedRetry.busy" : "embeddedRetry.unavailable";
-            pushToast({ kind: "error", title: t("embeddedRetry.failed"), detail: t(key) });
+            const key = result.code === "playback_required" ? "embeddedRetry.playbackRequired" : result.code === "session_required" ? "embeddedRetry.sessionRequired" : result.code === "rejected" ? "embeddedRetry.rejected" : result.code === "busy" ? "embeddedRetry.busy" : "embeddedRetry.unavailable";
+            pushToast({ kind: result.code === "playback_required" ? "info" : "error", title: t(result.code === "playback_required" ? "recovery.embeddedRetry" : "embeddedRetry.failed"), detail: t(key) });
             return;
           }
           await refreshQueueAfterChange();

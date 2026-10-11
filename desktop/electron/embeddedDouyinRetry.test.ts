@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createEmbeddedDouyinRetry, douyinVideoUrl, resolveDouyinUsingNativeSession, safeDouyinMediaUrl } from "./embeddedDouyinRetry";
+import { createEmbeddedDouyinRetry, douyinVideoUrl, resolveDouyinUsingNativeSession, safeDouyinMediaUrl, capturedDouyinVideo } from "./embeddedDouyinRetry";
 const original = "https://www.douyin.com/video/123";
 const media = "https://v26-web.douyinvod.com/video.mp4?token=runtime-only";
 const body = { aweme_detail: { aweme_id: "123", desc: "作品名称", video: { play_addr: { url_list: [media] } } } };
@@ -43,5 +43,30 @@ describe("explicit built-in Douyin retry", () => {
   it("redacts downstream errors", async () => {
     const retry = createEmbeddedDouyinRetry({ readTask: async () => ({ url: original, status: "failed" }), nativeFetch: async () => response(body), apply: async () => { throw new Error(media + " Cookie=secret"); } });
     expect(await retry("task-1")).toEqual({ ok: false, code: "unavailable" }); expect(douyinVideoUrl(original)).toBe(original);
+  });
+});
+
+describe("playback recovery for the original work", () => {
+  const played = {url:media,title:"作品名称",currentTime:3,readyState:4,visible:true};
+  it("requires exact original page and one actually played, named trusted media", () => {
+    expect(capturedDouyinVideo(original, original, [played])).toEqual({originalUrl:original,mediaUrl:media,title:"作品名称"});
+    expect(capturedDouyinVideo(original, "https://www.douyin.com/video/456", [played])).toBeUndefined();
+    expect(capturedDouyinVideo(original, original, [{...played,currentTime:0}])).toBeUndefined();
+    expect(capturedDouyinVideo(original, original, [{...played,visible:false}])).toBeUndefined();
+    expect(capturedDouyinVideo(original, original, [{...played,url:"blob:fixture"}])).toBeUndefined();
+    expect(capturedDouyinVideo(original, original, [{...played,title:""}])).toBeUndefined();
+    expect(capturedDouyinVideo(original, original, [played,played])).toBeUndefined();
+  });
+  it("opens playback without repeating the rejected API or changing the failed task", async () => {
+    const nativeFetch=vi.fn(),apply=vi.fn(),openPlayback=vi.fn();
+    const retry=createEmbeddedDouyinRetry({readTask:async()=>({url:original,status:"failed"}),nativeFetch,apply,capturedVideo:async()=>undefined,openPlayback});
+    expect(await retry("task-1")).toEqual({ok:false,code:"playback_required"});
+    expect(openPlayback).toHaveBeenCalledWith(original,"task-1");expect(nativeFetch).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();
+  });
+  it("retries the same original ID using played media and coalesces clicks", async () => {
+    const nativeFetch=vi.fn(),apply=vi.fn(async()=>{}),openPlayback=vi.fn();
+    const retry=createEmbeddedDouyinRetry({readTask:async()=>({url:original,status:"failed"}),nativeFetch,apply,capturedVideo:async()=>({originalUrl:original,mediaUrl:media,title:"作品名称"}),openPlayback});
+    const a=retry("task-1"),b=retry("task-1");expect(a).toBe(b);expect(await a).toEqual({ok:true});
+    expect(apply).toHaveBeenCalledOnce();expect(apply).toHaveBeenCalledWith("task-1",{originalUrl:original,mediaUrl:media,title:"作品名称"});expect(nativeFetch).not.toHaveBeenCalled();expect(openPlayback).not.toHaveBeenCalled();
   });
 });

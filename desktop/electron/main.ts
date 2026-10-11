@@ -68,6 +68,8 @@ import {
   getExtractWindow,
   getExtractSession,
   openExtractWindow,
+  getPlayedDouyinVideo,
+  getExtractRecoveryTaskId,
   enqueueExtractMedia,
   locateExtractMedia,
 } from "./extractWindow";
@@ -878,10 +880,17 @@ function registerIpc(): void {
       return snapshot.tasks.find((task) => task.id === id);
     },
     nativeFetch: (input, init) => getExtractSession().fetch(input, init),
+    capturedVideo: getPlayedDouyinVideo,
+    openPlayback: (url, id) => { openExtractWindow(url, id); },
     apply: async (taskId, video) => {
       if (!sidecar || engineActivating) throw new Error("unavailable");
       await sidecar.request("download.retryEmbeddedDouyin", { taskId, ...video });
     },
+  });
+  ipcMain.handle("extract:retryOriginal", async (event) => {
+    const id = getExtractRecoveryTaskId();
+    if (event.sender !== getExtractWindow()?.webContents || !id) return { ok: false, code: "invalid" };
+    return retryEmbeddedDouyin(id);
   });
   ipcMain.handle("app:retryEmbeddedDouyin", async (event, id: unknown) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || typeof id !== "string") return { ok: false, code: "invalid" };

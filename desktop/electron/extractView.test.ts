@@ -55,3 +55,21 @@ describe('extract selection cards', () => {
     expect(document.querySelector('label.media-choice input[type=checkbox]')).not.toBeNull();
   });
 });
+
+it('offers original-task recovery without creating a second task', async () => {
+  const api=(window as any).extractApi;
+  api.retryOriginal=vi.fn(async()=>({ok:false,code:'playback_required'}));
+  const button=document.querySelector('#retryOriginal') as HTMLButtonElement;
+  button.hidden=false;button.click();await new Promise(resolve=>setTimeout(resolve,0));
+  expect(api.retryOriginal).toHaveBeenCalledOnce();expect(enqueue).not.toHaveBeenCalled();
+  expect(document.querySelector('#status')!.textContent).toContain('本次没有创建新任务');
+});
+
+it('replaces loading text and redacts browser navigation failures', () => {
+  const browser=document.querySelector('#browser')!;
+  browser.dispatchEvent(new Event('did-stop-loading'));
+  expect(document.querySelector('#status')!.textContent).toContain('页面已加载');
+  const event=new Event('did-fail-load');Object.assign(event,{errorCode:-105,validatedURL:'https://example.com/?secret=private',errorDescription:'private'});browser.dispatchEvent(event);
+  expect(document.querySelector('#status')!.textContent).toContain('网页加载失败');
+  expect(document.querySelector('#status')!.textContent).not.toContain('private');
+});

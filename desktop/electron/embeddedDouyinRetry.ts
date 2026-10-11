@@ -1,5 +1,5 @@
 /** Credentials stay in Electron's native Session; this module never reads them. */
-export type EmbeddedRetryCode = "invalid" | "session_required" | "rejected" | "unavailable" | "network" | "busy";
+export type EmbeddedRetryCode = "invalid" | "session_required" | "rejected" | "unavailable" | "network" | "busy" | "playback_required";
 export class EmbeddedRetryError extends Error {
   constructor(readonly code: EmbeddedRetryCode) { super(code); }
 }
@@ -58,6 +58,8 @@ export async function resolveDouyinUsingNativeSession(original: string, nativeFe
 export function createEmbeddedDouyinRetry(deps: {
   readTask: (id: string) => Promise<{ url: string; status: string } | undefined>;
   nativeFetch: (input: string, init: RequestInit) => Promise<Response>;
+  capturedVideo?: (original: string) => Promise<ResolvedDouyinVideo | undefined>;
+  openPlayback?: (original: string, taskId: string) => void;
   apply: (id: string, video: ResolvedDouyinVideo) => Promise<void>;
 }) {
   const pending = new Map<string, Promise<{ ok: boolean; code?: EmbeddedRetryCode }>>();
@@ -68,10 +70,33 @@ export function createEmbeddedDouyinRetry(deps: {
       try {
         const task = await deps.readTask(id);
         if (!task || task.status !== "failed") throw new EmbeddedRetryError("busy");
-        const video = await resolveDouyinUsingNativeSession(task.url, deps.nativeFetch);
+        const original = douyinVideoUrl(task.url);
+        const video = deps.capturedVideo
+          ? await deps.capturedVideo(original)
+          : await resolveDouyinUsingNativeSession(original, deps.nativeFetch);
+        if (!video) {
+          deps.openPlayback?.(original, id);
+          throw new EmbeddedRetryError("playback_required");
+        }
         await deps.apply(id, video); return { ok: true };
       } catch (error) { return { ok: false, code: error instanceof EmbeddedRetryError ? error.code : "unavailable" as const }; }
     })();
     pending.set(id, run); void run.finally(() => pending.delete(id)); return run;
   };
+}
+
+/** Accept only the single media element actually played on this exact work page. */
+export function capturedDouyinVideo(original: string, pageUrl: string, observations: Array<{
+  url: string; title?: string; currentTime: number; readyState: number; visible: boolean;
+}>): ResolvedDouyinVideo | undefined {
+  const originalUrl = douyinVideoUrl(original);
+  let page: URL;
+  try { page = new URL(pageUrl); } catch { return undefined; }
+  if (page.origin + page.pathname !== originalUrl || page.username || page.password) return undefined;
+  const played = observations.filter(v => v.visible && v.readyState >= 2 && v.currentTime > 0);
+  if (played.length !== 1) return undefined;
+  const title = played[0].title?.trim();
+  if (!title || title.length > 500 || /[\u0000-\u001f]/.test(title)) return undefined;
+  try { return { originalUrl, title, mediaUrl: safeDouyinMediaUrl(played[0].url) }; }
+  catch { return undefined; }
 }
