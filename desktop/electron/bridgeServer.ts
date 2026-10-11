@@ -49,16 +49,20 @@ export type BridgeTaskStatus = {
   progress: number;
   title: string;
   error: string;
+  errorCode?: string;
+  hasFile?: boolean;
+  fileName?: string;
 };
 
 export type BridgeHandlers = {
   enqueue: (items: BridgeEnqueueItem[]) => Promise<BridgeEnqueueResult>;
   /** 可选：健康检查附带 Sidecar 是否可入队 */
-  getStatus?: () => { sidecarReady: boolean };
+  getStatus?: () => { sidecarReady: boolean; appVersion?: string; sidecarVersion?: string | null; connection?: string; versionMismatch?: boolean };
   /** 可选：按 taskId 批量查询状态（扩展轮询） */
   getTasks?: (ids: string[]) => BridgeTaskStatus[];
   retryTask?: (id: string) => Promise<BridgeEnqueueResult>;
   focusTask?: (id: string) => Promise<BridgeEnqueueResult>;
+  revealTask?: (id: string) => Promise<BridgeEnqueueResult>;
 };
 
 function sendJson(
@@ -211,6 +215,7 @@ export function startBridgeServer(
   port = BRIDGE_PORT,
 ): http.Server {
   const receipts = new Map<string, { fingerprint: string; result: Promise<BridgeEnqueueResult> }>();
+  const retries = new Map<string, Promise<BridgeEnqueueResult>>();
   const server = http.createServer((req, res) => {
     void (async () => {
       const method = req.method || "GET";
@@ -232,7 +237,8 @@ export function startBridgeServer(
           ok: true,
           service: "downany-bridge",
           sidecarReady: status ? status.sidecarReady : true,
-          capabilities: ["explicit-routes", "enqueue-receipts", "task-retry", "task-focus"],
+          ...status,
+          capabilities: ["explicit-routes", "enqueue-receipts", "task-retry", "task-focus", ...(handlers.revealTask ? ["task-reveal"] : [])],
         });
         return;
       }
@@ -261,7 +267,7 @@ export function startBridgeServer(
         }
         const input = JSON.parse(raw) as { requestId?: unknown };
         const requestId = typeof input.requestId === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(input.requestId) ? input.requestId : "";
-        const fingerprint = createHash("sha256").update(JSON.stringify(items.map(item => [item.url, item.route]))).digest("hex");
+        const fingerprint = createHash("sha256").update(JSON.stringify(items)).digest("hex");
         const existing = requestId ? receipts.get(requestId) : undefined;
         if (existing && existing.fingerprint !== fingerprint) {
           sendJson(res, 409, { ok: false, error: "发送标识与媒体不一致" }); return;
@@ -278,7 +284,7 @@ export function startBridgeServer(
         return;
       }
 
-      if (method === "POST" && ["/task/retry", "/task/focus"].includes(url.pathname)) {
+      if (method === "POST" && ["/task/retry", "/task/focus", "/task/reveal"].includes(url.pathname)) {
         const origin = String(req.headers.origin || "");
         if (origin && !/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) {
           sendJson(res, 403, { ok: false, error: "仅允许本机扩展操作任务" }); return;
@@ -286,14 +292,20 @@ export function startBridgeServer(
         const input = JSON.parse(await readBody(req)) as { taskId?: unknown };
         const taskId = typeof input.taskId === "string" ? input.taskId : "";
         if (!/^[a-zA-Z0-9_-]{1,100}$/.test(taskId)) { sendJson(res, 400, { ok: false, error: "无效任务标识" }); return; }
-        const handler = url.pathname === "/task/retry" ? handlers.retryTask : handlers.focusTask;
+        const handler = url.pathname === "/task/retry" ? handlers.retryTask : url.pathname === "/task/reveal" ? handlers.revealTask : handlers.focusTask;
         if (!handler) { sendJson(res, 501, { ok: false, error: "请更新百纳桌面端" }); return; }
-        const result = await handler(taskId);
+        const isRetry = url.pathname === "/task/retry";
+        const operation = isRetry && retries.has(taskId) ? retries.get(taskId)! : handler(taskId);
+        if (isRetry && !retries.has(taskId)) {
+          retries.set(taskId, operation);
+          void operation.finally(() => { if (retries.get(taskId) === operation) retries.delete(taskId); }).catch(() => {});
+        }
+        const result = await operation;
         sendJson(res, result.ok ? 200 : 409, result as unknown as Record<string, unknown>); return;
       }
       sendJson(res, 404, { ok: false, error: "not found" });
     })().catch((err) => {
-      sendJson(res, 500, { ok: false, error: String(err) });
+      sendJson(res, 500, { ok: false, error: "桌面操作未完成，请在百纳查看详情" });
     });
   });
 

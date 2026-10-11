@@ -174,3 +174,25 @@ describe("extension output preferences", () => {
     expect(items[1]).toMatchObject({quality:"best",audio_only:true});
   });
 });
+
+describe("connection recovery contract", () => {
+  it("publishes runtime identity, guards duplicate retry and supports task-based reveal", async () => {
+    let retries=0; const revealed:string[]=[];
+    const server=startBridgeServer({enqueue:async()=>({ok:true,taskIds:["task"]}),
+      getStatus:()=>({sidecarReady:false,appVersion:"0.3.3",sidecarVersion:null,connection:"connecting"}),
+      retryTask:async id=>{retries++;await new Promise(resolve=>setTimeout(resolve,40));return {ok:true,taskIds:[id]};},
+      revealTask:async id=>{revealed.push(id);return {ok:true,taskIds:[id]};}},0);
+    await new Promise<void>(resolve=>server.once("listening",resolve));
+    const address=server.address();if(!address||typeof address==="string")throw Error("address");const base=`http://127.0.0.1:${address.port}`;
+    const post=(path:string,body:unknown,origin?:string)=>fetch(base+path,{method:"POST",headers:{"Content-Type":"application/json",...(origin?{Origin:origin}:{})},body:JSON.stringify(body)});
+    try {
+      const health=await fetch(base+"/health").then(r=>r.json());expect(health).toMatchObject({appVersion:"0.3.3",sidecarVersion:null,sidecarReady:false});expect(health.capabilities).toContain("task-reveal");
+      await Promise.all([post("/task/retry",{taskId:"task"}),post("/task/retry",{taskId:"task"})]);expect(retries).toBe(1);
+      expect((await post("/task/reveal",{taskId:"task"})).status).toBe(200);expect(revealed).toEqual(["task"]);
+      expect((await post("/task/reveal",{taskId:"task"},"https://untrusted.example")).status).toBe(403);
+      expect((await post("/task/reveal",{path:"arbitrary-private-file"})).status).toBe(400);
+      const body={requestId:"output-request",items:[{url:"https://example.com/video",route:"page",quality:"720p"}]};await post("/enqueue",body);
+      expect((await post("/enqueue",{...body,items:[{...body.items[0],quality:"best"}]})).status).toBe(409);
+    } finally {await new Promise<void>(resolve=>server.close(()=>resolve()));}
+  });
+});

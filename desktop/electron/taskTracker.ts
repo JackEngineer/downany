@@ -8,6 +8,8 @@ export interface TrackedTask {
   status: string;
   progress: number;
   errorMessage: string;
+  errorCode?: string;
+  filePath?: string;
 }
 
 interface SnapshotLike {
@@ -17,6 +19,8 @@ interface SnapshotLike {
   progress?: number;
   error_message?: string;
   errorMessage?: string;
+  error_code?: string;
+  file_path?: string;
 }
 
 function readErrorMessage(t: SnapshotLike | undefined): string {
@@ -43,6 +47,8 @@ export class TaskTracker {
         status: t.status || "pending",
         progress: typeof t.progress === "number" ? t.progress : 0,
         errorMessage: readErrorMessage(t),
+        ...(t.error_code !== undefined ? { errorCode: t.error_code } : {}),
+        ...(t.file_path !== undefined ? { filePath: t.file_path } : {}),
       });
     }
   }
@@ -73,7 +79,9 @@ export class TaskTracker {
           typeof incoming.progress === "number"
             ? incoming.progress
             : prev?.progress ?? 0,
-        errorMessage: readErrorMessage(incoming) || prev?.errorMessage || "",
+        errorMessage: incoming.error_message ?? incoming.errorMessage ?? prev?.errorMessage ?? "",
+        ...(incoming.error_code !== undefined || prev?.errorCode !== undefined ? {errorCode: incoming.error_code ?? prev?.errorCode} : {}),
+        ...(incoming.file_path !== undefined || prev?.filePath !== undefined ? {filePath: incoming.file_path ?? prev?.filePath} : {}),
       };
       // 重新插入以把最近活跃的任务移到末尾
       this.tasks.delete(incoming.id);

@@ -14,15 +14,15 @@ function blocked(item) { const r=receiptFor(item); return r?.state === "sent" ||
 async function persistSelection() { await chrome.storage.session.set({[selectionKey()]: [...selected]}); }
 function updateButtons() {
   const count=items.filter(item => selected.has(item.url) && !blocked(item)).length;
-  $("enqueue").disabled=busy || !count;
+  $("enqueue").disabled=busy || !backgroundOutputReady || !count;
   $("enqueue").textContent=busy ? "发送中…" : `下载检测媒体${count ? ` (${count})` : ""}`;
   const page=receipts[currentPageKey];
-  $("enqueuePage").disabled=busy || !httpUrl(currentUrl) || page?.state === "sent" || (page?.state === "sending" && Date.now()-page.at < 90000);
+  $("enqueuePage").disabled=busy || !backgroundOutputReady || !httpUrl(currentUrl) || page?.state === "sent" || (page?.state === "sending" && Date.now()-page.at < 90000);
   $("enqueuePage").textContent=page?.state === "sent" ? "本页已入队" : "解析本页视频";
 }
 let currentPageKey = "";
 let outputPreference = {audio_only:false,quality:"best"};
-const popupDeliveries = VideoDlDelivery.createStore(chrome.storage.session);
+const popupDeliveries = VideoDlDelivery.createStore(chrome.storage.local, chrome.storage.session);
 const popupRecentKey = "popupSentTasksV1";
 function outputFor(item) {return VideoDlDelivery.outputOptions({...item,...outputPreference});}
 function outputLabel(item) {const o=outputFor(item);return item.type === "audio" ? "音频下载 · MP3" : o.audio_only ? "提取音频 · MP3" : item.route === "page" ? `视频 · ${o.quality === "best" ? "最高可用" : o.quality+" 偏好"}` : "视频 · 当前媒体清晰度";}
@@ -33,27 +33,9 @@ async function refreshOutputKeys() {
   $("outputHint").textContent=outputPreference.audio_only ? "视频会提取为 MP3；已检测音频按音频保存。清晰度偏好不适用于音频。" : "清晰度仅用于网页解析，实际取决于站点；检测媒体不能切换清晰度。";
   mediaSignature="";renderMedia();
 }
-async function directSend(sendItems) {
- const results=[];
- for(const item of sendItems) {
-  const result=await popupDeliveries.send(item,async requestId=>{
-   const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),15000);
-   try {const response=await fetch("http://127.0.0.1:17888/enqueue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:[item],requestId}),signal:ctrl.signal});return await response.json();} finally {clearTimeout(timer);}
-  });
-  if(result.ok && !result.duplicate) {
-   const saved=(await chrome.storage.session.get(popupRecentKey))[popupRecentKey] || [];
-   const fresh=(result.taskIds || []).map(taskId=>({taskId,title:item.title || (item.route === "page" ? currentTitle : "检测媒体"),route:item.route,...VideoDlDelivery.outputOptions(item),status:"pending",sentAt:Date.now(),error:""}));
-   await chrome.storage.session.set({[popupRecentKey]:[...fresh,...saved].slice(0,50)});
-  }
-  results.push(result);if(!result.ok)break;
- }
- return {ok:results.length>0 && results.every(r=>r.ok),results};
-}
 async function taskAction(type, taskId) {
-  const result = directBridgeFallback
-    ? await fetch(`http://127.0.0.1:17888/task/${type === "retrySend" ? "retry" : "focus"}`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({taskId})}).then(response=>response.json()).catch(()=>({ok:false,error:"桌面桥连接失败"}))
-    : await message({type, taskId});
-  status(result?.ok ? (type === "retrySend" ? "原任务已重试" : "已定位桌面任务") : result?.error || "操作失败", !result?.ok);
+  const result = await message({type, taskId}).catch(()=>({ok:false}));
+  status(result?.ok ? ({retrySend:"原任务已重试",revealTask:"已在文件夹显示成品",focusTask:"已定位桌面任务"})[type] : "操作未完成，请连接百纳并查看原任务", !result?.ok);
   await refresh();
 }
 let mediaSignature = "", recentSignature = "";
@@ -103,61 +85,45 @@ function renderRecent() {
   for (const task of recent.slice(0,8)) {
     const li=element("li","recent-item");li.append(element("p","recent-name",task.title || (task.route === "media" ? "检测媒体任务" : "网页解析任务")));
     li.append(element("p","recent-status",`${label(task.status)}${task.status === "downloading" ? ` ${Math.round(task.progress || 0)}%` : ""} · ${task.route === "media" ? "直接下载" : "网页解析"}${typeof task.audio_only === "boolean" ? ` · ${task.audio_only ? "MP3 音频" : task.quality && task.quality !== "best" ? task.quality+" 偏好" : "视频"}` : ""}`));
+    if (task.connectionStale) li.append(element("p","recent-status","未连接，显示上次状态；恢复连接后核对"));
+    if (task.status === "downloading") { const progress=document.createElement("progress");progress.max=100;progress.value=Math.max(0,Math.min(100,task.progress || 0));progress.setAttribute("aria-label","下载进度");li.append(progress); }
+    if (task.status === "completed") { li.append(element("p","recent-status",task.hasFile ? `成品：${task.fileName || "已保存"}` : "成品未能定位，请在百纳查看原任务")); if (task.hasFile) { const reveal=element("button","linkish","显示成品文件");reveal.addEventListener("click",()=>void taskAction("revealTask",task.taskId));li.append(reveal); } }
     if (task.error) li.append(element("p","recent-error",task.error));
     const open=element("button","linkish","在百纳查看");open.addEventListener("click",()=>void taskAction("focusTask",task.taskId));li.append(open);
     if (task.status === "failed" || task.status === "cancelled") { const retry=element("button","recent-retry","重试原任务");retry.addEventListener("click",async()=>{retry.disabled=true;try {await taskAction("retrySend",task.taskId);} finally {retry.disabled=false;}});li.append(retry); }
     $("recentList").append(li);
   }
 }
-let directBridgeFallback = false;
 let backgroundOutputReady = false;
 let checkingConnection = false;
+let refreshRunning = false;
 async function refreshConnection() {
   if (checkingConnection) return;
   checkingConnection = true;
   try {
-    directBridgeFallback = false;
-    const installed = chrome.runtime.getManifest().version;
-    let messageError = "";
-    const result = await message({type:"getBridgeHealth"}).catch(error=>{messageError=String(error?.message || error);return null;});
-    const listener = await message({type:"getSentTasks"}).catch(()=>null);
-    backgroundOutputReady = result?.outputProtocol === 1;
-    const p=Shared.bridgeConnectionPresentation(result || {ok:false});
+    const loaded = chrome.runtime.getManifest().version;
+    const health = await message({type:"getBridgeHealth"}).catch(()=>null);
+    backgroundOutputReady = health?.outputProtocol === 1;
+    const p=Shared.bridgeConnectionPresentation(health);
     $("connection").className=`connection ${p.kind}`;$("connection").textContent=p.text;
-    let detail = `已加载插件 ${installed}`;
-    if (!result?.ok) {
-      // Independent read-only probe distinguishes a healthy desktop from stale MV3 code.
-      const localPermission = await chrome.permissions.contains({origins:["http://127.0.0.1/*"]});
-      const ctrl = new AbortController(); const timer=setTimeout(()=>ctrl.abort(),3000);
-      let direct = null, failure = "";
-      try {
-        const response=await fetch("http://127.0.0.1:17888/health",{signal:ctrl.signal,cache:"no-store"});
-        if(response.ok) direct=await response.json();
-        else failure=`HTTP ${response.status}`;
-      } catch(error) {failure=error?.name === "AbortError" ? "连接超时" : "浏览器无法访问本地桥";}
-      finally {clearTimeout(timer);}
-      if (direct?.ok) {
-        directBridgeFallback = true;
-        const presentation = Shared.bridgeConnectionPresentation(direct);
-        $("connection").className=`connection ${presentation.kind}`;
-        $("connection").textContent=presentation.text;
-        detail += ` · 桌面桥可访问；后台健康响应：${result == null ? "无响应" : JSON.stringify(result)}；任务监听：${listener?.ok ? "正常" : "无响应"}${messageError ? `；消息错误：${messageError}` : ""}。`;
-      } else if (!localPermission) {
-        detail += " · 本地桥访问权限未生效，请本人检查百纳的站点访问设置。";
-      } else {
-        detail += ` · ${failure || "本地桥未响应"}。请确认桌面端运行；若已运行，请检查 Chrome 的本地网络访问提示。`;
-      }
-    }
-    if (installed !== "0.9.2") detail += " · 本地代码已更新，已加载版本尚未刷新。";
-    $("connectionDetail").textContent=detail;
+    $("runtimeVersions").textContent=`插件 ${loaded} · 桌面 ${health?.appVersion || "未连接"} · 下载服务 ${health?.sidecarVersion || "未连接"}`;
+    let detail = "";
+    if (!health) detail="扩展后台未响应，请重新打开弹窗；仍失败时由你重新加载百纳扩展。";
+    else if (health.versionMismatch) detail="桌面与下载服务版本不同，请重新打开同一安装版本。";
+    else if (health.ok && health.sidecarReady === false) detail="桌面已打开，下载服务尚未就绪。稍候重连；仍失败时在桌面查看连接状态。";
+    else if (!health.ok) detail=health.failureKind === "unexpected_service" ? "本地端口响应异常，请检查是否运行了其他版本或其他程序。" : "未能访问桌面。请打开百纳；若已运行，请检查浏览器的本地网络访问提示。连接失败不代表未安装。";
+    $("connectionDetail").textContent=detail;$("connectionDetail").hidden=!detail;
+    $("openDesktop").hidden=health?.ok === true && health.sidecarReady !== false;
+    updateButtons();
   } finally {checkingConnection=false;}
 }
 
 async function refresh() {
+  if (refreshRunning) return; refreshRunning=true;
   try {
-    const [r,t]=await Promise.all([message({type:"getDeliveries"}),message({type:"getSentTasks"})]);
+    const [r,t]=await Promise.all([message({type:"getDeliveries"}).catch(()=>null),message({type:"getSentTasks"}).catch(()=>null)]);
     receipts=r?.entries || await popupDeliveries.list();
-    const own=(await chrome.storage.session.get(popupRecentKey))[popupRecentKey] || [];
+    const own=(await chrome.storage.local.get(popupRecentKey))[popupRecentKey] || [];
     recent=[...own,...(t?.tasks || []).filter(task=>!own.some(item=>item.taskId===task.taskId))].slice(0,50);
     if (recent.length) {
       const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),2500);
@@ -166,14 +132,14 @@ async function refresh() {
         const response=await fetch(`http://127.0.0.1:17888/tasks?ids=${encodeURIComponent(ids.join(","))}`,{signal:ctrl.signal,cache:"no-store"});
         const data=await response.json();
         if(response.ok && data.ok && Array.isArray(data.tasks)) {
-          recent=recent.map(task=>{const live=data.tasks.find(item=>item.taskId===task.taskId || item.id===task.taskId);return live ? {...task,...live,error:Shared.taskFailureMessage(live.error, live.errorCode || live.error_code)} : task;});
-          if (!$("connectionDetail").textContent.includes("桌面任务状态已实时核验")) $("connectionDetail").textContent += " · 桌面任务状态已实时核验";
+          recent=recent.map(task=>{const live=data.tasks.find(item=>item.taskId===task.taskId || item.id===task.taskId);return live ? {...task,...live,error:Shared.taskFailureMessage(live.error, live.errorCode || live.error_code),hasFile:live.hasFile === true,connectionStale:false} : {...task,status:"unknown",hasFile:false};});
+          await chrome.storage.local.set({[popupRecentKey]:recent.map(task=>({taskId:task.taskId,title:task.title,route:task.route,audio_only:task.audio_only,quality:task.quality,status:task.status,progress:task.progress,sentAt:task.sentAt,error:task.error,hasFile:task.hasFile,fileName:task.fileName}))});
         }
-      } finally {clearTimeout(timer);}
+      } catch { recent=recent.map(task=>({...task,hasFile:false,connectionStale:true})); } finally {clearTimeout(timer);}
     }
     renderMedia();renderRecent();
     if ($("status").textContent === "无法读取扩展回执，请重新打开弹窗") status("");
-  } catch { status("无法读取扩展回执，请重新打开弹窗",true); }
+  } catch { status("无法读取扩展回执，请重新打开弹窗",true); } finally {refreshRunning=false;}
 }
 async function rescan() {
   if (currentTabId < 0 || !httpUrl(currentUrl)) return;
@@ -195,7 +161,7 @@ async function send(sendItems) {
   busy=true;renderMedia();status("正在发送并等待任务回执…");
   try {
     const normalized=sendItems.map(item=>({...item,...outputFor(item)}));
-    const result=!backgroundOutputReady ? await directSend(normalized) : await message({type:"enqueueExplicit",tabId:currentTabId,items:normalized});
+    const result=await message({type:"enqueueExplicit",tabId:currentTabId,items:normalized});
     status(result?.ok ? "已收到任务回执；进度见卡片与最近发送" : result?.error || result?.results?.find(r=>!r.ok)?.error || "部分任务未发送，请查看卡片状态",!result?.ok);
     await refresh();
   } catch { status("发送结果待确认，请重新打开查看回执",true); }
@@ -205,6 +171,7 @@ $("enqueue").addEventListener("click",()=>void send(items.filter(i=>selected.has
 $("enqueuePage").addEventListener("click",()=>void send([{url:Shared.normalizeYtdlpPageUrl(currentUrl),route:"page",pageUrl:currentUrl,title:""}]));
 $("selectAll").addEventListener("click",()=>{for (const item of items) if (!blocked(item)) selected.add(item.url);void persistSelection();renderMedia();});
 $("selectNone").addEventListener("click",()=>{selected.clear();void persistSelection();renderMedia();});
+$("openDesktop").addEventListener("click",async()=>{ $("openDesktop").disabled=true;status("正在打开百纳…");try {const result=await message({type:"openDesktop"});status(result?.ok ? "百纳已就绪" : "未能唤起，请从应用程序打开百纳后重连",!result?.ok);await refreshConnection();} catch {status("请从应用程序打开百纳后重连",true);} finally {$("openDesktop").disabled=false;} });
 $("refreshConnection").addEventListener("click",()=>void refreshConnection());
 const preference="inpageButtonEnabled";
 chrome.storage.sync.get({[preference]:true},data=>{$("inpageButtonToggle").checked=data[preference] !== false;});

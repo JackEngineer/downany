@@ -1,3 +1,5 @@
+import { RuntimeStatus } from "../RuntimeStatus";
+
 interface WindowChromeProps {
   platform?: NodeJS.Platform;
 }
@@ -5,11 +7,12 @@ interface WindowChromeProps {
 export function WindowChrome({
   platform = window.api.platform,
 }: WindowChromeProps) {
-  if (platform !== "darwin") return null;
+  if (platform !== "darwin") return <RuntimeStatus />;
 
   return (
     <header className="window-chrome">
       <span className="window-chrome__title">Downany · 百纳</span>
+      <RuntimeStatus />
     </header>
   );
 }

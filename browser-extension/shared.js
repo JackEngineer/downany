@@ -668,6 +668,7 @@
   }
 
   function bridgeConnectionPresentation(health) {
+    if (health?.versionMismatch) return {kind:"offline",text:"桌面与下载服务版本不一致"};
     if (health && health.ok && health.sidecarReady !== false) {
       return { kind: "online", text: "百纳已连接" };
     }

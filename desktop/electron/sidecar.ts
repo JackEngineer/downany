@@ -68,6 +68,12 @@ export class SidecarProcess extends EventEmitter {
     };
   }
 
+  private runningVersion: string | undefined;
+
+  getRunningVersion(): string | undefined {
+    return this.state === "connected" ? this.runningVersion : undefined;
+  }
+
   getConnectionState(): ConnectionState {
     return this.state;
   }
@@ -234,6 +240,7 @@ export class SidecarProcess extends EventEmitter {
         payload: { app: "electron", appVersion: this.opts.appVersion },
         timestamp: new Date().toISOString(),
       });
+      this.runningVersion = typeof hello.payload?.appVersion === "string" ? hello.payload.appVersion : undefined;
       handshaken = true;
       this.readyProc = child;
     } catch (err) {
@@ -246,7 +253,7 @@ export class SidecarProcess extends EventEmitter {
     }
   }
 
-  private waitForHello(child: ChildProcessWithoutNullStreams): Promise<{ protocolVersion: number }> {
+  private waitForHello(child: ChildProcessWithoutNullStreams): Promise<{ protocolVersion: number; payload?: { appVersion?: unknown } }> {
     return new Promise((resolve, reject) => {
       const cleanup = () => {
         clearTimeout(timer);
@@ -261,7 +268,7 @@ export class SidecarProcess extends EventEmitter {
       }, 90000);
       const onHello = (msg: Record<string, unknown>) => {
         cleanup();
-        resolve(msg as { protocolVersion: number });
+        resolve(msg as { protocolVersion: number; payload?: { appVersion?: unknown } });
       };
       const onExit = () => {
         cleanup();

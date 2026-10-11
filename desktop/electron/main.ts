@@ -45,6 +45,7 @@ import {
 } from "./enqueueGate";
 import { buildAppMenu } from "./menu";
 import { ConnectionState } from "./protocol";
+import { runtimeInfo } from "./runtimeInfo";
 import { registerProtocolClient } from "./protocolClient";
 import { SidecarProcess, resolveRepoRoot } from "./sidecar";
 import { resourcesRoot } from "./paths";
@@ -281,13 +282,18 @@ function trackedToBridgeStatus(t: {
   status: string;
   progress: number;
   errorMessage: string;
+  errorCode?: string;
+  filePath?: string;
 }): BridgeTaskStatus {
   return {
     id: t.id,
     title: t.title,
     status: t.status,
     progress: t.progress,
-    error: t.errorMessage,
+    error: t.status === "failed" ? "下载未完成，请在百纳查看详情" : "",
+    errorCode: t.errorCode,
+    hasFile: t.status === "completed" && Boolean(t.filePath) && fs.existsSync(t.filePath!),
+    fileName: t.status === "completed" && t.filePath ? path.basename(t.filePath) : undefined,
   };
 }
 
@@ -382,12 +388,18 @@ async function flushPendingEnqueue(): Promise<void> {
   await flushEnqueueItems(items);
 }
 
-  function startBridge(): void {
+function currentRuntimeInfo() {
+  const state = engineActivating ? "reconnecting" : engineUpdater?.recoveryRequired ? "failed" : sidecar?.getConnectionState() ?? "disconnected";
+  return runtimeInfo(app.getVersion(), sidecar?.getRunningVersion(), state, bridgeServer?.listening ? "listening" : "unavailable");
+}
+
+function startBridge(): void {
   if (bridgeServer) return;
   try {
     const server = startBridgeServer({
       enqueue: enqueueFromBridge,
       getStatus: () => ({
+        ...currentRuntimeInfo(),
         sidecarReady:
           sidecarReady &&
           Boolean(sidecar) &&
@@ -403,6 +415,14 @@ async function flushPendingEnqueue(): Promise<void> {
           await refreshDockFromSnapshot();
           return { ok: true, taskIds: [id] };
         } catch { return { ok: false, error: "原任务重试失败，请在百纳查看具体原因" }; }
+      },
+      revealTask: async (id) => {
+        const task = taskTracker.getByIds([id])[0];
+        if (!task || task.status !== "completed" || !task.filePath || !fs.existsSync(task.filePath)) {
+          return { ok: false, error: "成品文件已移动或未完成，请在百纳查看任务" };
+        }
+        shell.showItemInFolder(resolveOpenablePath(task.filePath));
+        return { ok: true, taskIds: [id] };
       },
       focusTask: async (id) => {
         const task = taskTracker.getByIds([id])[0];
@@ -894,6 +914,14 @@ function registerIpc(): void {
       throw new Error("下载工具正在启用，请稍后重试");
     }
     return sidecar.request(method, (payload as Record<string, unknown>) || {});
+  });
+
+  ipcMain.handle("app:getRuntimeInfo", () => currentRuntimeInfo());
+  ipcMain.handle("sidecar:reconnect", async () => {
+    if (!sidecar || engineActivating || engineUpdater?.recoveryRequired || isQuitting) return { ok: false };
+    if (["connected", "connecting", "reconnecting"].includes(sidecar.getConnectionState())) return { ok: false };
+    await sidecar.restart();
+    return { ok: true };
   });
 
   ipcMain.handle("sidecar:getState", async () => {

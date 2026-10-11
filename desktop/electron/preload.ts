@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { ConnectionState, ProtocolEvent } from "./protocol";
+import type { RuntimeInfo } from "./runtimeInfo";
 import type {
   TelegramConfig,
   TelegramDeliverySummary,
@@ -63,6 +64,12 @@ const api = {
     retry(deliveryId: string, confirmPossibleDuplicate = false, confirmInterruptedOutput = false): Promise<TelegramDeliverySummary> {
       return ipcRenderer.invoke("telegram:retry", { deliveryId, confirmPossibleDuplicate, confirmInterruptedOutput });
     },
+  },
+  getRuntimeInfo(): Promise<RuntimeInfo> {
+    return ipcRenderer.invoke("app:getRuntimeInfo");
+  },
+  reconnect(): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke("sidecar:reconnect");
   },
   getConnectionState(): Promise<ConnectionState> {
     return ipcRenderer.invoke("sidecar:getState");

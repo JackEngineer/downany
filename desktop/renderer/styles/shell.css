@@ -395,3 +395,6 @@
 
 .list-sort { white-space: nowrap; flex-shrink: 0; margin-left: auto; align-self: center; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
 .list-sort select { width: auto; min-width: 104px; padding: 3px 8px; font-size: 12px; }
+
+.runtime-status { display:flex; flex-wrap:wrap; gap:6px 14px; color:var(--text-muted, #8b98a5); font-size:11px; line-height:1.5; padding:6px 0; }
+.window-chrome .runtime-status { -webkit-app-region:no-drag; font-size:10px; padding:0; margin-left:20px; }

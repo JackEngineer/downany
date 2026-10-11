@@ -16,6 +16,8 @@
       </span>
     </header>
 
+    <p class="runtime-versions" id="runtimeVersions" aria-live="polite"></p>
+    <button type="button" class="secondary" id="openDesktop" hidden>打开百纳</button>
     <p class="connection-detail" id="connectionDetail" aria-live="polite"></p>
 
     <section class="page-meta" id="pageMeta">
@@ -26,6 +28,7 @@
       </div>
     </section>
 
+    <h2 class="section-title">下载选项</h2>
     <section class="output-options" aria-label="下载输出偏好">
       <label>输出 <select id="outputMode"><option value="video">视频 / 原媒体</option><option value="audio">音频（MP3）</option></select></label>
       <label>网页清晰度偏好 <select id="qualityPreference"><option value="best">最高可用</option><option value="1080p">不超过 1080p</option><option value="720p">不超过 720p</option></select></label>
@@ -37,6 +40,7 @@
       <button type="button" class="linkish" id="selectNone">清空</button>
     </div>
 
+    <h2 class="section-title">当前页媒体</h2>
     <ul class="media-list" id="mediaList" hidden></ul>
 
     <p class="empty" id="empty" hidden>

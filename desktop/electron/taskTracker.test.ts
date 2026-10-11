@@ -109,3 +109,12 @@ describe("TaskTracker", () => {
     ]);
   });
 });
+
+describe("extension final file and failure metadata", () => {
+  it("retains final file across progress and clears failure on an explicit retry event", () => {
+    const tracker=new TaskTracker();tracker.hydrate([{id:"task",status:"completed",file_path:"/fixture/movie.mp4",error_code:"site_response_unavailable"}]);
+    expect(tracker.getByIds(["task"])[0]).toMatchObject({filePath:"/fixture/movie.mp4",errorCode:"site_response_unavailable"});
+    tracker.applyEvent({event:"task.updated",payload:{task:{id:"task",status:"pending",error_code:"",error_message:""}}});
+    expect(tracker.getByIds(["task"])[0].errorCode).toBe("");
+  });
+});

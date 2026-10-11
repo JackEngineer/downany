@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { MigrationResult, SettingsFocus } from "../electron/preload";
+import { RuntimeStatus } from "./components/RuntimeStatus";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { SitesPanel } from "./components/SitesPanel";
 import { TelegramSettingsTab } from "./components/TelegramSettingsTab";
@@ -686,6 +687,7 @@ export function SettingsApp() {
         <h1>{t("settings.open", locale)}</h1>
         <span className={`save-state ${saveState}`}>{statusLabel}</span>
       </header>
+      <RuntimeStatus />
       {error && <p className="field-error">{error}</p>}
 
       <nav className="settings-tabs" aria-label={t("settings.categories", locale)}>

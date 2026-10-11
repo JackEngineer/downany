@@ -13,10 +13,20 @@
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,"0")).join("");
   }
-  function createStore(storage) {
+  function createStore(storage, legacyStorage) {
     const inFlight = new Map();
     let writeQueue = Promise.resolve();
-    async function list() { return (await storage.get(KEY))[KEY] || {}; }
+    async function list() {
+      const current = (await storage.get(KEY))[KEY];
+      if (current) return current;
+      const legacy = legacyStorage ? (await legacyStorage.get(KEY))[KEY] : null;
+      if (!legacy) return {};
+      const safe = Object.fromEntries(Object.entries(legacy).map(([key, value]) => [key, {
+        state: value.state, at: value.at, requestId: value.requestId, route: value.route,
+        taskIds: value.taskIds || [], error: value.state === "error" ? "发送结果待确认，请核对回执" : "",
+      }]));
+      await storage.set({ [KEY]: safe }); return safe;
+    }
     async function update(key, entry) {
       const operation = writeQueue.then(async () => {
         const entries = await list(); entries[key] = entry;
@@ -38,7 +48,7 @@
         catch { result = { ok: false, error: "发送结果未知，请重试核对回执" }; }
         const taskIds = result.taskIds || [];
         if (result.ok && taskIds.length === 0) result = { ok: false, error: "未收到任务回执，请更新桌面端后重试" };
-        await update(key, { state: result.ok ? "sent" : "error", at: Date.now(), requestId, route: item.route, taskIds, error: result.error || "" });
+        await update(key, { state: result.ok ? "sent" : "error", at: Date.now(), requestId, route: item.route, taskIds, error: result.ok ? "" : "发送结果待确认，请核对原回执；不会自动重复发送" });
         return result;
       })();
       inFlight.set(key, operation);

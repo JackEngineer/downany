@@ -699,11 +699,26 @@ function friendlyTaskError(error, errorCode) {
   return VideoDlShared.taskFailureMessage(error, errorCode);
 }
 
+function persistedTask(task) {
+  return {taskId:task.taskId,title:task.title || "",route:task.route,
+    ...VideoDlDelivery.outputOptions(task),sentAt:task.sentAt,status:task.status,
+    progress:task.progress,error:friendlyTaskError(task.error,task.errorCode),errorCode:task.errorCode || "",
+    hasFile:task.hasFile === true,fileName:task.fileName || ""};
+}
+const SENT_TASK_ROUTES_KEY = "sentTaskRoutesV1";
+async function withSessionRoutes(list) {
+  const routes = (await chrome.storage.session.get(SENT_TASK_ROUTES_KEY))[SENT_TASK_ROUTES_KEY] || {};
+  return list.map(task => ({...task, ...(routes[task.taskId] || {})}));
+}
 async function loadSentTasks() {
   try {
-    const data = await chrome.storage.session.get(SENT_TASKS_KEY);
+    const data = await chrome.storage.local.get(SENT_TASKS_KEY);
+    if (!data[SENT_TASKS_KEY]) {
+      const legacy = (await chrome.storage.session.get(SENT_TASKS_KEY))[SENT_TASKS_KEY];
+      if (Array.isArray(legacy)) { const safe = legacy.map(persistedTask); await chrome.storage.local.set({[SENT_TASKS_KEY]:safe}); return withSessionRoutes(safe); }
+    }
     const list = data?.[SENT_TASKS_KEY];
-    return Array.isArray(list) ? list : [];
+    return withSessionRoutes(Array.isArray(list) ? list : []);
   } catch {
     return [];
   }
@@ -718,7 +733,7 @@ async function saveSentTasks(list) {
       // A poll from before a retry cannot overwrite the newer attempt.
       if (!existing || (task.sentAt || 0) >= (existing.sentAt || 0)) current.set(task.taskId, task);
     }
-    await chrome.storage.session.set({[SENT_TASKS_KEY]: [...current.values()].sort((a,b) => (b.sentAt || 0)-(a.sentAt || 0)).slice(0,SENT_TASKS_MAX)});
+    await chrome.storage.local.set({[SENT_TASKS_KEY]: [...current.values()].map(persistedTask).sort((a,b) => (b.sentAt || 0)-(a.sentAt || 0)).slice(0,SENT_TASKS_MAX)});
   });
   sentTasksWriteQueue = operation.catch(() => {});
   await operation;
@@ -756,6 +771,11 @@ async function recordSentTasks({ taskIds, items, tabId = -1 }) {
   const next = [...byId.values()]
     .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0))
     .slice(0, SENT_TASKS_MAX);
+  // Tab IDs and source URLs are session-only; never persist them in durable receipts.
+  const routes = (await chrome.storage.session.get(SENT_TASK_ROUTES_KEY))[SENT_TASK_ROUTES_KEY] || {};
+  for (const task of next) routes[task.taskId] = {tabId:task.tabId,url:task.url,pageUrl:task.pageUrl};
+  const retained = Object.fromEntries(Object.entries(routes).slice(-SENT_TASKS_MAX));
+  await chrome.storage.session.set({[SENT_TASK_ROUTES_KEY]:retained});
   await saveSentTasks(next);
   void updateDownloadBadge(next);
   ensurePollRunning();
@@ -855,13 +875,16 @@ async function pollSentTasksOnce() {
     const nextTitle = remote.title || entry.title || "";
     const nextError = ["failed", "unknown"].includes(nextStatus) ? remote.error || "" : "";
     const nextErrorCode = ["failed", "unknown"].includes(nextStatus) ? remote.errorCode || remote.error_code || "" : "";
+    const nextHasFile = remote.hasFile === true, nextFileName = remote.fileName || "";
     const didChange =
+      nextHasFile !== entry.hasFile || nextFileName !== entry.fileName ||
       nextErrorCode !== entry.errorCode ||
       nextStatus !== entry.status ||
       nextProgress !== entry.progress ||
       nextTitle !== entry.title ||
       nextError !== entry.error;
     if (didChange) {
+      entry.hasFile = nextHasFile; entry.fileName = nextFileName;
       entry.status = nextStatus;
       entry.progress = nextProgress;
       entry.title = nextTitle;
@@ -967,15 +990,17 @@ async function probeBridgeHealth() {
       signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data || !data.ok) {
-      return { ok: false };
+    if (!res.ok || !data || !data.ok || data.service !== "downany-bridge") {
+      return { ok: false, failureKind: "unexpected_service" };
     }
     return {
       ok: true,
       sidecarReady: data.sidecarReady !== false,
+      appVersion: data.appVersion, sidecarVersion: data.sidecarVersion,
+      connection: data.connection, versionMismatch: data.versionMismatch, capabilities: data.capabilities,
     };
-  } catch {
-    return { ok: false };
+  } catch (error) {
+    return { ok: false, failureKind: error?.name === "AbortError" ? "timeout" : "unreachable" };
   } finally {
     clearTimeout(timer);
   }
@@ -1514,6 +1539,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().catch(() => sendResponse({ ok: false, error: "发送中断，请查看发送记录后重试" }));
     return true;
   }
+  if (message.type === "openDesktop") {
+    void wakeAppViaProtocol().then(() => waitForBridgeReady({timeoutMs:8000})).then(ok => sendResponse({ok})).catch(() => sendResponse({ok:false}));
+    return true;
+  }
+  if (message.type === "revealTask") {
+    void taskAction("reveal", message.taskId).then(sendResponse);
+    return true;
+  }
   if (message.type === "focusTask") {
     void taskAction("focus", message.taskId).then(sendResponse);
     return true;
@@ -1659,7 +1692,7 @@ void loadSentTasks().then((tasks) => {
 });
 
 // Only non-credential receipt metadata is stored; Cookie/header values remain in flight.
-const deliveryStore = VideoDlDelivery.createStore(chrome.storage.session);
+const deliveryStore = VideoDlDelivery.createStore(chrome.storage.local, chrome.storage.session);
 async function taskAction(action, taskId) {
   try {
     const response = await fetchWithTimeout(`${BRIDGE_BASE}/task/${action}`, {

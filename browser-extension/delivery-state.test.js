@@ -20,3 +20,13 @@ const {identity,createStore,outputOptions}=require("./delivery-state");
  const noAck=await store.send({route:"media",url:"https://cdn.example/noack.mp4"},async()=>({ok:true}));assert.equal(noAck.ok,false);
  console.log("delivery-state: duplicate clicks, reopen, route/signature separation, credential-free persistence, lost-response recovery and real acknowledgements passed");
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+(async()=>{
+ let local={},session={deliveryReceiptsV1:{hashed:{state:"sent",at:1,requestId:"old-request",route:"page",taskIds:["original"],headers:{Cookie:"never-persist"},error:"private-error"}}};
+ const area=data=>({get:async key=>({[key]:data[key]}),set:async value=>Object.assign(data,value)});
+ const migrated=createStore(area(local),area(session));await migrated.list();assert(!JSON.stringify(local).includes("Cookie"));assert(!JSON.stringify(local).includes("private-error"));
+ const item={route:"page",url:"https://example.com/persisted"};let calls=0;
+ await migrated.send(item,async()=>{calls++;return {ok:true,taskIds:["persisted-task"]};});
+ session={};const afterBrowserRestart=createStore(area(local),area(session));assert.equal((await afterBrowserRestart.send(item,async()=>{calls++;return {ok:true,taskIds:["duplicate"]};})).duplicate,true);assert.equal(calls,1);
+ console.log("receipt migration and browser-restart persistence passed");
+})().catch(error=>{console.error(error);process.exitCode=1;});
