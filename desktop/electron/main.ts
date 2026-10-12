@@ -12,6 +12,7 @@ import {
   session,
   shell,
 } from "electron";
+import { writeStderr } from "./stdio";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -354,7 +355,7 @@ async function flushEnqueueItems(
     return { ok: true, count: items.length, taskIds };
   } catch (err) {
     const message = redactErrors ? "加入下载失败，请重试" : String(err);
-    process.stderr.write(`外部入队失败: ${message}\n`);
+    writeStderr(`外部入队失败: ${message}\n`);
     mainWindow?.webContents.send("app:externalEnqueue", {
       count: 0,
       urls,
@@ -439,16 +440,16 @@ function startBridge(): void {
     server.once("listening", () => {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : BRIDGE_PORT;
-      process.stderr.write(
+      writeStderr(
         `扩展桥已监听 http://${BRIDGE_HOST}:${port}/enqueue\n`,
       );
     });
     server.once("error", (err) => {
       if (bridgeServer === server) bridgeServer = null;
-      process.stderr.write(`扩展桥启动失败: ${String(err)}\n`);
+      writeStderr(`扩展桥启动失败: ${String(err)}\n`);
     });
   } catch (err) {
-    process.stderr.write(`扩展桥启动失败: ${String(err)}\n`);
+    writeStderr(`扩展桥启动失败: ${String(err)}\n`);
   }
 }
 
@@ -512,10 +513,10 @@ app.on("open-file", (event, filePath) => {
         enqueueFromExternal([{ url }]);
       }
     } else {
-      process.stderr.write(`open-file 收到未支持的文件: ${filePath}\n`);
+      writeStderr(`open-file 收到未支持的文件: ${filePath}\n`);
     }
   } catch (err) {
-    process.stderr.write(`open-file 处理失败: ${String(err)}\n`);
+    writeStderr(`open-file 处理失败: ${String(err)}\n`);
   }
 });
 
@@ -779,7 +780,7 @@ async function startSidecar(): Promise<void> {
     }
   });
   sidecar.on("log", (chunk: string) => {
-    process.stderr.write(chunk);
+    writeStderr(chunk);
   });
   sidecar.on("reconnected", () => {
     if (engineActivating) return;
@@ -810,10 +811,10 @@ async function startSidecar(): Promise<void> {
       resourcesPath: resourcesRoot(__dirname),
       dataDir: downanyDataDir(),
       env: process.env,
-      log: (level, message) => process.stderr.write(`[Telegram ${level}] ${message}\n`),
+      log: (level, message) => writeStderr(`[Telegram ${level}] ${message}\n`),
     });
   } catch (error) {
-    process.stderr.write(`Telegram 本地服务资源校验失败: ${String(error)}\n`);
+    writeStderr(`Telegram 本地服务资源校验失败: ${String(error)}\n`);
   }
     telegramController?.attachSupervisor(telegramSupervisor ?? undefined);
   }).catch(() => undefined).finally(() => resolveTelegramSupervisorReady());
@@ -825,7 +826,7 @@ async function startSidecar(): Promise<void> {
       return current.request(method, payload);
     },
     downanyDataDir(),
-    (error) => process.stderr.write(`Telegram: ${error.message}\n`),
+    (error) => writeStderr(`Telegram: ${error.message}\n`),
     undefined,
     telegramSupervisorReady,
     undefined,
@@ -844,7 +845,7 @@ async function startSidecar(): Promise<void> {
   try {
     await telegramController.start();
   } catch (error) {
-    process.stderr.write(`Telegram 恢复失败: ${String(error)}\n`);
+    writeStderr(`Telegram 恢复失败: ${String(error)}\n`);
   }
   void refreshDockFromSnapshot();
 
@@ -867,7 +868,7 @@ async function startSidecar(): Promise<void> {
     const migration = await sidecar.request("app.runMigration", {});
     broadcastAll("app:migration", migration);
   } catch (err) {
-    process.stderr.write(`迁移查询失败: ${String(err)}\n`);
+    writeStderr(`迁移查询失败: ${String(err)}\n`);
   }
 }
 
@@ -1075,7 +1076,7 @@ initializePrimaryInstance(gotLock, () => {
     try {
       await sidecarStartup;
     } catch (err) {
-      process.stderr.write(`Sidecar 启动失败: ${String(err)}\n`);
+      writeStderr(`Sidecar 启动失败: ${String(err)}\n`);
       sidecarReady = false;
       broadcastState("failed");
     }
@@ -1108,11 +1109,11 @@ app.on("before-quit", createQuitHandler(async () => {
     // 退出时把 sending 留成无主记录或丢掉最后一次状态提交。
     await telegramController?.stop();
   } catch (error) {
-    process.stderr.write(`Telegram 停止失败: ${String(error)}\n`);
+    writeStderr(`Telegram 停止失败: ${String(error)}\n`);
   }
   try {
     await sidecar?.stop();
   } catch (error) {
-    process.stderr.write(`Sidecar 停止失败: ${String(error)}\n`);
+    writeStderr(`Sidecar 停止失败: ${String(error)}\n`);
   }
-}, () => app.quit(), () => process.stderr.write("应用退出清理失败\n")));
+}, () => app.quit(), () => writeStderr("应用退出清理失败\n")));
