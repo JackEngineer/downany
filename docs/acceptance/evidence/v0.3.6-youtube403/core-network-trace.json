@@ -1,0 +1,98 @@
+[
+  {
+    "case": 1,
+    "sameCoreSourceAsCandidate": "21ae823",
+    "ytDlpVersion": "2026.08.19",
+    "factorySessions": 1,
+    "googleRequests": [
+      {
+        "session": 1,
+        "host": "manifest.googlevideo.com",
+        "method": "GET",
+        "client": null,
+        "hasSignature": false,
+        "hasNParameter": false,
+        "status": 200,
+        "server": "HTTP server (unknown)"
+      },
+      {
+        "session": 1,
+        "host": "rr2---sn-a5mekndl.googlevideo.com",
+        "method": "GET",
+        "client": "VISIONOS",
+        "hasSignature": true,
+        "hasNParameter": false,
+        "expiresInSeconds": 21597,
+        "status": 206,
+        "server": "gvs 1.0"
+      },
+      {
+        "session": 1,
+        "host": "rr2---sn-a5mekndl.googlevideo.com",
+        "method": "GET",
+        "client": "VISIONOS",
+        "hasSignature": true,
+        "hasNParameter": false,
+        "expiresInSeconds": 21592,
+        "status": 206,
+        "server": "gvs 1.0"
+      }
+    ],
+    "metadataRequestsFailed": 0,
+    "cacheMode": "isolated-empty-then-warm",
+    "completed": true,
+    "fileName": "media.mp4",
+    "bytes": 10750915,
+    "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+    "fullDecodeExit": 0,
+    "elapsedSeconds": 14.07
+  },
+  {
+    "case": 2,
+    "sameCoreSourceAsCandidate": "21ae823",
+    "ytDlpVersion": "2026.08.19",
+    "factorySessions": 1,
+    "googleRequests": [
+      {
+        "session": 1,
+        "host": "manifest.googlevideo.com",
+        "method": "GET",
+        "client": null,
+        "hasSignature": false,
+        "hasNParameter": false,
+        "status": 200,
+        "server": "HTTP server (unknown)"
+      },
+      {
+        "session": 1,
+        "host": "rr2---sn-qja5mc-54.googlevideo.com",
+        "method": "GET",
+        "client": "VISIONOS",
+        "hasSignature": true,
+        "hasNParameter": false,
+        "expiresInSeconds": 21596,
+        "status": 206,
+        "server": "gvs 1.0"
+      },
+      {
+        "session": 1,
+        "host": "rr2---sn-qja5mc-54.googlevideo.com",
+        "method": "GET",
+        "client": "VISIONOS",
+        "hasSignature": true,
+        "hasNParameter": false,
+        "expiresInSeconds": 21589,
+        "status": 206,
+        "server": "gvs 1.0"
+      }
+    ],
+    "metadataRequestsFailed": 0,
+    "cacheMode": "isolated-empty-then-warm",
+    "completed": true,
+    "fileName": "media.mp4",
+    "bytes": 10750915,
+    "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+    "fullDecodeExit": 0,
+    "elapsedSeconds": 16.5
+  }
+]

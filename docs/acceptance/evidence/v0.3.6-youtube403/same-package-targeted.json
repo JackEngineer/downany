@@ -1,0 +1,88 @@
+{
+  "version": "0.3.6",
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "rows": [
+    {
+      "id": "youtube-single",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "taskId": "11caccfb-eca4-4cc5-9dda-b7e12d87a4d3",
+        "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0].mp4",
+        "bytes": 10750915,
+        "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+        "fullDecodeExit": 0,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "height": 480,
+        "duration": "150.140227",
+        "videoIdentityInFilename": true
+      }
+    },
+    {
+      "id": "youtube-double-click",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "createdTasks": 1,
+        "artifact": {
+          "taskId": "1f5e85a4-67cf-481c-9eb3-c2debe8a34e5",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (2).mp4",
+          "bytes": 10750915,
+          "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "150.140227",
+          "videoIdentityInFilename": true
+        }
+      }
+    },
+    {
+      "id": "youtube-restart",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "sameOriginalId": true,
+        "persistedBytes": 15360,
+        "pausedRestored": true,
+        "artifact": {
+          "taskId": "3abe05e7-af00-4f0b-ac79-346f69d1013e",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (3).mp4",
+          "bytes": 10750915,
+          "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "150.140227",
+          "videoIdentityInFilename": true
+        }
+      }
+    }
+  ],
+  "launches": [
+    {
+      "runtime": {
+        "appVersion": "0.3.6",
+        "sidecarVersion": "0.3.6",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      },
+      "readyMs": 1751
+    },
+    {
+      "runtime": {
+        "appVersion": "0.3.6",
+        "sidecarVersion": "0.3.6",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      },
+      "readyMs": 851
+    }
+  ],
+  "rendererErrors": []
+}

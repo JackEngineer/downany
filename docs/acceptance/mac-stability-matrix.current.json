@@ -495,5 +495,15 @@
     "YouTube真实匿名下载流程3行偶发HTTP403，未满足稳定性门槛",
     "Chrome连接/重连/发送3行等待本人正常加载与原生验收"
   ],
-  "evidenceBoundary": "只计入本矩阵绑定的最终DMG；旧候选、被同名退出请求中断的运行不计入。种子展示、受控网络和真实网站结果分别标注。"
+  "evidenceBoundary": "只计入本矩阵绑定的最终DMG；旧候选、被同名退出请求中断的运行不计入。种子展示、受控网络和真实网站结果分别标注。",
+  "followUpChecks": {
+    "youtube403MinimalDiagnosis": "v0.3.6-youtube403-diagnosis.md",
+    "sameCandidateTargetedRerun": {
+      "passed": 3,
+      "total": 3,
+      "evidenceFile": "evidence/v0.3.6-youtube403/same-package-targeted.json"
+    },
+    "originalFailuresRetained": true,
+    "rootCauseStatus": "历史失败定位至媒体HTTP403拒绝；本次未复现，具体服务端/中间层拒绝机制未知，没有证据可归因于应用URL缓存或签名过期。"
+  }
 }

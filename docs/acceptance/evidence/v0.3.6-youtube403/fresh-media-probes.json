@@ -1,0 +1,68 @@
+[
+  {
+    "session": 1,
+    "ytDlpVersion": "2026.08.19",
+    "cachedir": false,
+    "metadata": true,
+    "selector": "bestvideo[height<=480][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][vcodec^=avc][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480][ext=mp4]/best[height<=480]",
+    "selected": [
+      {
+        "formatId": "135",
+        "height": 480,
+        "protocol": "https",
+        "host": "rr2---sn-qja5mc-54.googlevideo.com",
+        "client": "VISIONOS",
+        "expiresInSeconds": 21599,
+        "status": 206,
+        "readBytes": 1024
+      },
+      {
+        "formatId": "140",
+        "height": null,
+        "protocol": "https",
+        "host": "rr2---sn-qja5mc-54.googlevideo.com",
+        "client": "VISIONOS",
+        "expiresInSeconds": 21597,
+        "status": 206,
+        "readBytes": 1024
+      }
+    ],
+    "videoId": "SkVqJ1SGeL0",
+    "formatCount": 47,
+    "safeHints": [],
+    "elapsedSeconds": 6.72
+  },
+  {
+    "session": 2,
+    "ytDlpVersion": "2026.08.19",
+    "cachedir": false,
+    "metadata": true,
+    "selector": "bestvideo[height<=480][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][vcodec^=avc][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480][ext=mp4]/best[height<=480]",
+    "selected": [
+      {
+        "formatId": "135",
+        "height": 480,
+        "protocol": "https",
+        "host": "rr2---sn-a5mekndl.googlevideo.com",
+        "client": "VISIONOS",
+        "expiresInSeconds": 21598,
+        "status": 206,
+        "readBytes": 1024
+      },
+      {
+        "formatId": "140",
+        "height": null,
+        "protocol": "https",
+        "host": "rr2---sn-a5mekndl.googlevideo.com",
+        "client": "VISIONOS",
+        "expiresInSeconds": 21596,
+        "status": 206,
+        "readBytes": 1024
+      }
+    ],
+    "videoId": "SkVqJ1SGeL0",
+    "formatCount": 47,
+    "safeHints": [],
+    "elapsedSeconds": 6.81
+  }
+]
