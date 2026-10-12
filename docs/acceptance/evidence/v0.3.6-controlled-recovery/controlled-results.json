@@ -1,0 +1,75 @@
+{
+  "version": "0.3.6",
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "realSiteRequests": 0,
+  "nativeChromeTested": false,
+  "rows": [
+    {
+      "id": "controlled403",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP403",
+      "classified": "access_denied",
+      "initialRequestCount": 2,
+      "explicitRecognitionExtraRequests": 1,
+      "noAutomaticRequestsAfterTerminal": true,
+      "originalIdAndOptionsRestored": true,
+      "noNewTasks": true,
+      "noFinalFile": true,
+      "existingFileUnchanged": true,
+      "diagnosticsGeneratedThroughButton": true,
+      "originalPageRecognitionOpened": true,
+      "finderRevealStubbedNotTested": true
+    },
+    {
+      "id": "controlled503-user-retry",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP503-then-healthy",
+      "classified": "network",
+      "initialRequestCount": 2,
+      "noAutomaticRequestsAfterTerminal": true,
+      "networkSettingsOpened": true,
+      "doubleRetrySameOriginalId": true,
+      "noNewTasks": true,
+      "qualityPreserved": true,
+      "artifact": {
+        "taskId": "d0458f7d-4f4a-42d2-a612-3e2856fab8bb",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "controlled-disconnect-range-recovery",
+      "status": "passed",
+      "evidenceKind": "same-package-server-disconnect-once",
+      "requestCount": 4,
+      "realPartialDisconnect": true,
+      "nonzeroRangeResume": true,
+      "sameOriginalTask": true,
+      "existingFileUnchanged": true,
+      "artifact": {
+        "taskId": "9f24abbf-c95f-4f4d-b67d-2b278b766179",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "baseline-protected",
+      "status": "passed",
+      "artifact": {
+        "taskId": "5732b4c6-d2a6-4620-9d4b-63c31ed3f924",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "fullDecodeExit": 0
+      },
+      "existingFileUnchanged": true
+    }
+  ],
+  "tests": {
+    "targetedPythonPassed": 146,
+    "subsequentImportPlacementCheckPassed": 3,
+    "controlledServerNodePassed": 12,
+    "applicationCodeChanged": false
+  }
+}

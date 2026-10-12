@@ -504,6 +504,13 @@
       "evidenceFile": "evidence/v0.3.6-youtube403/same-package-targeted.json"
     },
     "originalFailuresRetained": true,
-    "rootCauseStatus": "历史失败定位至媒体HTTP403拒绝；本次未复现，具体服务端/中间层拒绝机制未知，没有证据可归因于应用URL缓存或签名过期。"
+    "rootCauseStatus": "历史失败定位至媒体HTTP403拒绝；本次未复现，具体服务端/中间层拒绝机制未知，没有证据可归因于应用URL缓存或签名过期。",
+    "controlledRecovery": {
+      "evidenceFile": "evidence/v0.3.6-controlled-recovery/controlled-results.json",
+      "passed": 4,
+      "realSiteRequests": 0,
+      "nativeChromeTested": false,
+      "doesNotReplaceRealSiteFailures": true
+    }
   }
 }

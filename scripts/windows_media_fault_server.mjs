@@ -117,17 +117,18 @@ export async function createMediaFaultServer(mediaPath, {
   const server = createServer((request, response) => {
     const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
     const mode = modes.get(pathname) ?? 'healthy';
-    if (mode === 'service-unavailable') {
-      const body = Buffer.from('temporarily unavailable');
-      response.writeHead(503, {
+    if (mode === 'service-unavailable' || mode === 'access-denied') {
+      const status = mode === 'access-denied' ? 403 : 503;
+      const body = Buffer.from(status === 403 ? 'Forbidden' : 'temporarily unavailable');
+      response.writeHead(status, {
         'Content-Length': body.length,
         'Content-Type': 'text/plain; charset=utf-8',
-        'Retry-After': '1',
+        ...(status === 503 ? { 'Retry-After': '1' } : {}),
       }).end(body);
       requests.push({
         method: request.method,
         pathname,
-        status: 503,
+        status,
         rangeStart: null,
         rangeEnd: null,
         bytesSent: body.length,

@@ -389,3 +389,17 @@ test('invalid throttling options and an empty media file fail before a server st
     await removeFixture(fixture);
   }
 });
+
+test('controlled media rejection is 403 and does not serve the media body', async () => {
+  await withMediaServer(async server => {
+    server.setMode('/denied.mp4', 'access-denied');
+    const reply = await httpGet(server.baseUrl, '/denied.mp4');
+    assert.equal(reply.status, 403);
+    assert.equal(reply.body.toString(), 'Forbidden');
+    assert.equal(reply.headers['retry-after'], undefined);
+    assert.equal(server.requests.length, 1);
+    assert.equal(server.requests[0].faultInjected, true);
+    server.setMode('/denied.mp4', 'healthy');
+    assert.equal((await httpGet(server.baseUrl, '/denied.mp4')).status, 200);
+  }, { intervalMs: 0 });
+});

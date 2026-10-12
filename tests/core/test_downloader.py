@@ -9,7 +9,7 @@ import pytest
 from src.core import ytdlp_opts
 from src.core.download_task import DownloadOptions, DownloadTask, Platform, VideoInfo
 from src.core.downloader import DownloadCancelled, DownloadError, Downloader
-from src.core.error_codes import OutputVerificationFailed
+from src.core.error_codes import OutputVerificationFailed, classify_download_error
 from src.core.output_contract import SubtitleMode, compile_output_plan
 from src.core.output_commit import commit_output_bundle
 from src.sidecar.bin_paths import MediaToolchain
@@ -687,3 +687,27 @@ def test_same_title_different_direct_sources_and_repeat_keep_distinct_outputs(tm
     assert all(p.name.startswith("同名作品 [url-") for p in files)
     assert files[-1].name.endswith(" (2).mp4")
     assert [p.read_bytes() for p in files] == [bytes([1]), bytes([2]), bytes([1])]
+
+@pytest.mark.parametrize("message,expected_code", [
+    ("ERROR: unable to download video data: HTTP Error 403: Forbidden", "access_denied"),
+    ("Connection timed out", "network"),
+])
+def test_youtube_reparse_exhaustion_stops_after_two_sessions(tmp_path, message, expected_code):
+    staging = tmp_path / "task-1"
+    staging.mkdir()
+    factory = FakeYDLFactory(RuntimeError(message), RuntimeError(message), AssertionError("third session is forbidden"))
+    with pytest.raises(DownloadError) as failed:
+        _download(tmp_path, factory, plan=_video_plan(quality="480p"))
+    assert len(factory.instances) == 2
+    assert classify_download_error(failed.value) == expected_code
+    assert factory.option_snapshots[0]["format"] == factory.option_snapshots[1]["format"]
+    assert factory.option_snapshots[0]["outtmpl"] == factory.option_snapshots[1]["outtmpl"]
+    assert list(staging.iterdir()) == []
+
+
+def test_non_youtube_media_rejection_does_not_start_youtube_reparse_loop(tmp_path):
+    url = "https://cdn.example.invalid/clip.mp4"
+    factory = FakeYDLFactory(RuntimeError("HTTP Error 403: Forbidden"), AssertionError("unexpected reparse"))
+    with pytest.raises(DownloadError):
+        _download(tmp_path, factory, url=url, plan=_video_plan(url=url))
+    assert len(factory.instances) == 1
