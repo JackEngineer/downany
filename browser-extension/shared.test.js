@@ -455,3 +455,12 @@ assert.ok(failureMessage("", "need_login").includes("授权访问"));
 assert.strictEqual(failureMessage("Cookie=SECRET; https://private.example/token", undefined), "下载失败，请在百纳查看详情。");
 assert.strictEqual(failureMessage("", undefined), "");
 console.log("shared.js failure recovery tests passed");
+
+assert.ok(failureMessage("token=SECRET", "access_denied").includes("网站拒绝"));
+assert.ok(!failureMessage("token=SECRET", "access_denied").includes("SECRET"));
+for (const code of ["access_denied", "removed", "embedded_session_required", "media_tools_missing"]) {
+  assert.strictEqual(globalThis.VideoDlShared.canRetryTask({status:"failed", errorCode:code}), false);
+}
+assert.strictEqual(globalThis.VideoDlShared.canRetryTask({status:"failed", errorCode:"network"}), true);
+assert.strictEqual(globalThis.VideoDlShared.canRetryTask({status:"cancelled"}), true);
+assert.strictEqual(globalThis.VideoDlShared.canRetryTask({status:"completed"}), false);

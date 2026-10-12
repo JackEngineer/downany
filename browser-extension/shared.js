@@ -661,10 +661,16 @@
     if (errorCode === "site_response_unavailable" || /Fresh cookies \(not necessarily logged in\) are needed/i.test(raw)) {
       return "暂时无法读取视频信息，登录状态未知。可在百纳打开「网页识别」（浏览器抓取）；或播放原页视频，检测到媒体后下载。仍失败可导出诊断。";
     }
+    if (errorCode === "access_denied") return "网站拒绝了媒体请求。请在原网页确认可播放，再到百纳尝试网页识别或导出诊断。";
     if (errorCode === "cookie_unavailable" || /cookies? database/i.test(raw)) return "所选浏览器登录来源不可用，请在百纳检查任务设置。";
     if (errorCode === "need_login" || errorCode === "private") return "网站要求授权访问，请在百纳查看详情并选择已有授权来源。";
     if (/Requested format is not available/i.test(raw)) return "站点未提供符合清晰度上限的可确认格式；可改选最高可用重新发送，或下载检测媒体。";
     return "下载失败，请在百纳查看详情。";
+  }
+
+  function canRetryTask(task) {
+    const code = task?.errorCode || task?.error_code;
+    return ["failed", "cancelled"].includes(task?.status) && !["access_denied", "removed", "embedded_session_required", "media_tools_missing"].includes(code);
   }
 
   function bridgeConnectionPresentation(health) {
@@ -723,6 +729,7 @@
     pickPageThumbnail,
     findVideoCard,
     taskFailureMessage,
+    canRetryTask,
     bridgeConnectionPresentation,
     installGuidePresentation,
   };

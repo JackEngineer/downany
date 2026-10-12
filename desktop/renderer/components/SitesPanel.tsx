@@ -3,7 +3,7 @@ import { t, useLocale } from "../i18n";
 const SUPPORTED_SITES = [
   { name: "YouTube", url: "https://www.youtube.com" },
   { name: "Bilibili", url: "https://www.bilibili.com" },
-  { name: "Douyin", url: "https://www.douyin.com" },
+  { name: "Douyin", url: "https://www.douyin.com", experimental: true },
   { name: "TikTok", url: "https://www.tiktok.com" },
   { name: "Twitter / X", url: "https://x.com" },
   { name: "Instagram", url: "https://www.instagram.com" },
@@ -19,7 +19,7 @@ export function SitesPanel() {
         {SUPPORTED_SITES.map((site) => (
           <li key={site.name}>
             <a href={site.url} target="_blank" rel="noreferrer">
-              {site.name}
+              {site.name}{"experimental" in site ? ` · ${t("sites.experimental", locale)}` : ""}
             </a>
           </li>
         ))}

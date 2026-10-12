@@ -21,7 +21,9 @@ from src.core import error_codes as ec
         ("Video has been removed", ec.REMOVED),
         ("The uploader has closed their YouTube account", ec.REMOVED),
         ("HTTP Error 503: Service Unavailable", ec.NETWORK),
-        ("HTTP Error 403: Forbidden", ec.NETWORK),
+        ("HTTP Error 403: Forbidden", ec.ACCESS_DENIED),
+        ("HTTP 403 Forbidden", ec.ACCESS_DENIED),
+        ("HTTP Error 403: Sign in to access this video", ec.NEED_LOGIN),
         ("Connection timed out", ec.NETWORK),
         (
             "ERROR: [generic] https://cdn.example/video.m3u8: "

@@ -417,7 +417,11 @@ export function AddConfirmDialog() {
   };
 
   return (
-    <div className="dialog-backdrop" onClick={() => void close()}>
+    <div className="dialog-backdrop" onClick={(event) => {
+      // The second click on Add may land on this newly mounted backdrop.
+      if (event.detail > 1) return;
+      void close();
+    }}>
       <div
         className="dialog dialog-wide"
         role="dialog"

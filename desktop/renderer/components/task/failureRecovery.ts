@@ -47,6 +47,11 @@ const FAILURE_VIEWS = {
     requiresRetryConfirmation: false,
     actions: ["network"],
   },
+  access_denied: {
+    retryable: false,
+    requiresRetryConfirmation: false,
+    actions: ["recognize", "diagnostics"],
+  },
   network: {
     retryable: true,
     requiresRetryConfirmation: false,

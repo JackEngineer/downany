@@ -12,6 +12,7 @@ SITE_RESPONSE_UNAVAILABLE = "site_response_unavailable"
 GEO_BLOCKED = "geo_blocked"
 PRIVATE = "private"
 REMOVED = "removed"
+ACCESS_DENIED = "access_denied"
 NETWORK = "network"
 YTDLP_OUTDATED = "ytdlp_outdated"
 NEED_PO_TOKEN = "need_po_token"
@@ -30,6 +31,7 @@ ALL_ERROR_CODES = frozenset(
         GEO_BLOCKED,
         PRIVATE,
         REMOVED,
+        ACCESS_DENIED,
         NETWORK,
         YTDLP_OUTDATED,
         NEED_PO_TOKEN,
@@ -82,8 +84,9 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     )),
     (GEO_BLOCKED, re.compile(r"not available in your country|unavailable in your country|geo.?restrict|region.?block|country.?block", re.I)),
     (PRIVATE, re.compile(r"\bprivate video\b|video is private", re.I)),
+    (ACCESS_DENIED, re.compile(r"\bhttp(?: error)?\s*403\b|\b403\s*forbidden\b", re.I)),
     (NETWORK, re.compile(
-        r"timeout|timed out|connection|network|errno|http error 403|http error 429|http error 5|forbidden|ssl:|certificate",
+        r"timeout|timed out|connection|network|errno|http error 429|http error 5|ssl:|certificate",
         re.I,
     )),
     # generic 抽取器失败 = 站点/链接不受支持，须早于 404→removed；

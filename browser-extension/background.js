@@ -1642,6 +1642,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "retrySend") {
     void (async () => {
+      const known = (await loadSentTasks()).find(t => t.taskId === message.taskId);
+      if (["access_denied", "removed", "embedded_session_required", "media_tools_missing"].includes(known?.errorCode)) {
+        sendResponse({ok:false,error:"请在百纳查看原任务并使用对应恢复入口。"});
+        return;
+      }
       const result = await taskAction("retry", message.taskId);
       if (result.ok) {
         const tasks = await loadSentTasks();

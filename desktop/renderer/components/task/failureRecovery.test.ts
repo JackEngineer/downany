@@ -46,3 +46,9 @@ describe("output failure recovery", () => {
     ).toBe(true);
   });
 });
+
+ it("does not offer the same direct retry after an explicit site rejection", () => {
+   const view = failureRecoveryFor("access_denied");
+   expect(view.retryable).toBe(false);
+   expect(view.actions).toEqual(["recognize", "diagnostics"]);
+ });

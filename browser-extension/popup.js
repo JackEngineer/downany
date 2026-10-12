@@ -90,7 +90,7 @@ function renderRecent() {
     if (task.status === "completed") { li.append(element("p","recent-status",task.hasFile ? `成品：${task.fileName || "已保存"}` : "成品未能定位，请在百纳查看原任务")); if (task.hasFile) { const reveal=element("button","linkish","显示成品文件");reveal.addEventListener("click",()=>void taskAction("revealTask",task.taskId));li.append(reveal); } }
     if (task.error) li.append(element("p","recent-error",task.error));
     const open=element("button","linkish","在百纳查看");open.addEventListener("click",()=>void taskAction("focusTask",task.taskId));li.append(open);
-    if (task.status === "failed" || task.status === "cancelled") { const retry=element("button","recent-retry","重试原任务");retry.addEventListener("click",async()=>{retry.disabled=true;try {await taskAction("retrySend",task.taskId);} finally {retry.disabled=false;}});li.append(retry); }
+    if (Shared.canRetryTask(task)) { const retry=element("button","recent-retry","重试原任务");retry.addEventListener("click",async()=>{retry.disabled=true;try {await taskAction("retrySend",task.taskId);} finally {retry.disabled=false;}});li.append(retry); }
     $("recentList").append(li);
   }
 }
@@ -133,7 +133,7 @@ async function refresh() {
         const data=await response.json();
         if(response.ok && data.ok && Array.isArray(data.tasks)) {
           recent=recent.map(task=>{const live=data.tasks.find(item=>item.taskId===task.taskId || item.id===task.taskId);return live ? {...task,...live,error:Shared.taskFailureMessage(live.error, live.errorCode || live.error_code),hasFile:live.hasFile === true,connectionStale:false} : {...task,status:"unknown",hasFile:false};});
-          await chrome.storage.local.set({[popupRecentKey]:recent.map(task=>({taskId:task.taskId,title:task.title,route:task.route,audio_only:task.audio_only,quality:task.quality,status:task.status,progress:task.progress,sentAt:task.sentAt,error:task.error,hasFile:task.hasFile,fileName:task.fileName}))});
+          await chrome.storage.local.set({[popupRecentKey]:recent.map(task=>({taskId:task.taskId,title:task.title,route:task.route,audio_only:task.audio_only,quality:task.quality,status:task.status,progress:task.progress,sentAt:task.sentAt,error:task.error,errorCode:task.errorCode || task.error_code || "",hasFile:task.hasFile,fileName:task.fileName}))});
         }
       } catch { recent=recent.map(task=>({...task,hasFile:false,connectionStale:true})); } finally {clearTimeout(timer);}
     }

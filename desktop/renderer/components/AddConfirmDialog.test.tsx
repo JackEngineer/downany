@@ -84,6 +84,18 @@ describe("AddConfirmDialog playlist selection", () => {
     useAppStore.setState({ pendingAddUrls: null, toasts: [] });
   });
 
+  it("keeps confirmation open when Add's second click reaches the new backdrop", async () => {
+    useAppStore.setState({ pendingAddUrls: ["https://www.bilibili.com/video/BV1abc"] });
+    render(<AddConfirmDialog />);
+    const dialog = screen.getByRole("dialog", { name: "确认下载" });
+    const backdrop = dialog.closest(".dialog-backdrop")!;
+    fireEvent.click(backdrop, { detail: 2 });
+    expect(screen.getByRole("dialog", { name: "确认下载" })).toBeInTheDocument();
+    expect(useAppStore.getState().pendingAddUrls).not.toBeNull();
+    fireEvent.click(backdrop, { detail: 1 });
+    await waitFor(() => expect(useAppStore.getState().pendingAddUrls).toBeNull());
+  });
+
   it("submits selected playlist entries with one shared group identity", async () => {
     const parentUrl = "https://www.bilibili.com/video/BV1abc";
     useAppStore.setState({ pendingAddUrls: [parentUrl] });

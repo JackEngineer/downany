@@ -118,7 +118,8 @@ export async function run(options) {
   }
   // Public v0.3.0 always uses 17888, so refuse to disturb an existing app
   // before allocating or copying any acceptance data.
-  await assertBridgeUnused();
+  const sourceUsesFixedBridge = options.sourceVersion === "0.3.0";
+  if (sourceUsesFixedBridge) await assertBridgeUnused();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "downany-v031-macos-upgrade-"));
   const directories = prepareDownloadGateRoot(root);
   const installRoot = path.join(root, "Applications");
@@ -144,7 +145,7 @@ export async function run(options) {
     });
     // v0.3.0 predates the dynamic bridge-port switch and always binds 17888.
     // launchGateApp therefore proves that the product port is unused first.
-    session.environment.DOWNANY_BRIDGE_PORT = "17888";
+    session.environment.DOWNANY_BRIDGE_PORT = sourceUsesFixedBridge ? "17888" : "0";
     await launchGateApp(session);
     const sourceSettings = await session.page.evaluate((downloadDir) => window.api.request("settings.update", {
       download_dir: downloadDir,
