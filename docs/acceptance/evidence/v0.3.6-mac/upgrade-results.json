@@ -1,0 +1,53 @@
+{
+  "target": "macos-arm64",
+  "result": "passed",
+  "recordedAt": "2026-10-12T14:20:11.059Z",
+  "source": {
+    "version": "0.3.5",
+    "artifactSha256": "2cdde2c963d7a1f86144f61cad1d2ef64fa15ae5209177ac88089c6b473b29fd"
+  },
+  "candidate": {
+    "version": "0.3.6",
+    "artifactSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401"
+  },
+  "installMethod": "isolated-app-copy-replacement",
+  "manualInstallation": false,
+  "sourceLaunchVerified": true,
+  "candidateLaunchVerified": true,
+  "settingsPreserved": {
+    "downloadDirRetained": true,
+    "defaultQuality": "480p",
+    "concurrentDownloads": 2,
+    "themeMode": "dark",
+    "embedMetadata": false
+  },
+  "queuePreserved": {
+    "completedTask": true,
+    "pausedTask": true,
+    "sameTaskIds": true
+  },
+  "resume": {
+    "partialBytes": 31744,
+    "rangeStart": 64512,
+    "completed": true
+  },
+  "existingCompletedFileUnchanged": true,
+  "completedArtifacts": [
+    {
+      "phase": "source-completed",
+      "bytes": 2963740,
+      "sha256": "70b126bb2be237243034a44d102489637824d74e7c9cb7cb8a24b3e74a65980d",
+      "decodedSha256": "b6dc2dd0c2013ae195e09326d54eae8c60815103728ccf306a15501f229f03e8",
+      "videoCodec": "mpeg4",
+      "audioCodec": "aac"
+    },
+    {
+      "phase": "candidate-resumed",
+      "bytes": 2963740,
+      "sha256": "70b126bb2be237243034a44d102489637824d74e7c9cb7cb8a24b3e74a65980d",
+      "decodedSha256": "b6dc2dd0c2013ae195e09326d54eae8c60815103728ccf306a15501f229f03e8",
+      "videoCodec": "mpeg4",
+      "audioCodec": "aac"
+    }
+  ]
+}

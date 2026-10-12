@@ -1,0 +1,499 @@
+{
+  "candidate": {
+    "version": "0.3.6",
+    "target": "macos-arm64",
+    "sourceCommit": "21ae823656a7bd8df3db7b11ca085c8364ce311a",
+    "artifactSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+    "artifactBytes": 181385990,
+    "extensionVersion": "0.9.4",
+    "extensionArtifactSha256": "46d9ed94ed24ff737db262f1382dfee396ecf9a0fab30a607f3a973250563e42",
+    "nativeExtensionVersionVerified": false
+  },
+  "counts": {
+    "failed": 3,
+    "passed": 26,
+    "blocked": 3,
+    "not-tested": 0
+  },
+  "rows": [
+    {
+      "id": "youtube-single",
+      "status": "failed",
+      "error": "website_failed",
+      "errorCode": "access_denied",
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json",
+      "releaseBlocking": true,
+      "note": "真实匿名公开样本偶发 HTTP403；同视频有其他成功尝试，但本行稳定性未通过，不据此断言登录、删除或程序bug。"
+    },
+    {
+      "id": "youtube-batch",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "createdTasks": 2,
+        "artifacts": [
+          {
+            "taskId": "6885d505-659b-472e-b1fd-e0cc9e1611fe",
+            "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (3).mp4",
+            "bytes": 10750915,
+            "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+            "fullDecodeExit": 0,
+            "videoStreams": 1,
+            "audioStreams": 1,
+            "height": 480,
+            "duration": "150.140227",
+            "videoIdentityInFilename": true
+          },
+          {
+            "taskId": "130ae2eb-72a6-492e-8dba-7b82ca7545da",
+            "fileName": "Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film [youtube-aqz-KE-bpKQ] (2).mp4",
+            "bytes": 40413354,
+            "sha256": "acaa752ecfeeb79e25dffc3d0e4dce8fac9be73f424be5cabe93268a4b2e9ffd",
+            "fullDecodeExit": 0,
+            "videoStreams": 1,
+            "audioStreams": 1,
+            "height": 480,
+            "duration": "634.624580",
+            "videoIdentityInFilename": true
+          }
+        ]
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "youtube-quality",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "selected": {
+          "value": "230+bestaudio",
+          "label": "360p · mp4"
+        },
+        "artifact": {
+          "taskId": "21d126fa-c79f-4ee0-bed1-64b71f97fff8",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (2).mkv",
+          "bytes": 6381872,
+          "sha256": "da7457a113a29066175ec09f88e3dadb908b737269da41550e072ce5394376f1",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 360,
+          "duration": "150.128000",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "youtube-audio",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "taskId": "a079f4a6-4154-47cd-a3ca-58c9dc89e7f0",
+        "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0].mp3",
+        "bytes": 5108500,
+        "sha256": "9c06c1841002c4e024c718d373b39918d076e17cea47a586be00426c8a1346aa",
+        "fullDecodeExit": 0,
+        "videoStreams": 0,
+        "audioStreams": 1,
+        "duration": "150.120000",
+        "videoIdentityInFilename": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "youtube-cancel",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "originalId": "7b29ab9d-838f-4447-8329-c779e635e925",
+        "terminalState": "cancelled",
+        "noFinalFile": true,
+        "noAutomaticRetry": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "youtube-retry",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "controlledFailure": "unreachable-local-proxy",
+        "errorCode": "network",
+        "retryKeptOriginalId": true,
+        "noNewTasks": true,
+        "artifact": {
+          "taskId": "dd80aedd-012b-4004-b609-8ec93990d837",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (4).mp4",
+          "bytes": 10750915,
+          "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "150.140227",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "youtube-double-click",
+      "status": "failed",
+      "error": "website_failed",
+      "errorCode": "access_denied",
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json",
+      "releaseBlocking": true,
+      "note": "真实匿名公开样本偶发 HTTP403；同视频有其他成功尝试，但本行稳定性未通过，不据此断言登录、删除或程序bug。"
+    },
+    {
+      "id": "youtube-restart",
+      "status": "failed",
+      "error": "website_failed",
+      "errorCode": "access_denied",
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json",
+      "releaseBlocking": true,
+      "note": "真实匿名公开样本偶发 HTTP403；同视频有其他成功尝试，但本行稳定性未通过，不据此断言登录、删除或程序bug。"
+    },
+    {
+      "id": "bilibili-single",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "taskId": "a1846db4-7464-440d-9bce-a3d723a2ba45",
+        "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (2).mp4",
+        "bytes": 18444147,
+        "sha256": "b445eacdd9feff5ae729d412f93e26de4ddea70c92b47c47c41678b98b7cf7f4",
+        "fullDecodeExit": 0,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "height": 480,
+        "duration": "146.146712",
+        "videoIdentityInFilename": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-batch",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "createdTasks": 2,
+        "artifacts": [
+          {
+            "taskId": "8407693b-d8ae-4d63-b59b-7c43b0bdf94f",
+            "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (3).mp4",
+            "bytes": 18444147,
+            "sha256": "08f78fb0fcdd4a1a1878e11491e42614199e726a528dacae561ebb6fd180d32f",
+            "fullDecodeExit": 0,
+            "videoStreams": 1,
+            "audioStreams": 1,
+            "height": 480,
+            "duration": "146.146712",
+            "videoIdentityInFilename": true
+          },
+          {
+            "taskId": "f949a76f-a834-4403-a8f9-179b0de89442",
+            "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p02 Caminandes 3- Llamigos [BiliBili-BV1zL4y1e7Jh_p2].mp4",
+            "bytes": 18909080,
+            "sha256": "35029ea0aa4f83e00c65ce20ad8a004e51c226497cff04cc52f36090c535f860",
+            "fullDecodeExit": 0,
+            "videoStreams": 1,
+            "audioStreams": 1,
+            "height": 480,
+            "duration": "150.186984",
+            "videoIdentityInFilename": true
+          }
+        ]
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-quality",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "selected": {
+          "value": "30016+bestaudio",
+          "label": "360p · mp4 · 6.1 MB"
+        },
+        "artifact": {
+          "taskId": "6688c0ba-f51b-442d-8927-18b337eb0704",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (4).mp4",
+          "bytes": 10452748,
+          "sha256": "63700753e878b0ed70e99a8d0e64666506943e0df739751cbc7db19d07672d5b",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 360,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-audio",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "taskId": "0c61735b-74c4-4f61-87b8-f3fee3616dac",
+        "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1].mp3",
+        "bytes": 5137503,
+        "sha256": "b2bae0fff13c2cb7f7f6878b97181f9c94a88aebfff5df130a20c61640430395",
+        "fullDecodeExit": 0,
+        "videoStreams": 0,
+        "audioStreams": 1,
+        "duration": "146.181224",
+        "videoIdentityInFilename": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-cancel",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "originalId": "1f542f7d-5f0f-4d94-88dd-647f7df5f454",
+        "terminalState": "cancelled",
+        "noFinalFile": true,
+        "noAutomaticRetry": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-retry",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "controlledFailure": "unreachable-local-proxy",
+        "errorCode": "network",
+        "retryKeptOriginalId": true,
+        "noNewTasks": true,
+        "artifact": {
+          "taskId": "cd899cb9-ed66-4e55-ac73-155b0b824c6e",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (5).mp4",
+          "bytes": 18444147,
+          "sha256": "08f78fb0fcdd4a1a1878e11491e42614199e726a528dacae561ebb6fd180d32f",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-double-click",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "createdTasks": 1,
+        "artifact": {
+          "taskId": "c3aebfe8-88b6-43f6-a61c-f2122c24fae3",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (6).mp4",
+          "bytes": 18444147,
+          "sha256": "08f78fb0fcdd4a1a1878e11491e42614199e726a528dacae561ebb6fd180d32f",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "bilibili-restart",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "sameOriginalId": true,
+        "persistedBytes": 3072,
+        "pausedRestored": true,
+        "artifact": {
+          "taskId": "750ce54f-4118-46a3-ad17-a5ef32f0bc5e",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1] (7).mp4",
+          "bytes": 18444147,
+          "sha256": "08f78fb0fcdd4a1a1878e11491e42614199e726a528dacae561ebb6fd180d32f",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/sites-results.json"
+    },
+    {
+      "id": "mac-cold-start",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/cold-results.json",
+      "evidenceKind": "three-fresh-profile-process-cold-starts",
+      "note": "系统缓存未清除，不等于重启系统后的干净机器首装。"
+    },
+    {
+      "id": "mac-epipe",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/real-electron-pipe.json",
+      "evidenceKind": "actual-Electron-two-closed-output-pipes"
+    },
+    {
+      "id": "mac-data-upgrade",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/upgrade-results.json",
+      "evidenceKind": "isolated-real-0.3.5-to-0.3.6-copy-replacement"
+    },
+    {
+      "id": "mac-partial-resume",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/upgrade-results.json",
+      "evidenceKind": "actual-nonzero-HTTP206-Range-and-full-decode"
+    },
+    {
+      "id": "mac-existing-file-safety",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/recovery-results.json",
+      "evidenceKind": "real-output-no-overwrite-and-unchanged-existing-files"
+    },
+    {
+      "id": "chrome-connect",
+      "status": "blocked",
+      "releaseBlocking": true,
+      "evidenceKind": "native-Chrome-not-executed",
+      "note": "实际已加载插件版本与原生工具栏流程未知。管理页访问曾遭拒；等待本人正常加载/重载0.9.4。隔离Electron popup展示不计入原生Chrome通过。"
+    },
+    {
+      "id": "chrome-reconnect",
+      "status": "blocked",
+      "releaseBlocking": true,
+      "evidenceKind": "native-Chrome-not-executed",
+      "note": "实际已加载插件版本与原生工具栏流程未知。管理页访问曾遭拒；等待本人正常加载/重载0.9.4。隔离Electron popup展示不计入原生Chrome通过。"
+    },
+    {
+      "id": "chrome-delivery",
+      "status": "blocked",
+      "releaseBlocking": true,
+      "evidenceKind": "native-Chrome-not-executed",
+      "note": "实际已加载插件版本与原生工具栏流程未知。管理页访问曾遭拒；等待本人正常加载/重载0.9.4。隔离Electron popup展示不计入原生Chrome通过。"
+    },
+    {
+      "id": "error-network",
+      "status": "passed",
+      "evidenceKind": "controlled-real-HTTP503",
+      "evidence": {
+        "taskId": "11edaf13-6303-4cd6-83f4-7cde962c7e45",
+        "errorCode": "network",
+        "detail": "网络连接失败，请检查网络或代理后重试",
+        "recoveryActions": [
+          "检查网络设置"
+        ],
+        "directRetryVisible": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "error-access-denied",
+      "status": "passed",
+      "evidenceKind": "controlled-real-HTTP403",
+      "evidence": {
+        "taskId": "98eca109-8d40-4c65-b908-2f24a8929461",
+        "errorCode": "access_denied",
+        "detail": "网站拒绝了媒体请求。请先确认原网页可播放，再尝试网页识别；仍失败时导出诊断",
+        "recoveryActions": [
+          "网页识别",
+          "导出诊断"
+        ],
+        "directRetryVisible": false
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "error-unsupported",
+      "status": "passed",
+      "evidenceKind": "controlled-real-nonmedia-page",
+      "evidence": {
+        "taskId": "a41a42fb-46b9-4c21-8ebc-6b0e33b70ceb",
+        "errorCode": "unsupported",
+        "detail": "暂不支持直接下载此页面，请改用网页识别",
+        "recoveryActions": [
+          "网页识别"
+        ],
+        "directRetryVisible": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "error-invalid-link",
+      "status": "passed",
+      "evidenceKind": "real-site-unavailable-link",
+      "evidence": {
+        "taskId": "7d917ed0-2982-4bee-8854-5115ce3168d0",
+        "errorCode": "removed",
+        "detail": "此内容已被删除或不可用",
+        "recoveryActions": [],
+        "directRetryVisible": false
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "error-login",
+      "status": "passed",
+      "evidenceKind": "seeded-presentation-only-not-real-login",
+      "evidence": {
+        "taskId": "85dfcdab-5eb9-49cd-991a-6b84c5a276d4",
+        "errorCode": "need_login",
+        "detail": "需要登录后才能下载，请选择浏览器登录状态后重试",
+        "recoveryActions": [
+          "选择登录状态",
+          "网页识别"
+        ],
+        "directRetryVisible": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "error-program-bug",
+      "status": "passed",
+      "evidenceKind": "seeded-unknown-presentation-plus-real-EPIPE-regression",
+      "evidence": {
+        "taskId": "60d942b2-7358-4390-b109-2246e58780ed",
+        "errorCode": "unknown",
+        "detail": "下载未完成，请重试或改用网页识别",
+        "recoveryActions": [
+          "网页识别"
+        ],
+        "directRetryVisible": true,
+        "doesNotMisdiagnoseUnknownAsLoginOrNetwork": true,
+        "unknownDoesNotProveBug": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "douyin-experimental-label",
+      "status": "passed",
+      "evidenceKind": "real-packaged-task-UI-seeded-platform",
+      "evidence": {
+        "experimentalLabelVisible": true
+      },
+      "evidenceFile": "evidence/v0.3.6-mac/errors-results.json"
+    },
+    {
+      "id": "douyin-original-guard",
+      "status": "passed",
+      "evidenceFile": "evidence/v0.3.6-mac/douyin-guard-results.json",
+      "evidenceKind": "real-anonymous-original-page-recovery-rejected",
+      "note": "只验证拒绝错误作品/未实际播放的保护；未完成真实播放、抓取和原任务下载，不宣称抖音稳定支持。"
+    }
+  ],
+  "publishingReady": false,
+  "publishingBlockers": [
+    "YouTube真实匿名下载流程3行偶发HTTP403，未满足稳定性门槛",
+    "Chrome连接/重连/发送3行等待本人正常加载与原生验收"
+  ],
+  "evidenceBoundary": "只计入本矩阵绑定的最终DMG；旧候选、被同名退出请求中断的运行不计入。种子展示、受控网络和真实网站结果分别标注。"
+}

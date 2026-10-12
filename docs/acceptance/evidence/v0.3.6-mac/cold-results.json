@@ -1,0 +1,48 @@
+{
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "passed": true,
+  "runs": [
+    {
+      "freshProfile": true,
+      "freshData": true,
+      "processColdStart": true,
+      "systemCacheNotFlushed": true,
+      "readyMs": 801,
+      "runtime": {
+        "appVersion": "0.3.6",
+        "sidecarVersion": "0.3.6",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      }
+    },
+    {
+      "freshProfile": true,
+      "freshData": true,
+      "processColdStart": true,
+      "systemCacheNotFlushed": true,
+      "readyMs": 886,
+      "runtime": {
+        "appVersion": "0.3.6",
+        "sidecarVersion": "0.3.6",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      }
+    },
+    {
+      "freshProfile": true,
+      "freshData": true,
+      "processColdStart": true,
+      "systemCacheNotFlushed": true,
+      "readyMs": 885,
+      "runtime": {
+        "appVersion": "0.3.6",
+        "sidecarVersion": "0.3.6",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      }
+    }
+  ]
+}

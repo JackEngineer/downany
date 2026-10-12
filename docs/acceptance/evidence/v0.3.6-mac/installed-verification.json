@@ -1,0 +1,27 @@
+{
+  "runtime": {
+    "ok": true,
+    "service": "downany-bridge",
+    "sidecarReady": true,
+    "appVersion": "0.3.6",
+    "sidecarVersion": "0.3.6",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false,
+    "capabilities": [
+      "explicit-routes",
+      "enqueue-receipts",
+      "task-retry",
+      "task-focus",
+      "task-reveal"
+    ]
+  },
+  "normalLaunchServicesStartup": true,
+  "queuePreserved": true,
+  "historyPreserved": true,
+  "settingsPreserved": true,
+  "existingFilesUnchanged": true,
+  "queueCount": 46,
+  "historyCount": 39,
+  "existingFileCount": 31
+}

@@ -1,0 +1,149 @@
+{
+  "target": "macos-arm64",
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "expectedVersion": "0.3.6",
+  "recordedAt": "2026-10-12T14:21:12.462Z",
+  "sampleLicense": "CC0 1.0",
+  "result": "passed",
+  "launchCount": 3,
+  "previousCompletedFilesUnchanged": true,
+  "cases": [
+    {
+      "label": "public-direct",
+      "taskId": "c05ef779-6dc7-43ca-a59e-c4e9572ce2e4",
+      "artifactBytes": 1131116,
+      "artifactSha256": "797e880d38a800b1a54b3ec4a16159c7cd20a15e4ea7676a84d2793d8bdbf6f3",
+      "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
+      "durationSeconds": 5.055,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": {
+        "codec": "h264",
+        "width": 960,
+        "height": 540
+      },
+      "audio": {
+        "codec": "aac",
+        "channels": 2,
+        "sampleRate": "48000"
+      },
+      "visibleCompleted": true
+    },
+    {
+      "label": "duplicate-name-no-overwrite",
+      "taskId": "cfaf83d5-b100-44c0-aced-17f25bdd2a89",
+      "artifactBytes": 1131116,
+      "artifactSha256": "797e880d38a800b1a54b3ec4a16159c7cd20a15e4ea7676a84d2793d8bdbf6f3",
+      "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
+      "durationSeconds": 5.055,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": {
+        "codec": "h264",
+        "width": 960,
+        "height": 540
+      },
+      "audio": {
+        "codec": "aac",
+        "channels": 2,
+        "sampleRate": "48000"
+      },
+      "visibleCompleted": true,
+      "recovery": {
+        "originalFileUnchanged": true,
+        "distinctOutputPath": true,
+        "decodedMatchesSource": true
+      }
+    },
+    {
+      "label": "failed-task-retry",
+      "taskId": "0bc6e607-3a5f-4bc1-843b-3fd59c92f787",
+      "artifactBytes": 1131099,
+      "artifactSha256": "d5b2367557193a6c177876d1ad2a0905995328d44788eb63288766ff55efe450",
+      "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
+      "durationSeconds": 5.055,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": {
+        "codec": "h264",
+        "width": 960,
+        "height": 540
+      },
+      "audio": {
+        "codec": "aac",
+        "channels": 2,
+        "sampleRate": "48000"
+      },
+      "visibleCompleted": true,
+      "recovery": {
+        "initialStatus": "failed",
+        "initialErrorCode": "network",
+        "sameTaskId": true,
+        "uiAction": "retry",
+        "decodedMatchesSource": true,
+        "outputDirectoryRetained": true,
+        "retainedSelections": {
+          "quality": "720p",
+          "formatId": null,
+          "audioOnly": false,
+          "postprocessing": "none"
+        }
+      }
+    },
+    {
+      "label": "pause-restart-resume",
+      "taskId": "4c589b08-b557-4861-ad98-ca6de5a0cdeb",
+      "artifactBytes": 1131105,
+      "artifactSha256": "c5b7aad5cf115160f3158363d6311d399d9d85b4c25afb83cbfb39fd4a9b38ea",
+      "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
+      "durationSeconds": 5.055,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": {
+        "codec": "h264",
+        "width": 960,
+        "height": 540
+      },
+      "audio": {
+        "codec": "aac",
+        "channels": 2,
+        "sampleRate": "48000"
+      },
+      "visibleCompleted": true,
+      "recovery": {
+        "activeBytes": 7168,
+        "pausedBytes": 15360,
+        "restoredStatus": "paused",
+        "sameTaskId": true,
+        "uiActions": [
+          "pause",
+          "continue"
+        ],
+        "rangeStart": 31744,
+        "decodedMatchesSource": true
+      }
+    },
+    {
+      "label": "network-interruption-recovery",
+      "taskId": "26327c2e-da69-4396-9b78-033a0259cad8",
+      "artifactBytes": 1131095,
+      "artifactSha256": "094fab4483a683f199e3e753b5f528f21fdf1975728e27748c360e6d3e0f471b",
+      "decodedSha256": "a4063e6466861883b9b3a460c20a8dba6034953f0f5a9f49dd58bd4f57c75f3f",
+      "durationSeconds": 5.055,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": {
+        "codec": "h264",
+        "width": 960,
+        "height": 540
+      },
+      "audio": {
+        "codec": "aac",
+        "channels": 2,
+        "sampleRate": "48000"
+      },
+      "visibleCompleted": true,
+      "recovery": {
+        "faultInjected": true,
+        "interruptedBytes": 262144,
+        "rangeStart": 236387,
+        "decodedMatchesSource": true
+      }
+    }
+  ]
+}

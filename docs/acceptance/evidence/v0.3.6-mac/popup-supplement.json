@@ -1,0 +1,20 @@
+{
+  "kind": "isolated-Electron-fixture-not-native-Chrome",
+  "checks": [
+    "actual version fields, safe HTTP403 recovery, no denied same-path retry, completed file action, progress",
+    "cold startup distinguishes app from ready service",
+    "blocked/unreachable remains ambiguous and actionable, no alternate access probe"
+  ],
+  "actions": [
+    {
+      "type": "domMedia"
+    },
+    {
+      "type": "revealTask",
+      "taskId": "completed-fixture"
+    }
+  ],
+  "pageErrors": [],
+  "extensionVersion": "0.9.4",
+  "extensionArtifactSha256": "46d9ed94ed24ff737db262f1382dfee396ecf9a0fab30a607f3a973250563e42"
+}

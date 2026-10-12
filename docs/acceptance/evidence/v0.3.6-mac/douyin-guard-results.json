@@ -1,0 +1,21 @@
+{
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "status": "passed",
+  "evidenceKind": "real-anonymous-built-in-page-rejection-only",
+  "originalPreserved": true,
+  "noNewTasks": true,
+  "noFinalFile": true,
+  "firstRecovery": {
+    "ok": false,
+    "code": "playback_required"
+  },
+  "actualPage": {
+    "host": "www.douyin.com",
+    "path": "/jingxuan",
+    "differentFromOriginalVideoPath": true,
+    "playedVideoCount": 0
+  },
+  "retryRejected": true,
+  "loginOrCaptchaNotPerformed": true,
+  "actualDownloadNotProved": true
+}

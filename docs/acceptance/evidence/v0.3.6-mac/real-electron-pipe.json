@@ -1,0 +1,17 @@
+{
+  "realElectronPipeErrors": [
+    "EPIPE",
+    "EPIPE"
+  ],
+  "runtime": {
+    "appVersion": "0.3.6",
+    "sidecarVersion": "0.3.6",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "mainProcessSurvived": true,
+  "secondWriteSurvived": true,
+  "candidateSha256": "4832ce415a9898821926d5ab59e1e816b36b1cdc72671c671acfd52bd6e62401",
+  "appAsarSha256": "a512461733be6fc16b0b3c1d9a53448cbc2635c892722ca1e17f9b1a5f928bae"
+}
