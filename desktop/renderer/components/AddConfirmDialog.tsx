@@ -104,6 +104,7 @@ function newGroupId(): string {
 export function AddConfirmDialog() {
   const locale = useLocale();
   const pendingAddUrls = useAppStore((s) => s.pendingAddUrls);
+  const loginMode = useAppStore((s) => s.pendingAddLoginMode);
   const setPendingAddUrls = useAppStore((s) => s.setPendingAddUrls);
   const pushToast = useAppStore((s) => s.pushToast);
   const [rows, setRows] = useState<ParseRow[]>([]);
@@ -124,6 +125,7 @@ export function AddConfirmDialog() {
     request<{ parseId: string }>("download.parseUrls", {
       urls: pendingAddUrls,
       allow_playlist: true,
+      login_mode: loginMode,
     })
       .then((res) => setParseId(res.parseId))
       .catch(() => {
@@ -278,6 +280,7 @@ export function AddConfirmDialog() {
             playlist_index,
           };
         }),
+        loginMode,
       );
       if (created) setPendingAddUrls(null);
     } catch {
@@ -430,6 +433,7 @@ export function AddConfirmDialog() {
         onClick={(e) => e.stopPropagation()}
       >
         <h2>{t("parse.confirm", locale)}</h2>
+        {loginMode === "none" && <p className="muted">{t("add.withoutLogin", locale)}</p>}
         <ul className="confirm-list">
           {blocks.map((block) => {
             if (block.kind === "single") {

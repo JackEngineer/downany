@@ -22,6 +22,7 @@ export function ActionBar() {
   const pushToast = useAppStore((state) => state.pushToast);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [withoutLogin, setWithoutLogin] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const batchPending = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -86,8 +87,8 @@ export function ActionBar() {
   const addUrls = async (raw: string) => {
     setBusy(true);
     try {
-      const urls = await submitAddText(raw);
-      if (urls.length > 0) setText("");
+      const urls = await submitAddText(raw, withoutLogin ? "none" : "inherit");
+      if (urls.length > 0) { setText(""); setWithoutLogin(false); }
     } finally {
       setBusy(false);
     }
@@ -143,6 +144,7 @@ export function ActionBar() {
   };
 
   return (
+    <>
     <section className="action-bar" aria-label={t("add.actions", locale)}>
       <TextField
         ref={addRef}
@@ -238,5 +240,10 @@ export function ActionBar() {
         }}
       />
     </section>
+    <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+      <input type="checkbox" checked={withoutLogin} disabled={disabled || busy} onChange={event => setWithoutLogin(event.target.checked)} />
+      {t("add.withoutLogin", locale)}
+    </label>
+    </>
   );
 }

@@ -35,6 +35,7 @@ from src.core.error_codes import (
     OutputVerificationFailed,
     classify_download_error,
 )
+from src.core.login_policy import effective_login_options, validate_login_mode
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.downloader import (
     DownloadCancelled,
@@ -485,12 +486,13 @@ class DownloadManager:
             self._refresh_task_proxy(task)
             return
         task.options.proxy = current.proxy
-        task.options.cookies_from_browser = "" if task.options.browser_extension else current.cookies_from_browser
+        task.options.cookies_from_browser = "" if task.options.browser_extension or task.options.login_mode == "none" else current.cookies_from_browser
         if task.options.browser_extension:
             task.options.cookiefile = ""
         task.options.speed_limit = current.speed_limit
         task.options.concurrent_fragments = current.concurrent_fragments
-        logger.info("重试任务已刷新登录状态与代理设置")
+        task.options = effective_login_options(task.options)
+        logger.info("重试任务已刷新恢复设置")
 
     def _normalize_task_url(self, task: DownloadTask) -> None:
         normalized = normalize_download_url(task.video_info.url)
@@ -761,6 +763,33 @@ class DownloadManager:
     def retry_task(self, task_id: str) -> TaskActionResult:
         return self.apply_task_action(task_id, TaskAction.RETRY)
 
+    def _set_task_login_mode(self, task: DownloadTask, login_mode: str) -> None:
+        mode = validate_login_mode(login_mode)
+        options = task.options
+        if mode == "inherit" and options.login_mode != "inherit":
+            current = self.config.build_download_options(output_path=options.output_path)
+            options = replace(options, cookies_from_browser=current.cookies_from_browser, cookiefile=current.cookiefile)
+        task.options = effective_login_options(options, mode)
+
+    def retry_with_login_mode(self, task_id: str, login_mode: str) -> None:
+        mode = validate_login_mode(login_mode)
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is None:
+                raise ValueError("任务不存在")
+            if task.options.login_mode == mode and task.status in (TaskStatus.PENDING, TaskStatus.DOWNLOADING):
+                return
+            if task.status not in (TaskStatus.FAILED, TaskStatus.CANCELLED):
+                raise ValueError("当前状态不能重试")
+            checkpoint = deepcopy(task)
+            try:
+                self._set_task_login_mode(task, mode)
+                report = self._apply_task_actions_locked((task_id,), TaskAction.RETRY)
+            except Exception:
+                self._restore_checkpoints([(task, checkpoint)])
+                raise
+        self._emit_action_results(report)
+
     def retry_embedded_douyin(self, task_id: str, original_url: str, media_url: str, title: str) -> None:
         # Only Main may call this route; nevertheless validate the IPC payload again.
         if not re.fullmatch(r"https://www\.douyin\.com/video/\d+", original_url):
@@ -816,6 +845,7 @@ class DownloadManager:
         audio_only: Optional[bool] = None,
         postprocessing: Optional[str] = None,
         priority: Optional[int] = None,
+        login_mode: Optional[str] = None,
     ) -> Optional[DownloadTask]:
         """
         更新任务选项 / 重命名。下载中的任务不允许改下载选项（可先暂停）。
@@ -828,7 +858,7 @@ class DownloadManager:
 
             touches_options = any(
                 value is not None
-                for value in (format_id, quality, audio_only, postprocessing)
+                for value in (format_id, quality, audio_only, postprocessing, login_mode)
             ) or clear_format
             if touches_options and task.status == TaskStatus.DOWNLOADING:
                 raise ValueError("下载进行中，请先暂停再修改选项")
@@ -850,6 +880,8 @@ class DownloadManager:
                     task.video_info.title = new_title
 
                 if touches_options:
+                    if login_mode is not None:
+                        self._set_task_login_mode(task, login_mode)
                     if clear_format:
                         task.options.format_id = None
                     if format_id is not None:
@@ -1024,6 +1056,7 @@ class DownloadManager:
                     return
                 if task.requires_embedded_session and not task.embedded_media_url:
                     raise EmbeddedSessionRequired("临时媒体地址已释放，请主动使用内置登录重试")
+                task.options = effective_login_options(task.options)
                 self._refresh_task_proxy(task)
                 self._normalize_task_url(task)
                 task.status = TaskStatus.DOWNLOADING

@@ -1,5 +1,6 @@
 export type FailureRecoveryAction =
   | "login"
+  | "withoutLogin"
   | "network"
   | "updateTool"
   | "recognize"
@@ -29,7 +30,7 @@ const FAILURE_VIEWS = {
   cookie_unavailable: {
     retryable: true,
     requiresRetryConfirmation: false,
-    actions: ["login", "recognize"],
+    actions: ["withoutLogin", "login", "recognize"],
   },
   site_response_unavailable: {
     retryable: true,

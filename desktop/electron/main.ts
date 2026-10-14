@@ -1008,7 +1008,7 @@ function registerIpc(): void {
     "app:showTaskContextMenu",
     async (
       evt,
-      template: Array<{ id: string; label: string; enabled?: boolean; type?: string }>,
+      template: Array<{ id: string; label: string; enabled?: boolean; type?: string; checked?: boolean }>,
     ) => {
       const win = BrowserWindow.fromWebContents(evt.sender);
       return new Promise<string | null>((resolve) => {
@@ -1024,6 +1024,8 @@ function registerIpc(): void {
           }
           return {
             label: item.label,
+            type: item.type === "radio" ? "radio" as const : "normal" as const,
+            checked: item.checked,
             enabled: item.enabled !== false,
             click: () => finish(item.id),
           };

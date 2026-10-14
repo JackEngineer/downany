@@ -12,6 +12,7 @@ import type {
   ProtocolEvent,
   SearchMode,
   TaskSnapshot,
+  TaskLoginMode,
   TaskProgressPatch,
   ToastItem,
 } from "../lib/types";
@@ -33,6 +34,7 @@ interface AppState {
   netError: string;
   addFocusSignal: number;
   pendingAddUrls: string[] | null;
+  pendingAddLoginMode: TaskLoginMode;
   tasks: TaskSnapshot[];
   settings: AppSettings | null;
   logDir: string;
@@ -45,7 +47,7 @@ interface AppState {
   failNetSearch: (searchId: string, error: string) => void;
   clearNetSearch: () => void;
   requestAddFocus: () => void;
-  setPendingAddUrls: (urls: string[] | null) => void;
+  setPendingAddUrls: (urls: string[] | null, loginMode?: TaskLoginMode) => void;
   setLogDir: (dir: string) => void;
   hydrateSnapshot: (snap: AppSnapshot) => void;
   invalidateSnapshotRequests: () => void;
@@ -140,6 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   netError: "",
   addFocusSignal: 0,
   pendingAddUrls: null,
+  pendingAddLoginMode: "inherit",
   tasks: [],
   settings: defaultSettings,
   logDir: "",
@@ -158,7 +161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearNetSearch: () =>
     set({ netSearchId: "", netSearching: false, netResults: [], netError: "" }),
   requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),
-  setPendingAddUrls: (pendingAddUrls) => set({ pendingAddUrls }),
+  setPendingAddUrls: (pendingAddUrls, loginMode = "inherit") => set({ pendingAddUrls, pendingAddLoginMode: pendingAddUrls ? loginMode : "inherit" }),
   setLogDir: (logDir) => set({ logDir }),
 
   hydrateSnapshot: (snap) => {

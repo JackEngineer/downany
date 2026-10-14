@@ -28,7 +28,8 @@ export type ContextMenuTemplateItem = {
   id: string;
   label: string;
   enabled?: boolean;
-  type?: "separator";
+  type?: "separator" | "radio";
+  checked?: boolean;
 };
 
 const api = {

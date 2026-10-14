@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import { t } from "../../i18n";
 import {
@@ -24,6 +24,7 @@ export interface TaskCommands {
   open: () => Promise<void>;
   reveal: () => Promise<void>;
   recognizePage: () => Promise<void>;
+  retryWithoutLogin?: () => Promise<void>;
   retryEmbeddedDouyin?: () => Promise<void>;
   openSettings: (focus?: SettingsFocus) => Promise<void>;
   exportDiagnostics: () => Promise<void>;
@@ -34,6 +35,7 @@ export type SettingsFocus = "cookies" | "network" | "downloadTool" | "download";
 
 export function useTaskCommands(task: TaskSnapshot): TaskCommands {
   const pushToast = useAppStore((state) => state.pushToast);
+  const noLoginRetryPending = useRef(false);
 
   const run = useCallback<TaskCommands["run"]>(
     async (method) => {
@@ -106,6 +108,16 @@ export function useTaskCommands(task: TaskSnapshot): TaskCommands {
   return useMemo(
     () => ({
       run,
+      retryWithoutLogin: async () => {
+        if (noLoginRetryPending.current) return;
+        noLoginRetryPending.current = true;
+        try {
+          await request("download.retry", { taskId: task.id, login_mode: "none" });
+          await refreshQueueAfterChange();
+        } catch {
+          pushToast({ kind: "error", title: t("error.action"), detail: t("error.actionRetry") });
+        } finally { noLoginRetryPending.current = false; }
+      },
       update,
       open: () => safeOpen(async () => {
         if (task.file_path) {

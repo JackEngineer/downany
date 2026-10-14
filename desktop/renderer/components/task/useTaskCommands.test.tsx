@@ -19,6 +19,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("single-task commands", () => {
+  it("coalesces anonymous recovery on the original task without changing defaults", async () => {
+    const reply = deferred<unknown>();
+    request.mockReturnValueOnce(reply.promise).mockResolvedValueOnce({ tasks: [], settings });
+    const { result } = renderHook(() => useTaskCommands(taskFixture({ id: "original", status: "failed", error_code: "cookie_unavailable" })));
+    let first: Promise<void>;
+    await act(async () => {
+      first = result.current.retryWithoutLogin!();
+      await result.current.retryWithoutLogin!();
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("download.retry", { taskId: "original", login_mode: "none" });
+    await act(async () => { reply.resolve({ ok: true }); await first!; });
+    expect(request).not.toHaveBeenCalledWith("settings.update", expect.anything());
+  });
+
   it("keeps diagnostics exported when opening the folder alone fails", async () => {
     request.mockResolvedValue({ ok: true, path: "C:\\isolated\\diagnostics.zip" });
     window.api.showItemInFolder = vi.fn().mockRejectedValue(new Error("Cookie: fake-secret"));

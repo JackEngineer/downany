@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import type { TaskLoginMode } from "./types";
 import { request } from "./api";
 import { refreshQueueAfterChange } from "./refreshQueue";
 import { extractUrls, looksLikePlaylistUrl } from "./urls";
@@ -17,6 +18,7 @@ export async function createTasksAndRefresh(
     group_title?: string;
     playlist_index?: number;
   }[],
+  loginMode: TaskLoginMode = "inherit",
 ): Promise<boolean> {
   const { pushToast } = useAppStore.getState();
   const readiness = await request<{ ready?: boolean; reason?: string }>(
@@ -36,6 +38,7 @@ export async function createTasksAndRefresh(
   const result = await request<{ taskIds?: string[] }>("download.createTasks", {
     urls,
     items,
+    login_mode: loginMode,
   });
   const count = Array.isArray(result?.taskIds) ? result.taskIds.length : urls.length;
   pushToast({
@@ -52,7 +55,7 @@ export async function createTasksAndRefresh(
  * - 播放列表/合集 URL → 即使自动开始也先进确认窗（选集）
  * - 其余自动开始 → 直入队（Sidecar 对 playlist URL 仍会兜底展开）
  */
-export async function submitAddText(raw: string): Promise<string[]> {
+export async function submitAddText(raw: string, loginMode: TaskLoginMode = "inherit"): Promise<string[]> {
   const { pushToast, settings, setPendingAddUrls } = useAppStore.getState();
   const urls = extractUrls(raw);
   if (urls.length === 0) {
@@ -64,11 +67,11 @@ export async function submitAddText(raw: string): Promise<string[]> {
   const forceConfirm =
     settings?.auto_start_downloads === false || urls.some(looksLikePlaylistUrl);
   if (forceConfirm) {
-    setPendingAddUrls(urls);
+    setPendingAddUrls(urls, loginMode);
     return urls;
   }
   try {
-    const created = await createTasksAndRefresh(urls);
+    const created = await createTasksAndRefresh(urls, undefined, loginMode);
     if (!created) return [];
   } catch {
     pushToast({

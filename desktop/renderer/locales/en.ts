@@ -1,6 +1,11 @@
 import type { MessageKey } from "./zh-CN";
 
 export const en = {
+  "add.withoutLogin": "Do not use sign-in state for this add",
+  "recovery.withoutLogin": "Retry this task without sign-in state",
+  "task.withoutLogin": "No sign-in state",
+  "task.loginDefault": "Use default sign-in source for this task",
+  "task.loginNone": "Do not use sign-in state for this task",
   "nav.all": "All",
   "nav.active": "Active",
   "nav.completed": "Completed",
@@ -68,7 +73,7 @@ export const en = {
   "retry.copy": "The previous output did not pass verification. Retrying downloads a new file and will not overwrite existing files.",
   "failure.unknown": "Download did not finish. Retry or use page recognition.",
   "failure.need_login": "Sign in with your browser, then select that browser and retry.",
-  "failure.cookie_unavailable": "Could not read the selected login session. Choose your login source again, then retry.",
+  "failure.cookie_unavailable": "Could not read this task’s sign-in source. Check the default source, or retry only this task without sign-in state.",
   "failure.site_response_unavailable": "Could not read the video information right now. Try page recognition; if it still fails, export diagnostics.",
   "failure.private": "This content is private. Sign in to an account with access, then retry.",
   "failure.geo_blocked": "This content is unavailable in your region. Check network settings before retrying.",
@@ -81,7 +86,7 @@ export const en = {
   "failure.output_path_invalid": "The output location or file name is unavailable. Check download settings.",
   "failure.media_tools_missing": "Required media tools are missing. Reinstall Downany.",
   "failure.output_verification_failed": "The output could not be verified. Export diagnostics before retrying.",
-  "recovery.login": "Choose browser login",
+  "recovery.login": "Check default sign-in source",
   "recovery.network": "Network settings",
   "recovery.updateTool": "Update download tool",
   "recovery.embeddedRetry": "Play and retry original task",

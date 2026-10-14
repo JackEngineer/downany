@@ -89,6 +89,7 @@ export function presentTask(
     status === "failed" ? failureRecoveryFor(task.error_code, locale) : null;
   const bytes = formatBytes(task.total_bytes || task.downloaded_bytes);
   const meta = [platformLabel(task.platform, locale)];
+  if (task.login_mode === "none") meta.push(t("task.withoutLogin", locale));
   if (task.quality && task.quality !== "best") meta.push(task.quality);
   if (bytes !== "—") meta.push(bytes);
   if (status === "completed" && task.completed_at) {

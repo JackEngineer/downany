@@ -68,6 +68,7 @@ class DownloadOptions:
     postprocessing_pipeline: List[str] = field(default_factory=list)  # 可选多步后处理
     filename_template: str = ""  # 输出文件名模板（空 = 默认 %(title)s.%(ext)s）
     postprocess_script: str = ""  # postprocessing=script 时执行的 shell 脚本
+    login_mode: str = "inherit"  # inherit global source, or explicitly no credentials
     cookies_from_browser: str = ""  # yt-dlp cookiesfrombrowser 浏览器名
     cookiefile: str = ""  # Netscape cookie 文件路径
     browser_extension: bool = False  # 扩展任务只使用随入队请求提供的会话，不读取其他 App
@@ -110,6 +111,7 @@ class TaskSnapshot:
     group_title: str = ""
     playlist_index: int = 0
     completion_note: str = ""
+    login_mode: str = "inherit"
 
 
 @dataclass
@@ -162,6 +164,7 @@ class DownloadTask:
             'error_message': self.error_message,
             'error_code': self.error_code,
             'completion_note': self.completion_note,
+            'login_mode': self.options.login_mode,
             'created_at': self.created_at.isoformat(),
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
@@ -197,4 +200,5 @@ class DownloadTask:
             group_title=self.group_title,
             playlist_index=self.playlist_index,
             completion_note=self.completion_note,
+            login_mode=self.options.login_mode,
         )

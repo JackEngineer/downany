@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "originalTaskId": "dfbbdfac-36ab-494d-adc2-3021da2a1345",
+  "originalFailure": "cookie_unavailable",
+  "status": "completed",
+  "queueCount": 48,
+  "otherTasksExactlyUnchanged": true,
+  "otherHistoryExactlyUnchanged": true,
+  "originalHistoryUpdatedInPlace": true,
+  "newHistoryEntries": 0,
+  "globalConfigBytesUnchanged": true,
+  "existingFileHashesUnchanged": 32,
+  "independentReferenceFrames": [
+    {
+      "seconds": 0,
+      "sameDecodedFrame": true
+    },
+    {
+      "seconds": 10,
+      "sameDecodedFrame": true
+    },
+    {
+      "seconds": 60,
+      "sameDecodedFrame": true
+    }
+  ]
+}

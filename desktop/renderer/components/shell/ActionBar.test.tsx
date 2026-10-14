@@ -51,6 +51,21 @@ beforeEach(() => {
 });
 
 describe("ActionBar", () => {
+  it("scopes no sign-in state to this add and resets the next add", async () => {
+    submitAddTextMock.mockResolvedValue(["https://example.com/video"]);
+    render(<ActionBar />);
+    const checkbox = screen.getByRole("checkbox", { name: "不使用登录状态（仅本次添加）" });
+    fireEvent.click(checkbox);
+    fireEvent.change(screen.getByRole("textbox", { name: "添加下载链接" }), { target: { value: "https://example.com/video" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    await waitFor(() => expect(submitAddTextMock).toHaveBeenCalledWith("https://example.com/video", "none"));
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    fireEvent.change(screen.getByRole("textbox", { name: "添加下载链接" }), { target: { value: "https://example.com/next" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    await waitFor(() => expect(submitAddTextMock).toHaveBeenLastCalledWith("https://example.com/next", "inherit"));
+    expect(requestMock).not.toHaveBeenCalledWith("settings.update", expect.anything());
+  });
+
   it("does not turn an applied batch action into a failure when refresh rejects", async () => {
     requestMock.mockResolvedValueOnce({ action: "pause", applied: [{ taskId: "first", status: "paused" }], deferred: [], skipped: [] })
       .mockRejectedValueOnce(new Error("Cookie: fake-secret"));
@@ -105,7 +120,7 @@ describe("ActionBar", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "添加" }));
     await waitFor(() =>
-      expect(submitAddTextMock).toHaveBeenCalledWith("https://example.com/video"),
+      expect(submitAddTextMock).toHaveBeenCalledWith("https://example.com/video", "inherit"),
     );
   });
 

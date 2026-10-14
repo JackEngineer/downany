@@ -711,3 +711,28 @@ def test_non_youtube_media_rejection_does_not_start_youtube_reparse_loop(tmp_pat
     with pytest.raises(DownloadError):
         _download(tmp_path, factory, url=url, plan=_video_plan(url=url))
     assert len(factory.instances) == 1
+
+
+@pytest.mark.parametrize("mode", ["none", "inherit"])
+def test_twitter_primary_and_fallback_obey_explicit_login_policy(tmp_path, mode):
+    url = "https://x.com/user/status/123"
+    staging = tmp_path / "anonymous-task"
+    staging.mkdir()
+    main = staging / "media.mp4"
+    main.write_bytes(b"media")
+    task = DownloadTask(video_info=VideoInfo(url=url, title="Public post", platform=Platform.TWITTER),
+        options=DownloadOptions(login_mode=mode, cookies_from_browser="chrome", cookiefile="/unused/mock-cookie-file",
+                                http_headers={"Cookie": "mock-only", "Authorization": "mock-only"}))
+    plan = compile_output_plan(task)
+    factory = FakeYDLFactory(RuntimeError("extractor failed"), _info(main, extractor="generic", id="direct"))
+    with patch("src.core.downloader.resolve_twitter_media", return_value=(task.video_info, "https://video.twimg.com/direct.mp4")):
+        Downloader(ydl_factory=factory).download(url, plan, toolchain=_toolchain(tmp_path), staging_dir=staging)
+    assert len(factory.option_snapshots) == 2
+    for options in factory.option_snapshots:
+        if mode == "none":
+            assert "cookiesfrombrowser" not in options and "cookiefile" not in options
+            assert "Cookie" not in options.get("http_headers", {})
+            assert "Authorization" not in options.get("http_headers", {})
+        else:
+            assert options["cookiesfrombrowser"][0] == "chrome"
+            assert options["cookiefile"] == "/unused/mock-cookie-file"

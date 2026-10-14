@@ -29,7 +29,7 @@ describe("task presentation", () => {
 
   it.each([
     ["need_login", "需要登录后才能下载，请选择浏览器登录状态后重试"],
-    ["cookie_unavailable", "无法读取所选登录状态，请重新选择登录来源后重试"],
+    ["cookie_unavailable", "无法读取此任务使用的登录来源。可检查默认来源，或仅此项不使用登录状态重试"],
     ["site_response_unavailable", "暂时无法读取视频信息，请尝试网页识别；仍失败时可导出诊断"],
     ["private", "此内容为私密内容，请登录有访问权限的账号后重试"],
     ["geo_blocked", "此内容在当前地区不可用，请检查网络设置后重试"],

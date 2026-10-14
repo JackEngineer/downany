@@ -1,0 +1,11 @@
+{
+  "version": "0.3.7",
+  "normalShutdown": true,
+  "backupVerified": true,
+  "candidateVerified": true,
+  "atomicReplacement": true,
+  "queueCount": 48,
+  "historyCount": 41,
+  "existingFileCount": 32,
+  "dmgSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8"
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Callable, Dict, List, Optional
 
 from src.core.download_manager import (
@@ -22,6 +22,7 @@ from src.core.download_task import (
 )
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.error_codes import OutputPathInvalid
+from src.core.login_policy import effective_login_options, validate_login_mode
 from src.core.output_paths import ensure_output_directory_ready
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
@@ -354,6 +355,7 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
         postprocessing_pipeline=list(base.postprocessing_pipeline),
         filename_template=base.filename_template,
         postprocess_script=base.postprocess_script,
+        login_mode=base.login_mode,
         cookies_from_browser=base.cookies_from_browser,
         cookiefile=base.cookiefile,
         embed_metadata=base.embed_metadata,
@@ -363,6 +365,11 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
         download_sections=base.download_sections,
         sponsorblock_remove=base.sponsorblock_remove,
     )
+    if "login_mode" in item:
+        try:
+            opts.login_mode = validate_login_mode(item["login_mode"])
+        except ValueError as exc:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
     raw_headers = item.get("headers")
     if isinstance(raw_headers, dict) and raw_headers:
         headers = {
@@ -392,7 +399,7 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
     if item.get("direct_media") is True:
         opts.direct_media = True
         opts.embed_metadata = False
-    return opts
+    return effective_login_options(opts)
 
 
 def _find_item_for_url(
@@ -418,6 +425,7 @@ def _new_parse_session(
     allow_playlist: bool,
     options: DownloadOptions,
 ) -> ParseSession:
+    options = effective_login_options(options)
     session_options: Dict[str, Any] = {
         "proxy": proxy,
         "timeout": timeout,
@@ -438,13 +446,14 @@ def _expand_playlist_specs(
     seed_item: Optional[Dict[str, Any]] = None,
 ) -> Optional[List[Dict[str, Any]]]:
     """把播放列表 URL 展成多条入队规格；失败或不足以展开时返回 None。"""
+    seed_options = _build_item_options(base_options, seed_item or {})
     try:
         result = _new_parse_session(
             url,
             proxy=proxy,
             timeout=90.0,
             allow_playlist=True,
-            options=base_options,
+            options=seed_options,
         ).run()
     except (ParseCancelled, ParseTimeout, ParseFailed, Exception) as exc:
         logger.warning("播放列表展开失败，回退单任务: %s (%s)", url, exc)
@@ -502,6 +511,11 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     if not isinstance(urls, list) or not urls:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "urls 必须是非空数组")
     options = ctx.config.build_download_options()
+    if "login_mode" in payload:
+        try:
+            options = replace(options, login_mode=validate_login_mode(payload["login_mode"]))
+        except ValueError as exc:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
     try:
         ensure_output_directory_ready(options.output_path)
     except OutputPathInvalid as exc:
@@ -597,7 +611,7 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         group_id = str(spec.get("group_id") or "")
         group_title = str(spec.get("group_title") or "")
         playlist_index = int(spec.get("playlist_index") or 0)
-        task_options = spec.get("options") or options
+        task_options = effective_login_options(spec.get("options") or options)
         referer = ""
         if task_options.http_headers and isinstance(task_options.http_headers, dict):
             referer = str(
@@ -659,6 +673,13 @@ def _retry_embedded_douyin(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict
 
 
 def _retry(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if "login_mode" in payload:
+        task_id = _require_task_id(payload)
+        try:
+            ctx.manager.retry_with_login_mode(task_id, validate_login_mode(payload["login_mode"]))
+        except ValueError as exc:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
+        return {"ok": True, "taskId": task_id}
     if payload.get("browser_extension") is True:
         task = ctx.manager.get_task(_require_task_id(payload))
         if task is not None and task.status.value in ("failed", "cancelled"):
@@ -745,6 +766,11 @@ def _update_task(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]
         kwargs["format_id"] = str(value) if value else ""
         if not value:
             kwargs["clear_format"] = True
+    if "login_mode" in payload:
+        try:
+            kwargs["login_mode"] = validate_login_mode(payload["login_mode"])
+        except ValueError as exc:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
     if "quality" in payload:
         kwargs["quality"] = str(payload["quality"])
     if "audio_only" in payload:
@@ -812,6 +838,11 @@ def _parse_urls(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     parse_id = str(uuid.uuid4())
     proxy = ctx.config.get_proxy_for_download()
     options = ctx.config.build_download_options()
+    if "login_mode" in payload:
+        try:
+            options = effective_login_options(options, validate_login_mode(payload["login_mode"]))
+        except ValueError as exc:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
     timeout = float(payload.get("timeout") or 30)
     allow_playlist = bool(payload.get("allow_playlist") or payload.get("allowPlaylist"))
     job = _ParseJob()

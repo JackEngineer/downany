@@ -766,7 +766,7 @@ describe("MediaTaskBanner", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "选择登录状态" }),
+      screen.getByRole("button", { name: "检查默认登录来源" }),
     );
     expect(openSettingsMock).toHaveBeenCalledWith("cookies");
 
@@ -777,10 +777,10 @@ describe("MediaTaskBanner", () => {
   });
 
   it.each([
-    ["need_login", ["选择登录状态", "网页识别"]],
-    ["cookie_unavailable", ["选择登录状态", "网页识别"]],
+    ["need_login", ["检查默认登录来源", "网页识别"]],
+    ["cookie_unavailable", ["不使用登录状态重试此项", "检查默认登录来源", "网页识别"]],
     ["site_response_unavailable", ["网页识别", "导出诊断"]],
-    ["private", ["选择登录状态", "网页识别"]],
+    ["private", ["检查默认登录来源", "网页识别"]],
     ["geo_blocked", ["检查网络设置"]],
     ["network", ["检查网络设置"]],
     ["ytdlp_outdated", ["更新下载工具"]],
@@ -808,8 +808,8 @@ describe("MediaTaskBanner", () => {
   );
 
   it.each([
-    ["cookie_unavailable", "zh-CN", "无法读取所选登录状态，请重新选择登录来源后重试", "选择登录状态", "cookies", "网页识别", "重试"],
-    ["cookie_unavailable", "en", "Could not read the selected login session. Choose your login source again, then retry.", "Choose browser login", "cookies", "Recognize page", "Retry"],
+    ["cookie_unavailable", "zh-CN", "无法读取此任务使用的登录来源。可检查默认来源，或仅此项不使用登录状态重试", "检查默认登录来源", "cookies", "网页识别", "重试"],
+    ["cookie_unavailable", "en", "Could not read this task’s sign-in source. Check the default source, or retry only this task without sign-in state.", "Check default sign-in source", "cookies", "Recognize page", "Retry"],
     ["site_response_unavailable", "zh-CN", "暂时无法读取视频信息，请尝试网页识别；仍失败时可导出诊断", "导出诊断", "diagnostics", "网页识别", "重试"],
     ["site_response_unavailable", "en", "Could not read the video information right now. Try page recognition; if it still fails, export diagnostics.", "Export diagnostics", "diagnostics", "Recognize page", "Retry"],
   ] as const)(
@@ -1210,6 +1210,8 @@ describe("MediaTaskBanner", () => {
       { id: "pp:mp4", label: "转换为 MP4", enabled: true },
       { id: "pp:mp3", label: "提取音频 (MP3)", enabled: true },
       { id: "pp:script", label: "自定义脚本", enabled: true },
+      { id: "login:inherit", label: "此任务使用默认登录来源", type: "radio", checked: true },
+      { id: "login:none", label: "此任务不使用登录状态", type: "radio", checked: false },
       { id: "cancel", label: "取消下载" },
     ]);
   });
@@ -1474,7 +1476,7 @@ describe("MediaTaskBanner", () => {
 
     fireEvent.keyDown(menu, { key: "ArrowUp" });
     expect(document.activeElement).toBe(
-      screen.getByRole("menuitemradio", { name: "自定义脚本" }),
+      screen.getByRole("menuitemradio", { name: "此任务不使用登录状态" }),
     );
 
     fireEvent.keyDown(menu, { key: "Home" });

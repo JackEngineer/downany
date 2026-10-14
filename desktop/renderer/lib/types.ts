@@ -3,6 +3,8 @@ import type { ConnectionState } from "../../electron/protocol";
 export type { ConnectionState };
 export type { TaskProgressPatch } from "../../electron/taskProgressRelay";
 
+export type TaskLoginMode = "inherit" | "none";
+
 export type AppRoute = "new" | "queue" | "history" | "settings";
 
 export type ListFilter = "all" | "active" | "completed" | "history";
@@ -37,6 +39,7 @@ export interface FormatOption {
 }
 
 export interface TaskSnapshot {
+  login_mode?: TaskLoginMode;
   id: string;
   url: string;
   title: string;

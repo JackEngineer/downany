@@ -78,6 +78,7 @@ function runPrimaryAction(
 }
 
 const RECOVERY_ACTION_VIEWS = {
+  withoutLogin: { labelKey: "recovery.withoutLogin", icon: "download" },
   login: { labelKey: "recovery.login", icon: "settings" },
   network: { labelKey: "recovery.network", icon: "settings" },
   updateTool: { labelKey: "recovery.updateTool", icon: "settings" },
@@ -95,6 +96,8 @@ function runRecoveryAction(
   commands: TaskCommands,
 ): Promise<void> {
   switch (action) {
+    case "withoutLogin":
+      return commands.retryWithoutLogin?.() ?? Promise.resolve();
     case "login":
       return commands.openSettings("cookies");
     case "network":

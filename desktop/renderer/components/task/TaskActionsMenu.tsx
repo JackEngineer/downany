@@ -190,6 +190,9 @@ export function buildTaskContextTemplate(
       })),
     );
   }
+  if (status !== "completed" && status !== "downloading") {
+    items.push({ id: "login:inherit", label: t("task.loginDefault", locale), type: "radio", checked: (task.login_mode ?? "inherit") === "inherit" }, { id: "login:none", label: t("task.loginNone", locale), type: "radio", checked: task.login_mode === "none" });
+  }
   if (status === "downloading") items.push({ id: "pause", label: t("action.pause", locale) });
   if (status === "paused") items.push({ id: "resume", label: t("action.continue", locale) });
   if (status === "pending" || status === "downloading" || status === "paused") {
@@ -221,6 +224,10 @@ export async function dispatchTaskAction(
   requestRetry: () => Promise<void>,
 ): Promise<void> {
   switch (actionId) {
+    case "login:inherit":
+      return commands.update({ login_mode: "inherit" });
+    case "login:none":
+      return commands.update({ login_mode: "none" });
     case "rename":
       startRename();
       return;
@@ -260,7 +267,7 @@ function toVisibleMenuItems(task: TaskSnapshot, locale: Locale): VisibleMenuItem
     id: item.id,
     label: item.label,
     enabled: item.enabled !== false,
-    checked: item.id === `pp:${activePostprocessing}`,
+    checked: item.id.startsWith("login:") ? item.id === "login:" + (task.login_mode ?? "inherit") : item.id === `pp:${activePostprocessing}`,
     separator: item.type === "separator",
   }));
 }
@@ -486,7 +493,7 @@ export function TaskActionsMenu({
                     />
                   );
                 }
-                const radio = item.id.startsWith("pp:");
+                const radio = item.id.startsWith("pp:") || item.id.startsWith("login:");
                 return (
                   <button
                     key={item.id}
