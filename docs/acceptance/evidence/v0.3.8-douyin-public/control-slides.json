@@ -1,0 +1,15 @@
+{
+  "id": "7676036453872274731",
+  "status": 200,
+  "statusCode": 0,
+  "exactTargetCount": 1,
+  "filterList": null,
+  "verificationFilterList": null,
+  "videoDetails": [
+    {
+      "duration": 970880,
+      "downloadAddresses": 4,
+      "playAddresses": 4
+    }
+  ]
+}

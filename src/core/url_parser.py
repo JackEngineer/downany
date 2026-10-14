@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple
 from yt_dlp.cookies import extract_cookies_from_browser
 
 from src.core.download_task import VideoInfo
+from src.core.douyin_public import public_douyin_id, resolve_public_douyin, PublicDouyinUnavailable
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.formats import summarize_formats
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
@@ -341,6 +342,7 @@ class ParseSession:
         allow_playlist: bool = False,
         cookies_from_browser: str = "",
         cookiefile: str = "",
+        public_douyin: bool = False,
     ):
         cleaned = (url or "").strip()
         if is_twitter_url(cleaned):
@@ -353,6 +355,7 @@ class ParseSession:
         self.allow_playlist = allow_playlist
         self.cookies_from_browser = (cookies_from_browser or "").strip()
         self.cookiefile = (cookiefile or "").strip()
+        self.public_douyin = public_douyin
         self._lock = threading.Lock()
         self._process: Optional[subprocess.Popen] = None
         self._cancelled = False
@@ -390,6 +393,16 @@ class ParseSession:
 
     def run(self) -> ParseResult:
         """阻塞执行解析。由调用方决定放在哪个线程。"""
+        if self.public_douyin and public_douyin_id(self.url) and not self.cookies_from_browser and not self.cookiefile:
+            if self._cancelled:
+                raise ParseCancelled(self.url)
+            try:
+                info, _media = resolve_public_douyin(self.url, proxy=self.proxy, timeout=self.timeout)
+            except PublicDouyinUnavailable as exc:
+                raise ParseFailed(str(exc)) from exc
+            if self._cancelled:
+                raise ParseCancelled(self.url)
+            return ParseResult(info=info)
         try:
             return self._run_ytdlp()
         except ParseCancelled:

@@ -431,6 +431,8 @@ def _new_parse_session(
         "timeout": timeout,
         "allow_playlist": allow_playlist,
     }
+    if options.login_mode == "none":
+        session_options["public_douyin"] = True
     if options.cookies_from_browser:
         session_options["cookies_from_browser"] = options.cookies_from_browser
     if options.cookiefile:

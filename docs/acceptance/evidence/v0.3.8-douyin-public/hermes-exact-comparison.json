@@ -1,0 +1,24 @@
+{
+  "skill": "/Users/jacklee/.hermes/skills/douyin-download/SKILL.md",
+  "method": "installed Hermes Playwright with documented fresh iPhone context and home-first request",
+  "noUserCookiesRead": true,
+  "rows": [
+    {
+      "id": "7129496663315516712",
+      "status": 403,
+      "bytes": 46,
+      "statusCode": null,
+      "exactTarget": false,
+      "titlePresent": false,
+      "duration": null,
+      "downloadAddresses": 0,
+      "playAddresses": 0
+    }
+  ],
+  "homepage": {
+    "host": "www.douyin.com",
+    "path": "/home",
+    "challenge": false
+  },
+  "stop": "explicit_access_denied"
+}

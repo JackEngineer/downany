@@ -1,0 +1,23 @@
+[
+  {
+    "suite": "public-ui",
+    "tasks": 1,
+    "history": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "pause-restart",
+    "tasks": 2,
+    "history": 2,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "installed-ui",
+    "tasks": 1,
+    "history": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "version": "0.3.8",
+  "candidateSha256": "41a81584931b70db41b0244d21f7265f54caf41ee51cab7a83d7ee20ef4ba645",
+  "realSiteRequests": "two explicit Douyin work IDs; original filter terminal",
+  "nativeChromeTested": false,
+  "rows": [
+    {
+      "id": "original-filtered-target",
+      "status": "blocked",
+      "workId": "7129496663315516712",
+      "errorCode": "site_response_unavailable",
+      "sameOriginalId": true,
+      "noFinalFile": true,
+      "noOtherWorkSelected": true,
+      "restartPreserved": true
+    },
+    {
+      "id": "public-douyin-pause-restart-resume",
+      "status": "passed",
+      "workId": "7676036453872274731",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "persistedBytes": 523264,
+      "loginModePreserved": true,
+      "artifact": {
+        "taskId": "8f6e05f5-4758-44b3-a7cf-7d5f71ef6b02",
+        "bytes": 54740048,
+        "sha256": "146de99a94500598400296712c3a77646f330f1ad2cb7748719b55aae0dd299e",
+        "duration": 970.895964,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    }
+  ]
+}

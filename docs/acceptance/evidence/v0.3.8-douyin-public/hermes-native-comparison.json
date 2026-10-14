@@ -1,0 +1,39 @@
+{
+  "method": "local Hermes douyin-download skill home-first/native same-origin fetch comparison",
+  "originalId": "7129496663315516712",
+  "controlId": "7676036453872274731",
+  "userCookiesRead": false,
+  "rows": [
+    {
+      "id": "7129496663315516712",
+      "httpStatus": 200,
+      "contentType": "application/json",
+      "bytes": 343,
+      "statusCode": 0,
+      "exactTargetDetail": false,
+      "awemeDetailPresent": false,
+      "titlePresent": false,
+      "downloadAddressCount": 0,
+      "playAddressCount": 0
+    },
+    {
+      "id": "7676036453872274731",
+      "httpStatus": 200,
+      "contentType": "application/json",
+      "bytes": 58110,
+      "statusCode": 0,
+      "exactTargetDetail": true,
+      "awemeDetailPresent": true,
+      "titlePresent": true,
+      "duration": 970880,
+      "downloadAddressCount": 4,
+      "playAddressCount": 4
+    }
+  ],
+  "home": {
+    "host": "www.douyin.com",
+    "path": "/jingxuan",
+    "visibleChallenge": false,
+    "visibleLoginPrompt": false
+  }
+}

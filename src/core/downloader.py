@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 import yt_dlp
 
 from src.core.download_task import VideoInfo
+from src.core.douyin_public import public_douyin_id, resolve_public_douyin, PublicDouyinUnavailable
 from src.core.error_codes import OutputVerificationFailed
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.output_contract import OutputPlan, SubtitleMode
@@ -339,9 +340,12 @@ def _merge_fallback_info(info: object, fallback: VideoInfo) -> object:
         merged["duration"] = int(fallback.duration)
     if fallback.platform.value != "unknown":
         merged["extractor"] = fallback.platform.value
-    source_id = extract_tweet_id(fallback.url)
+    source_id = extract_tweet_id(fallback.url) or public_douyin_id(fallback.url)
     if source_id:
         merged["id"] = source_id
+    if public_douyin_id(fallback.url):
+        merged["direct"] = False
+        merged["webpage_url"] = fallback.url
     return merged
 
 
@@ -555,6 +559,8 @@ class Downloader:
         staging_dir: Path,
         preferred_title: str = "",
         ephemeral_source_url: str = "",
+        public_quality: str = "best",
+        public_douyin: bool = False,
     ) -> DownloadResult:
         """Download into staging and return only postprocessed output facts."""
         cookie_path: Optional[str] = None
@@ -580,15 +586,22 @@ class Downloader:
                 cookie_path = apply_cookiefile_from_headers(ydl_options, url)
 
             try:
-                result = self._download_with_ydl(
-                    url,
-                    ydl_options,
-                    plan,
-                    staging,
-                    preexisting_files,
-                    preferred_title=preferred_title,
-                    source_url=ephemeral_source_url or None,
-                )
+                public_source = (public_douyin and public_douyin_id(url) and not ephemeral_source_url
+                                 and not ydl_options.get("cookiesfrombrowser") and not ydl_options.get("cookiefile")
+                                 and not any(k.lower() in {"cookie", "authorization"} for k in ydl_options.get("http_headers", {})))
+                if public_source:
+                    info, media = resolve_public_douyin(url, proxy=ydl_options.get("proxy"), quality=public_quality)
+                    self.last_info = info
+                    ydl_options["http_headers"]["Referer"] = "https://www.douyin.com/"
+                    ydl_options["format"] = "best"
+                    result = self._download_with_ydl(media, ydl_options, plan, staging, preexisting_files,
+                                                     source_url=url, metadata_fallback=info)
+                else:
+                    result = self._download_with_ydl(
+                        url, ydl_options, plan, staging, preexisting_files,
+                        preferred_title=preferred_title,
+                        source_url=ephemeral_source_url or None,
+                    )
             except DownloadCancelled:
                 raise
             except Exception as primary_exc:
@@ -617,6 +630,8 @@ class Downloader:
                 self.finished_callback()
             return result
         except DownloadCancelled:
+            raise
+        except PublicDouyinUnavailable:
             raise
         except OutputVerificationFailed as exc:
             if ephemeral_source_url:

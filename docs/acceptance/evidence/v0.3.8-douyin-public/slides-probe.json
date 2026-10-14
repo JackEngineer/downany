@@ -1,0 +1,85 @@
+{
+  "targetId": "7129496663315516712",
+  "rows": [
+    {
+      "route": "share-slides",
+      "request": {
+        "host": "www.iesdouyin.com",
+        "path": "/web/api/v2/aweme/slidesinfo/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 200,
+      "contentType": "application/json",
+      "bytes": 303,
+      "bodySha256": "9dc4ff8688d096fff238d4d3b6515e036df598543691f5cfe7445054bcfd680c",
+      "jsonValid": true,
+      "routerDataPresent": false,
+      "topLevelKeys": [
+        "aweme_details",
+        "emoji_list",
+        "extra",
+        "filter_list",
+        "log_pb",
+        "status_code",
+        "verification_filter_list"
+      ],
+      "statusCode": 0,
+      "awemeDetailPresent": false,
+      "exactTargetItems": [
+        {
+          "awemeId": "7129496663315516712",
+          "titlePresent": false,
+          "videoPresent": false,
+          "duration": null,
+          "status": null,
+          "playAddressPresent": false
+        }
+      ],
+      "httpAccessDenied": false,
+      "challengePage": false
+    },
+    {
+      "route": "share-slides-note-variant",
+      "request": {
+        "host": "www.iesdouyin.com",
+        "path": "/web/api/v2/aweme/slidesinfo/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 200,
+      "contentType": "application/json",
+      "bytes": 303,
+      "bodySha256": "a57c2a309dd7b9ee4bd2b6d3000ce5821ec317d578f33ee7fc58d0f05d447e26",
+      "jsonValid": true,
+      "routerDataPresent": false,
+      "topLevelKeys": [
+        "aweme_details",
+        "emoji_list",
+        "extra",
+        "filter_list",
+        "log_pb",
+        "status_code",
+        "verification_filter_list"
+      ],
+      "statusCode": 0,
+      "awemeDetailPresent": false,
+      "exactTargetItems": [
+        {
+          "awemeId": "7129496663315516712",
+          "titlePresent": false,
+          "videoPresent": false,
+          "duration": null,
+          "status": null,
+          "playAddressPresent": false
+        }
+      ],
+      "httpAccessDenied": false,
+      "challengePage": false
+    }
+  ]
+}

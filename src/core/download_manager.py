@@ -1100,7 +1100,7 @@ class DownloadManager:
                 task.video_info.platform == Platform.YOUTUBE
                 or PlatformDetector.detect(task.video_info.url) == Platform.YOUTUBE
             )
-            if extract_url and not is_youtube_task and not task.requires_embedded_session and not task.options.direct_media:
+            if extract_url and not is_youtube_task and not task.requires_embedded_session and not task.options.direct_media and not (is_douyin_url(task.video_info.url) and task.options.login_mode == "none"):
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
                     extract_url,
@@ -1220,6 +1220,7 @@ class DownloadManager:
                 staging_dir=staging_dir,
                 **({"preferred_title": task.video_info.title} if task.video_info.media_title_verified else {}),
                 **({"ephemeral_source_url": task.video_info.url} if task.requires_embedded_session else {}),
+                **({"public_douyin": True, "public_quality": task.options.quality} if is_douyin_url(task.video_info.url) and task.options.login_mode == "none" else {}),
             )
 
             with self._lock:

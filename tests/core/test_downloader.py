@@ -736,3 +736,41 @@ def test_twitter_primary_and_fallback_obey_explicit_login_policy(tmp_path, mode)
         else:
             assert options["cookiesfrombrowser"][0] == "chrome"
             assert options["cookiefile"] == "/unused/mock-cookie-file"
+
+
+def test_public_douyin_uses_verified_original_identity_and_existing_output_plan(tmp_path):
+    url = "https://www.douyin.com/video/123456"
+    staging = tmp_path / "public-douyin"
+    staging.mkdir()
+    main = staging / "media.mp4"
+    main.write_bytes(b"media")
+    task = DownloadTask(video_info=VideoInfo(url=url, title="Public work", platform=Platform.DOUYIN),
+                        options=DownloadOptions(login_mode="none"))
+    factory = FakeYDLFactory(_info(main, extractor="generic", id="cdn-address", direct=True))
+    downloader = Downloader(ydl_factory=factory)
+    with patch("src.core.downloader.resolve_public_douyin", return_value=(task.video_info, "https://v6-default.365yg.com/video.mp4")) as resolver:
+        result = downloader.download(url, compile_output_plan(task), toolchain=_toolchain(tmp_path),
+                                     staging_dir=staging, public_douyin=True, public_quality="480p")
+    resolver.assert_called_once_with(url, proxy=None, quality="480p")
+    assert factory.urls == ["https://v6-default.365yg.com/video.mp4"]
+    assert result.source_key == "douyin-123456"
+    assert result.rendered_leaf == "Public work [douyin-123456].mp4"
+    assert downloader.last_info.url == url
+    assert factory.option_snapshots[0]["http_headers"]["Referer"] == "https://www.douyin.com/"
+    assert "cookiesfrombrowser" not in factory.option_snapshots[0]
+
+
+def test_public_douyin_does_not_override_inherited_credentials(tmp_path):
+    url = "https://www.douyin.com/video/123456"
+    staging = tmp_path / "inherit-douyin"
+    staging.mkdir()
+    main = staging / "media.mp4"
+    main.write_bytes(b"media")
+    task = DownloadTask(video_info=VideoInfo(url=url), options=DownloadOptions(cookies_from_browser="chrome"))
+    factory = FakeYDLFactory(_info(main))
+    with patch("src.core.downloader.resolve_public_douyin") as resolver:
+        Downloader(ydl_factory=factory).download(url, compile_output_plan(task), toolchain=_toolchain(tmp_path),
+                                                staging_dir=staging, public_douyin=True)
+    resolver.assert_not_called()
+    assert factory.urls == [url]
+    assert factory.option_snapshots[0]["cookiesfrombrowser"][0] == "chrome"

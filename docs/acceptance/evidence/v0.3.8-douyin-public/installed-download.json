@@ -1,0 +1,33 @@
+{
+  "version": "0.3.8",
+  "mode": "isolated",
+  "checks": [
+    "official_public_douyin_parse_confirmation",
+    "global_settings_unchanged",
+    "full_audio_video_decode",
+    "correct_duration",
+    "restart_persists_task_login_mode"
+  ],
+  "errors": [],
+  "runtime": {
+    "appVersion": "0.3.8",
+    "sidecarVersion": "0.3.8",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "media": {
+    "taskId": "277690b3-994f-4c0a-b670-c94abd819abc",
+    "loginMode": "none",
+    "fileName": "影视精选：换个视角去看《逃出绝命镇》合集 #青年创作者成长计划#抖音精选#悬疑#了不起的精讲团#逃出绝命镇 [douyin-7676036453872274731].mp4",
+    "bytes": 54825310,
+    "duration": 970.896009,
+    "width": 1024,
+    "height": 576,
+    "video": "hevc",
+    "audio": "aac",
+    "sha256": "e27c767519041af18b7085eb53b73a9dff4689113aeb24a00541acdbd6ac1adc",
+    "decodeExit": 0
+  },
+  "passed": true
+}

@@ -1,0 +1,112 @@
+{
+  "targetId": "7129496663315516712",
+  "rows": [
+    {
+      "route": "official-share-ssr",
+      "request": {
+        "host": "www.iesdouyin.com",
+        "path": "/share/video/7129496663315516712/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 302,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 183,
+      "bodySha256": "661e9b03e97978522128997ae518c638b61f6c31e4dc3bb65af950e83585a7d5",
+      "redirect": {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": "app_code_link"
+      },
+      "jsonValid": false,
+      "routerDataPresent": false,
+      "httpAccessDenied": false,
+      "challengePage": false
+    },
+    {
+      "route": "original-desktop-page",
+      "request": {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 72914,
+      "bodySha256": "9b56a6acdcb27eb620b5ee1ad870ad67964c70131b6fc31e8bd946b39c1e309e",
+      "jsonValid": false,
+      "routerDataPresent": false,
+      "httpAccessDenied": false,
+      "challengePage": false
+    },
+    {
+      "route": "official-share-page",
+      "request": {
+        "host": "www.iesdouyin.com",
+        "path": "/share/video/7129496663315516712/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 302,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 183,
+      "bodySha256": "661e9b03e97978522128997ae518c638b61f6c31e4dc3bb65af950e83585a7d5",
+      "redirect": {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": "app_code_link"
+      },
+      "jsonValid": false,
+      "routerDataPresent": false,
+      "httpAccessDenied": false,
+      "challengePage": false
+    },
+    {
+      "route": "desktop-detail-api",
+      "request": {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 403,
+      "contentType": "text/plain",
+      "bytes": 46,
+      "bodySha256": "8253547040c98c6c15cdee7c7cb52bfd457ea450b28158d9afe8e55fb7791218",
+      "jsonValid": false,
+      "routerDataPresent": false,
+      "httpAccessDenied": true,
+      "challengePage": false
+    },
+    {
+      "route": "you-get-legacy-public-api",
+      "request": {
+        "host": "www.douyin.com",
+        "path": "/web/api/v2/aweme/iteminfo/",
+        "modalId": null,
+        "previousPage": null
+      },
+      "credentialSource": "none",
+      "attempts": 1,
+      "status": 200,
+      "contentType": "application/json",
+      "bytes": 0,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "jsonValid": false,
+      "routerDataPresent": false,
+      "httpAccessDenied": false,
+      "challengePage": false
+    }
+  ]
+}

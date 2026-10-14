@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "statusCode": 0,
+  "awemeDetailsCount": 0,
+  "filterList": [
+    {
+      "aweme_id": "7129496663315516712",
+      "reason": 4
+    }
+  ],
+  "verificationFilterList": null
+}

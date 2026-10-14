@@ -1,0 +1,350 @@
+{
+  "version": "0.3.7",
+  "originalUrl": "https://www.douyin.com/video/7129496663315516712",
+  "originalId": "7129496663315516712",
+  "credentialSource": "fresh-native-browser-session-no-user-cookie-read",
+  "runtime": {
+    "appVersion": "0.3.7",
+    "sidecarVersion": "0.3.7",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "task": {
+    "id": "27edce19-691d-4936-b116-ace7b0124b7c",
+    "status": "failed",
+    "errorCode": "site_response_unavailable"
+  },
+  "page": {
+    "host": "www.douyin.com",
+    "path": "/jingxuan",
+    "modalId": "7676036453872274731",
+    "previousPage": null,
+    "visibleLoginOrCaptcha": false,
+    "visibleUnavailable": false,
+    "videos": [
+      {
+        "time": 3.997422,
+        "ready": 4
+      },
+      {
+        "time": 0,
+        "ready": 4
+      }
+    ]
+  },
+  "trace": {
+    "navigations": [
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": "web_video_404_link",
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": "web_video_404_link",
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": null,
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": null,
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null
+      }
+    ],
+    "requests": [
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "other"
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "script",
+        "initiatorFunctions": [
+          ""
+        ]
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": "7129496663315516712",
+        "type": "XHR",
+        "initiator": "script",
+        "initiatorFunctions": [
+          "",
+          "o",
+          ""
+        ]
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": "7129496663315516712",
+        "type": "XHR",
+        "initiator": "script",
+        "initiatorFunctions": [
+          "",
+          "o",
+          ""
+        ]
+      },
+      {
+        "host": "lf-zt.douyin.com",
+        "path": "/obj/uc-assets/zt/@byted/x-storage-web/4.0.5/dist/latest/index.html",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "script",
+        "initiatorFunctions": [
+          "appendChild",
+          ""
+        ]
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": "web_video_404_link",
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "script",
+        "initiatorFunctions": [
+          "v",
+          "countDownEneded",
+          ""
+        ]
+      },
+      {
+        "host": "lf-zt.douyin.com",
+        "path": "/obj/uc-assets/zt/@byted/x-storage-web/4.0.5/dist/latest/index.html",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "script",
+        "initiatorFunctions": [
+          "appendChild",
+          ""
+        ]
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "initiator": "other"
+      }
+    ],
+    "responses": [
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": "7129496663315516712",
+        "type": "Other",
+        "status": 200,
+        "mimeType": "application/json",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": "7129496663315516712",
+        "type": "XHR",
+        "status": 200,
+        "mimeType": "application/json",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "lf-zt.douyin.com",
+        "path": "/obj/uc-assets/zt/@byted/x-storage-web/4.0.5/dist/latest/index.html",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7676036453872274731",
+        "previousPage": "web_video_404_link",
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "lf-zt.douyin.com",
+        "path": "/obj/uc-assets/zt/@byted/x-storage-web/4.0.5/dist/latest/index.html",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false
+      }
+    ],
+    "bodies": [
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false,
+        "bytes": 798839,
+        "routerDataPresent": false,
+        "renderDataPresent": true,
+        "has404Marker": false,
+        "hasUnavailableText": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/aweme/v1/web/aweme/detail/",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": "7129496663315516712",
+        "type": "XHR",
+        "status": 200,
+        "mimeType": "application/json",
+        "fromServiceWorker": false,
+        "bytes": 405,
+        "routerDataPresent": false,
+        "renderDataPresent": false,
+        "has404Marker": false,
+        "hasUnavailableText": false,
+        "statusCode": 0,
+        "awemeDetailPresent": false
+      },
+      {
+        "host": "www.douyin.com",
+        "path": "/video/7129496663315516712",
+        "modalId": null,
+        "previousPage": null,
+        "awemeId": null,
+        "type": "Document",
+        "status": 200,
+        "mimeType": "text/html",
+        "fromServiceWorker": false,
+        "bytes": 802322,
+        "routerDataPresent": false,
+        "renderDataPresent": true,
+        "has404Marker": false,
+        "hasUnavailableText": false
+      }
+    ],
+    "recovery": [
+      {
+        "ok": false,
+        "code": "playback_required"
+      }
+    ],
+    "errors": [
+      "body_unavailable"
+    ]
+  },
+  "originalTaskPreserved": true,
+  "noFinalFile": true,
+  "noNewTasks": true
+}
