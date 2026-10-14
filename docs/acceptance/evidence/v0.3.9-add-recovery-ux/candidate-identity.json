@@ -6,6 +6,6 @@
   "sidecarSha256": "e657c94c6a30ab747129e50772579e56b796878065a35733e2e48e761dc61467",
   "initialFunctionalCandidateSidecarSha256": "e657c94c6a30ab747129e50772579e56b796878065a35733e2e48e761dc61467",
   "finalChangesAfterFunctionalRun": "opaque options panel, primary login icon, readable recovery labels and wrapping detail text; final UI and both public downloads rerun",
-  "installedFinalCandidateTest": "installed-results.json",
-  "finalVisualTest": "visual-results.json"
+  "installedFinalCandidateTest": "installed-downloads.json",
+  "finalVisualTest": "final-visual.json"
 }
