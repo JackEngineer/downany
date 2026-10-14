@@ -1,0 +1,28 @@
+{
+  "version": "0.3.8",
+  "originalUrl": "https://www.douyin.com/video/7129496663315516712",
+  "originalId": "7129496663315516712",
+  "evidenceKind": "normal-original-webpage-own-detail-XHR",
+  "httpStatus": 200,
+  "responseBytes": 405,
+  "statusCode": 0,
+  "awemeDetailPresent": false,
+  "filterDetail": {
+    "aweme_id": "7129496663315516712",
+    "detail_msg": "因作品权限设置，暂时无法查看，去看看其他作品吧",
+    "filter_reason": "status_friend_see",
+    "notice": "作品暂时无法查看"
+  },
+  "cause": "original work permission restriction in current access context",
+  "deletionProved": false,
+  "publicTitleAuthorOrOriginalShortLinkFound": false,
+  "hermesDocumentedMethodSameUrl": "fresh mobile home-first context returned HTTP403; no metadata/media; route stopped",
+  "hermesLauncher": "/Users/jacklee/.local/bin/hermes -> /Users/jacklee/.hermes/hermes-agent/.hermes/bin/hermes -> isolated bundled Python3.14.7 runtime",
+  "skillPythonBinding": "skill does not pin executable; comparison used installed Playwright1.62.0 and its documented Chrome fallback after missing cached browser",
+  "normalBrowserSameUrl": "HTTP200 but aweme_detail absent, filter_reason status_friend_see",
+  "originalTaskPreserved": true,
+  "noNewTasks": true,
+  "noFinalFile": true,
+  "furtherAlternateAttemptsStopped": true,
+  "nextStep": "本人使用有该原作品访问权限的账号确认正常播放；或作者改为公开。无需导出cookies。"
+}
