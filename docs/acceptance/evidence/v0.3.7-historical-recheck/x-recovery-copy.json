@@ -1,0 +1,35 @@
+{
+  "version": "0.3.7",
+  "mode": "recovery",
+  "checks": [
+    "original_id_recovered",
+    "no_new_tasks",
+    "other_tasks_unchanged",
+    "global_settings_unchanged",
+    "full_audio_video_decode",
+    "correct_duration",
+    "restart_persists_task_login_mode"
+  ],
+  "errors": [],
+  "runtime": {
+    "appVersion": "0.3.7",
+    "sidecarVersion": "0.3.7",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "media": {
+    "taskId": "dfbbdfac-36ab-494d-adc2-3021da2a1345",
+    "loginMode": "none",
+    "fileName": "Ej1wG5QP1IBAJxfl [url-403c8efe].mkv",
+    "bytes": 6813870,
+    "duration": 89.489,
+    "width": 960,
+    "height": 508,
+    "video": "h264",
+    "audio": "aac",
+    "sha256": "c1243a0acbd9b56d5d247d91096cd8b4e519cc95aa53634b2ca2bd321a565bfb",
+    "decodeExit": 0
+  },
+  "passed": true
+}

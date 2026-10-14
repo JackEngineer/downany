@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "dailyQueueAndHistoryExactlyUnchanged": true,
+  "dailyConfigBytesUnchanged": true,
+  "oldFilesUnchanged": 33,
+  "originalXTaskStillCompleted": true,
+  "originalXTaskId": "dfbbdfac-36ab-494d-adc2-3021da2a1345",
+  "loginMode": "none",
+  "duration": 89.489,
+  "bytes": 6813870,
+  "fullDecodeExit": 0,
+  "installedCoreMatchesValidatedCandidate": true
+}

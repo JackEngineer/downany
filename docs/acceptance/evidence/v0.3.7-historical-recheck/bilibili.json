@@ -1,0 +1,40 @@
+{
+  "version": "0.3.7",
+  "candidateSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8",
+  "rows": [
+    {
+      "id": "bilibili-double-add-confirm",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "confirmationSurvivedSecondClick": true,
+        "createdTasks": 1,
+        "artifact": {
+          "taskId": "91c76968-30b8-4d04-8bdf-df8239d72cdb",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1].mp4",
+          "bytes": 18444147,
+          "sha256": "b445eacdd9feff5ae729d412f93e26de4ddea70c92b47c47c41678b98b7cf7f4",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      }
+    }
+  ],
+  "launches": [
+    {
+      "runtime": {
+        "appVersion": "0.3.7",
+        "sidecarVersion": "0.3.7",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      },
+      "readyMs": 1473
+    }
+  ],
+  "rendererErrors": []
+}

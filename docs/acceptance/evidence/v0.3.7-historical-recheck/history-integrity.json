@@ -1,0 +1,51 @@
+[
+  {
+    "suite": "controlled",
+    "taskCount": 6,
+    "historyCount": 6,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "service",
+    "taskCount": 1,
+    "historyCount": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "youtube",
+    "taskCount": 3,
+    "historyCount": 3,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "x",
+    "taskCount": 1,
+    "historyCount": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "x-recovery",
+    "taskCount": 1,
+    "historyCount": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "douyin-r2",
+    "taskCount": 1,
+    "historyCount": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  },
+  {
+    "suite": "bilibili",
+    "taskCount": 1,
+    "historyCount": 1,
+    "oneHistoryPerTerminalTask": true,
+    "noActiveTasks": true
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "version": "0.3.7",
+  "candidateSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8",
+  "realSiteRequests": "Douyin original page and normal extractor only",
+  "nativeChromeTested": false,
+  "rows": [
+    {
+      "id": "douyin-original-direct",
+      "status": "failed",
+      "originalFailure": "site_response_unavailable",
+      "currentErrorCode": "site_response_unavailable",
+      "sameSample": true,
+      "loginMode": "none",
+      "noFinalFile": true
+    },
+    {
+      "id": "douyin-original-playback-recovery",
+      "status": "blocked",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "noFinalFile": true,
+      "actualPage": {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7691170921935146278",
+        "visibleLoginOrCaptcha": false,
+        "played": []
+      },
+      "recoveryMessage": "正在加载页面…",
+      "loginOrCaptchaNotPerformed": true,
+      "actualDownloadNotProved": true
+    }
+  ]
+}

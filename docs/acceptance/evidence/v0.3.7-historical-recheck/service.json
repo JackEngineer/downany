@@ -1,0 +1,45 @@
+{
+  "version": "0.3.7",
+  "candidateSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8",
+  "realSiteRequests": 0,
+  "nativeChromeTested": false,
+  "rows": [
+    {
+      "id": "sidecar-disconnect-reconnect",
+      "status": "passed",
+      "scope": "isolated-test-child-only",
+      "downloadPausedBeforeTermination": true,
+      "disconnectedObserved": true,
+      "newSidecarPid": true,
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "nonzeroRangeResume": true,
+      "artifact": {
+        "taskId": "742b0be5-eaee-42db-be95-01e99ada534f",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "launcher-EPIPE",
+      "status": "passed",
+      "realElectronErrors": [
+        "EPIPE",
+        "EPIPE"
+      ],
+      "mainSurvived": true,
+      "secondWriteSurvived": true,
+      "runtime": {
+        "appVersion": "0.3.7",
+        "sidecarVersion": "0.3.7",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      }
+    }
+  ]
+}

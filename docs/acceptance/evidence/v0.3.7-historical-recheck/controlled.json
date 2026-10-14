@@ -1,0 +1,111 @@
+{
+  "version": "0.3.7",
+  "candidateSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8",
+  "realSiteRequests": 0,
+  "nativeChromeTested": false,
+  "rows": [
+    {
+      "id": "controlled403",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP403",
+      "classified": "access_denied",
+      "initialRequestCount": 2,
+      "explicitRecognitionExtraRequests": 1,
+      "noAutomaticRequestsAfterTerminal": true,
+      "originalIdAndOptionsRestored": true,
+      "noNewTasks": true,
+      "noFinalFile": true,
+      "existingFileUnchanged": true,
+      "diagnosticsGeneratedThroughButton": true,
+      "originalPageRecognitionOpened": true,
+      "finderRevealStubbedNotTested": true
+    },
+    {
+      "id": "controlled503-user-retry",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP503-then-healthy",
+      "classified": "network",
+      "initialRequestCount": 2,
+      "noAutomaticRequestsAfterTerminal": true,
+      "networkSettingsOpened": true,
+      "doubleRetrySameOriginalId": true,
+      "noNewTasks": true,
+      "qualityPreserved": true,
+      "artifact": {
+        "taskId": "a2606eb9-0946-4470-af92-df77ebd216f9",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "controlled-disconnect-range-recovery",
+      "status": "passed",
+      "evidenceKind": "same-package-server-disconnect-once",
+      "requestCount": 4,
+      "realPartialDisconnect": true,
+      "nonzeroRangeResume": true,
+      "sameOriginalTask": true,
+      "existingFileUnchanged": true,
+      "artifact": {
+        "taskId": "9d2c1b77-30fd-4bfd-a33a-412619f63a0f",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "cancel-restart-retry",
+      "status": "passed",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "cancelledRestored": true,
+      "artifact": {
+        "taskId": "b1a852a2-4716-4a65-8fe5-0b9ef82e5e9c",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "pause-restart-resume",
+      "status": "passed",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "persistedBytes": 31744,
+      "nonzeroRangeResume": true,
+      "artifact": {
+        "taskId": "6e4c8193-538b-40f7-9a18-8e4b0246331d",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      }
+    },
+    {
+      "id": "baseline-protected",
+      "status": "passed",
+      "artifact": {
+        "taskId": "23c8c0bb-ed04-403d-95dd-838c3239be6d",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "existingFileUnchanged": true
+    }
+  ]
+}

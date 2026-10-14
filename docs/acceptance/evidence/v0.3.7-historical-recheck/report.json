@@ -1,0 +1,367 @@
+{
+  "version": "0.3.7",
+  "productSourceCommit": "95ef028",
+  "installedExecutable": "/Applications/Downany.app/Contents/MacOS/Downany",
+  "candidateDmgSha256": "5c0177ee8427456c86118efdf239f98dbcba71327641dd709aae59b5d739d9d8",
+  "counts": {
+    "passed": 14,
+    "failed": 1,
+    "blocked": 1
+  },
+  "rows": [
+    {
+      "id": "controlled403",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP403",
+      "classified": "access_denied",
+      "initialRequestCount": 2,
+      "explicitRecognitionExtraRequests": 1,
+      "noAutomaticRequestsAfterTerminal": true,
+      "originalIdAndOptionsRestored": true,
+      "noNewTasks": true,
+      "noFinalFile": true,
+      "existingFileUnchanged": true,
+      "diagnosticsGeneratedThroughButton": true,
+      "originalPageRecognitionOpened": true,
+      "finderRevealStubbedNotTested": true,
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "controlled503-user-retry",
+      "status": "passed",
+      "evidenceKind": "same-package-local-HTTP503-then-healthy",
+      "classified": "network",
+      "initialRequestCount": 2,
+      "noAutomaticRequestsAfterTerminal": true,
+      "networkSettingsOpened": true,
+      "doubleRetrySameOriginalId": true,
+      "noNewTasks": true,
+      "qualityPreserved": true,
+      "artifact": {
+        "taskId": "a2606eb9-0946-4470-af92-df77ebd216f9",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "controlled-disconnect-range-recovery",
+      "status": "passed",
+      "evidenceKind": "same-package-server-disconnect-once",
+      "requestCount": 4,
+      "realPartialDisconnect": true,
+      "nonzeroRangeResume": true,
+      "sameOriginalTask": true,
+      "existingFileUnchanged": true,
+      "artifact": {
+        "taskId": "9d2c1b77-30fd-4bfd-a33a-412619f63a0f",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "cancel-restart-retry",
+      "status": "passed",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "cancelledRestored": true,
+      "artifact": {
+        "taskId": "b1a852a2-4716-4a65-8fe5-0b9ef82e5e9c",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "pause-restart-resume",
+      "status": "passed",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "persistedBytes": 31744,
+      "nonzeroRangeResume": true,
+      "artifact": {
+        "taskId": "6e4c8193-538b-40f7-9a18-8e4b0246331d",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "baseline-protected",
+      "status": "passed",
+      "artifact": {
+        "taskId": "23c8c0bb-ed04-403d-95dd-838c3239be6d",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "existingFileUnchanged": true,
+      "suite": "controlled",
+      "evidenceFile": "controlled.json"
+    },
+    {
+      "id": "sidecar-disconnect-reconnect",
+      "status": "passed",
+      "scope": "isolated-test-child-only",
+      "downloadPausedBeforeTermination": true,
+      "disconnectedObserved": true,
+      "newSidecarPid": true,
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "nonzeroRangeResume": true,
+      "artifact": {
+        "taskId": "742b0be5-eaee-42db-be95-01e99ada534f",
+        "bytes": 1334484,
+        "sha256": "10325bbcb87067e93444926b7f2c80744271f0403ec549f8d6ccfc8354dae6ac",
+        "duration": 4,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "fullDecodeExit": 0
+      },
+      "suite": "service",
+      "evidenceFile": "service.json"
+    },
+    {
+      "id": "launcher-EPIPE",
+      "status": "passed",
+      "realElectronErrors": [
+        "EPIPE",
+        "EPIPE"
+      ],
+      "mainSurvived": true,
+      "secondWriteSurvived": true,
+      "runtime": {
+        "appVersion": "0.3.7",
+        "sidecarVersion": "0.3.7",
+        "connection": "connected",
+        "bridge": "listening",
+        "versionMismatch": false
+      },
+      "suite": "service",
+      "evidenceFile": "service.json"
+    },
+    {
+      "id": "youtube-single",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "taskId": "8095a989-3219-4741-9b5a-5bcf120622ed",
+        "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0].mp4",
+        "bytes": 10750915,
+        "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+        "fullDecodeExit": 0,
+        "videoStreams": 1,
+        "audioStreams": 1,
+        "height": 480,
+        "duration": "150.140227",
+        "videoIdentityInFilename": true
+      },
+      "suite": "youtube",
+      "evidenceFile": "youtube.json"
+    },
+    {
+      "id": "youtube-double-click",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "createdTasks": 1,
+        "artifact": {
+          "taskId": "6428b906-e512-4a60-b29c-afefa361b08f",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (2).mp4",
+          "bytes": 10750915,
+          "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "150.140227",
+          "videoIdentityInFilename": true
+        }
+      },
+      "suite": "youtube",
+      "evidenceFile": "youtube.json"
+    },
+    {
+      "id": "youtube-restart",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "sameOriginalId": true,
+        "persistedBytes": 15360,
+        "pausedRestored": true,
+        "artifact": {
+          "taskId": "b0d4009e-57f3-4c86-9d46-35577f04d82f",
+          "fileName": "Caminandes 3： Llamigos [youtube-SkVqJ1SGeL0] (3).mp4",
+          "bytes": 10750915,
+          "sha256": "413bab6e07af178f62142be39ee4456f6f4f77203c4d18b1cb62ccc5c2bf4184",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "150.140227",
+          "videoIdentityInFilename": true
+        }
+      },
+      "suite": "youtube",
+      "evidenceFile": "youtube.json"
+    },
+    {
+      "id": "bilibili-double-add-confirm",
+      "status": "passed",
+      "evidenceKind": "packaged-electron-real-site-ui",
+      "evidence": {
+        "confirmationSurvivedSecondClick": true,
+        "createdTasks": 1,
+        "artifact": {
+          "taskId": "91c76968-30b8-4d04-8bdf-df8239d72cdb",
+          "fileName": "羊驼动画 ｜ Caminandes ｜ Blender p01 Caminandes 2- Gran Dillama- - Blender Animated Short [BiliBili-BV1zL4y1e7Jh_p1].mp4",
+          "bytes": 18444147,
+          "sha256": "b445eacdd9feff5ae729d412f93e26de4ddea70c92b47c47c41678b98b7cf7f4",
+          "fullDecodeExit": 0,
+          "videoStreams": 1,
+          "audioStreams": 1,
+          "height": 480,
+          "duration": "146.146712",
+          "videoIdentityInFilename": true
+        }
+      },
+      "suite": "bilibili",
+      "evidenceFile": "bilibili.json"
+    },
+    {
+      "id": "douyin-original-direct",
+      "status": "failed",
+      "originalFailure": "site_response_unavailable",
+      "currentErrorCode": "site_response_unavailable",
+      "sameSample": true,
+      "loginMode": "none",
+      "noFinalFile": true,
+      "suite": "douyin",
+      "evidenceFile": "douyin.json"
+    },
+    {
+      "id": "douyin-original-playback-recovery",
+      "status": "blocked",
+      "sameOriginalId": true,
+      "noNewTasks": true,
+      "noFinalFile": true,
+      "actualPage": {
+        "host": "www.douyin.com",
+        "path": "/jingxuan",
+        "modalId": "7691170921935146278",
+        "visibleLoginOrCaptcha": false,
+        "played": []
+      },
+      "recoveryMessage": "正在加载页面…",
+      "loginOrCaptchaNotPerformed": true,
+      "actualDownloadNotProved": true,
+      "suite": "douyin",
+      "evidenceFile": "douyin.json"
+    },
+    {
+      "id": "x-public-anonymous",
+      "status": "passed",
+      "suite": "x",
+      "evidenceFile": "x-public.json",
+      "evidence": {
+        "taskId": "2c031223-8fca-4fbd-b9dd-69172ee5b21a",
+        "loginMode": "none",
+        "fileName": "Donald J. Trump - https：⧸⧸t.co⧸3hR8ysrmvX [twitter-2109670602336321536].mkv",
+        "bytes": 6884274,
+        "duration": 89.489,
+        "width": 960,
+        "height": 508,
+        "video": "h264",
+        "audio": "aac",
+        "sha256": "f0f2e23ac5435428ab56e8f78e3104fbb13cb3d60df907126daa564a7e03d0a0",
+        "decodeExit": 0
+      },
+      "checks": [
+        "anonymous_parse_confirmation",
+        "global_settings_unchanged",
+        "full_audio_video_decode",
+        "correct_duration",
+        "restart_persists_task_login_mode"
+      ],
+      "scope": "public post in installed app"
+    },
+    {
+      "id": "x-historical-task-recovery-copy",
+      "status": "passed",
+      "suite": "x",
+      "evidenceFile": "x-recovery-copy.json",
+      "evidence": {
+        "taskId": "dfbbdfac-36ab-494d-adc2-3021da2a1345",
+        "loginMode": "none",
+        "fileName": "Ej1wG5QP1IBAJxfl [url-403c8efe].mkv",
+        "bytes": 6813870,
+        "duration": 89.489,
+        "width": 960,
+        "height": 508,
+        "video": "h264",
+        "audio": "aac",
+        "sha256": "c1243a0acbd9b56d5d247d91096cd8b4e519cc95aa53634b2ca2bd321a565bfb",
+        "decodeExit": 0
+      },
+      "checks": [
+        "original_id_recovered",
+        "no_new_tasks",
+        "other_tasks_unchanged",
+        "global_settings_unchanged",
+        "full_audio_video_decode",
+        "correct_duration",
+        "restart_persists_task_login_mode"
+      ],
+      "scope": "isolated history copy"
+    }
+  ],
+  "notExecuted": [
+    {
+      "id": "x-inherit-chrome-read",
+      "reason": "原失败源已确认；本次禁止读取用户cookies，未重新调用实际Chrome凭据读取。历史失败副本仅在显式none后恢复。"
+    },
+    {
+      "id": "native-chrome-connect",
+      "reason": "原生插件版本/加载尚需本人正常确认，未接受新权限或另行自动加载。"
+    },
+    {
+      "id": "native-chrome-reconnect",
+      "reason": "同上，未操作实际Chrome。"
+    },
+    {
+      "id": "native-chrome-enqueue",
+      "reason": "同上，未操作实际Chrome。"
+    }
+  ],
+  "dailyPreservationEvidence": "daily-preservation.json",
+  "historyIntegrityEvidence": "history-integrity.json",
+  "productChangedThisRecheck": false,
+  "windowsTested": false,
+  "pushedOrReleased": false,
+  "interpretation": "本轮14项通过，不消除历史间歇性403；抖音直接下载仍失败，播放恢复未取得原作品媒体，不能算成功。"
+}

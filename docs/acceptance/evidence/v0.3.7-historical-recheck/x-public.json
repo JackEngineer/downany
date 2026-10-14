@@ -1,0 +1,33 @@
+{
+  "version": "0.3.7",
+  "mode": "isolated",
+  "checks": [
+    "anonymous_parse_confirmation",
+    "global_settings_unchanged",
+    "full_audio_video_decode",
+    "correct_duration",
+    "restart_persists_task_login_mode"
+  ],
+  "errors": [],
+  "runtime": {
+    "appVersion": "0.3.7",
+    "sidecarVersion": "0.3.7",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "media": {
+    "taskId": "2c031223-8fca-4fbd-b9dd-69172ee5b21a",
+    "loginMode": "none",
+    "fileName": "Donald J. Trump - https：⧸⧸t.co⧸3hR8ysrmvX [twitter-2109670602336321536].mkv",
+    "bytes": 6884274,
+    "duration": 89.489,
+    "width": 960,
+    "height": 508,
+    "video": "h264",
+    "audio": "aac",
+    "sha256": "f0f2e23ac5435428ab56e8f78e3104fbb13cb3d60df907126daa564a7e03d0a0",
+    "decodeExit": 0
+  },
+  "passed": true
+}
