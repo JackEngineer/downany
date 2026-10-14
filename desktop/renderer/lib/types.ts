@@ -3,7 +3,7 @@ import type { ConnectionState } from "../../electron/protocol";
 export type { ConnectionState };
 export type { TaskProgressPatch } from "../../electron/taskProgressRelay";
 
-export type TaskLoginMode = "inherit" | "none";
+export type TaskLoginMode = "auto" | "inherit" | "none";
 
 export type AppRoute = "new" | "queue" | "history" | "settings";
 

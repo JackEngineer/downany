@@ -398,3 +398,19 @@
 
 .runtime-status { display:flex; flex-wrap:wrap; gap:6px 14px; color:var(--text-muted, #8b98a5); font-size:11px; line-height:1.5; padding:6px 0; }
 .window-chrome .runtime-status { -webkit-app-region:no-drag; font-size:10px; padding:0; margin-left:20px; }
+
+.action-bar-options { position: relative; flex: 0 0 auto; }
+.action-bar-options > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 6px 8px; color: var(--color-text-secondary); font-size: 12px; border-radius: var(--radius-control); }
+.action-bar-options > summary::-webkit-details-marker { display: none; }
+.action-bar-options > summary:hover, .action-bar-options[open] > summary { color: var(--color-text-primary); background: var(--color-surface-control-hover); }
+.action-bar-options > summary:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.action-bar-options__panel { position: absolute; right: 0; top: calc(100% + 12px); z-index: 80; width: 320px; padding: 16px; border: 1px solid var(--color-stroke-subtle); border-radius: var(--radius-popover); background: var(--color-surface-raised); box-shadow: var(--elevation-overlay); }
+.action-bar-options__panel > p { margin: 5px 0 14px; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary); }
+.action-bar-options__panel fieldset { margin: 0; border: 0; padding: 0; }
+.action-bar-options__panel legend { margin-bottom: 8px; font-size: 12px; color: var(--color-text-secondary); }
+.action-bar-options__choice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 6px; cursor: pointer; border-radius: 6px; }
+.action-bar-options__choice:hover { background: var(--color-surface-control-hover); }
+.action-bar-options__choice input { margin-top: 3px; accent-color: var(--color-focus-ring); }
+.action-bar-options__choice b { display: block; font-size: 13px; font-weight: 500; }
+.action-bar-options__choice small { display: block; margin-top: 4px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
+@media (max-width: 760px) { .action-bar-options__panel { width: min(300px, calc(100vw - 32px)); } }

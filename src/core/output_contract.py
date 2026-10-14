@@ -163,7 +163,7 @@ def _insert_source_key(template: str, source_key_template: str) -> str:
 
 
 def _compile_final_names(task: DownloadTask) -> tuple[str, str, str]:
-    options = effective_login_options(task.options)
+    options = effective_login_options(task.options, url=task.video_info.url)
     direct_media = bool(_DIRECT_MEDIA_RE.search(task.video_info.url or ""))
     if direct_media:
         source_key_template = stable_source_key(task.video_info.url)
@@ -201,7 +201,7 @@ def _compile_final_names(task: DownloadTask) -> tuple[str, str, str]:
 
 def compile_output_plan(task: DownloadTask) -> OutputPlan:
     """Compile one task without performing network or filesystem operations."""
-    options = effective_login_options(task.options)
+    options = effective_login_options(task.options, url=task.video_info.url)
     audio_output = bool(options.audio_only or options.postprocessing == "mp3")
     media_kind = MediaKind.AUDIO if audio_output else MediaKind.VIDEO
 

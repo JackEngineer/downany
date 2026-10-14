@@ -116,11 +116,12 @@ export function presentTask(
     ? Math.min(100, Math.max(0, Number(task.progress)))
     : 0;
   const canOpen = status !== "completed" || Boolean(task.file_path);
-  const allowPrimary = canOpen && (failure?.retryable ?? true);
+  const recoveryFirst = status === "failed" && ["need_login", "cookie_unavailable", "private", "site_response_unavailable", "embedded_session_required", "access_denied", "unsupported", "need_po_token", "ytdlp_outdated", "output_path_invalid", "media_tools_missing"].includes(task.error_code ?? "");
+  const allowPrimary = canOpen && !recoveryFirst && (failure?.retryable ?? true);
 
   return {
     status,
-    label: statusLabel(status, locale),
+    label: status === "failed" && ["need_login", "private", "cookie_unavailable"].includes(task.error_code ?? "") ? t(`task.failureLabel.${task.error_code}`, locale) : statusLabel(status, locale),
     tone: stateView.tone,
     meta,
     detail,

@@ -492,3 +492,11 @@ html[data-reduce-transparency="true"]
     min-width: 0;
   }
 }
+
+.media-task-banner__actions .media-task-banner__primary-action { border-color: var(--material-action-media-stroke-focus); background: var(--material-action-media-fill-hover); font-weight: 500; }
+.media-task-banner__detail { max-width: 72ch; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+
+@media (max-width: 900px) {
+  .media-task-banner__actions .media-task-banner__recovery-action { width: auto; min-width: max-content; padding: 0 9px; }
+  .media-task-banner__actions .media-task-banner__recovery-label { display: inline; }
+}

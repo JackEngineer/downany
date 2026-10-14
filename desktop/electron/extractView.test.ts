@@ -62,7 +62,7 @@ it('offers original-task recovery without creating a second task', async () => {
   const button=document.querySelector('#retryOriginal') as HTMLButtonElement;
   button.hidden=false;button.click();await new Promise(resolve=>setTimeout(resolve,0));
   expect(api.retryOriginal).toHaveBeenCalledOnce();expect(enqueue).not.toHaveBeenCalled();
-  expect(document.querySelector('#status')!.textContent).toContain('本次没有创建新任务');
+  expect(document.querySelector('#status')!.textContent).toContain('登录不一定能解除作品权限限制');
 });
 
 it('replaces loading text and redacts browser navigation failures', () => {

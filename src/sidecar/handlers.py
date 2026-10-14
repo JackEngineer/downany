@@ -22,7 +22,7 @@ from src.core.download_task import (
 )
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.error_codes import OutputPathInvalid
-from src.core.login_policy import effective_login_options, validate_login_mode
+from src.core.login_policy import effective_login_options, validate_login_mode, prefers_public_download
 from src.core.output_paths import ensure_output_directory_ready
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
 from src.core.search_engine import SearchEngine
@@ -399,7 +399,7 @@ def _build_item_options(base: DownloadOptions, item: Dict[str, Any]) -> Download
     if item.get("direct_media") is True:
         opts.direct_media = True
         opts.embed_metadata = False
-    return effective_login_options(opts)
+    return effective_login_options(opts, url=str(item.get("url") or ""))
 
 
 def _find_item_for_url(
@@ -425,13 +425,13 @@ def _new_parse_session(
     allow_playlist: bool,
     options: DownloadOptions,
 ) -> ParseSession:
-    options = effective_login_options(options)
+    options = effective_login_options(options, url=url)
     session_options: Dict[str, Any] = {
         "proxy": proxy,
         "timeout": timeout,
         "allow_playlist": allow_playlist,
     }
-    if options.login_mode == "none":
+    if prefers_public_download(options, url):
         session_options["public_douyin"] = True
     if options.cookies_from_browser:
         session_options["cookies_from_browser"] = options.cookies_from_browser
@@ -613,7 +613,7 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         group_id = str(spec.get("group_id") or "")
         group_title = str(spec.get("group_title") or "")
         playlist_index = int(spec.get("playlist_index") or 0)
-        task_options = effective_login_options(spec.get("options") or options)
+        task_options = effective_login_options(spec.get("options") or options, url=str(spec["url"]))
         referer = ""
         if task_options.http_headers and isinstance(task_options.http_headers, dict):
             referer = str(

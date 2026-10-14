@@ -1,0 +1,26 @@
+{
+  "version": "0.3.9",
+  "theme": "dark",
+  "sameStatesAsBefore": true,
+  "checks": [
+    "dark-theme-basic-and-options",
+    "escape-closes-options",
+    "minimum-window-options-and-readable-actions-fit",
+    "old-explicit-account-choice-preserved",
+    "global-settings-not-changed"
+  ],
+  "screenshots": [
+    "01-after-dark.png",
+    "02-options-dark.png",
+    "03-narrow-options.png"
+  ],
+  "runtime": {
+    "appVersion": "0.3.9",
+    "sidecarVersion": "0.3.9",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "actualNarrowViewport": 760,
+  "passed": true
+}

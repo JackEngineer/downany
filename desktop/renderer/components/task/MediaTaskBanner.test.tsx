@@ -751,46 +751,30 @@ describe("MediaTaskBanner", () => {
     );
   });
 
-  it("offers the exact login-recovery actions", async () => {
-    render(
-      <MediaTaskBanner
-        task={taskFixture({ status: "failed", error_code: "need_login" })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "重试" }));
-    await waitFor(() =>
-      expect(requestMock).toHaveBeenCalledWith("download.retry", {
-        taskId: "task-1",
-      }),
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "检查默认登录来源" }),
-    );
-    expect(openSettingsMock).toHaveBeenCalledWith("cookies");
-
-    fireEvent.click(screen.getByRole("button", { name: "网页识别" }));
-    expect(openExtractWindowMock).toHaveBeenCalledWith(
-      "https://example.com/video",
-    );
+  it("offers one clear login action without retrying or changing account settings", () => {
+    render(<MediaTaskBanner task={taskFixture({ status: "failed", error_code: "need_login" })} />);
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "打开网页登录" }));
+    expect(openExtractWindowMock).toHaveBeenCalledWith("https://example.com/video");
+    expect(openSettingsMock).not.toHaveBeenCalled();
+    expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
   });
 
   it.each([
-    ["need_login", ["检查默认登录来源", "网页识别"]],
-    ["cookie_unavailable", ["不使用登录状态重试此项", "检查默认登录来源", "网页识别"]],
-    ["site_response_unavailable", ["网页识别", "导出诊断"]],
-    ["private", ["检查默认登录来源", "网页识别"]],
-    ["geo_blocked", ["检查网络设置"]],
-    ["network", ["检查网络设置"]],
+    ["need_login", ["打开网页登录"]],
+    ["cookie_unavailable", ["尝试公开下载"]],
+    ["site_response_unavailable", ["网页识别"]],
+    ["private", ["打开网页登录"]],
+    ["geo_blocked", []],
+    ["network", []],
     ["ytdlp_outdated", ["更新下载工具"]],
     ["need_po_token", ["网页识别"]],
     ["unsupported", ["网页识别"]],
     ["removed", []],
     ["output_path_invalid", ["检查下载设置"]],
-    ["media_tools_missing", ["重新安装 Downany", "导出诊断"]],
-    ["output_verification_failed", ["导出诊断"]],
-    ["unexpected_code", ["网页识别"]],
+    ["media_tools_missing", ["重新安装 Downany"]],
+    ["output_verification_failed", []],
+    ["unexpected_code", []],
   ] as const)(
     "shows only the useful recovery actions for %s",
     (errorCode, labels) => {
@@ -807,52 +791,17 @@ describe("MediaTaskBanner", () => {
     },
   );
 
-  it.each([
-    ["cookie_unavailable", "zh-CN", "无法读取此任务使用的登录来源。可检查默认来源，或仅此项不使用登录状态重试", "检查默认登录来源", "cookies", "网页识别", "重试"],
-    ["cookie_unavailable", "en", "Could not read this task’s sign-in source. Check the default source, or retry only this task without sign-in state.", "Check default sign-in source", "cookies", "Recognize page", "Retry"],
-    ["site_response_unavailable", "zh-CN", "暂时无法读取视频信息，请尝试网页识别；仍失败时可导出诊断", "导出诊断", "diagnostics", "网页识别", "重试"],
-    ["site_response_unavailable", "en", "Could not read the video information right now. Try page recognition; if it still fails, export diagnostics.", "Export diagnostics", "diagnostics", "Recognize page", "Retry"],
-  ] as const)(
-    "keeps %s recovery safe and actionable in %s",
-    async (errorCode, locale, detail, recoveryLabel, recoveryAction, recognizeLabel, retryLabel) => {
-      setLocale(locale);
-      requestMock.mockImplementation(async (method) => method === "app.exportDiagnostics"
-        ? { ok: true, path: "/tmp/diagnostics.zip" }
-        : { tasks: [], settings: null });
-      const task = taskFixture({
-        id: "task-recovery-original",
-        url: "https://example.com/original-video",
-        status: "failed",
-        error_code: errorCode,
-        error_message: "Cookie: PRIVATE_TOKEN C:\\Users\\PRIVATE_USER\\response.json",
-      });
-      const { container } = render(<MediaTaskBanner task={task} />);
-
-      expect(screen.getByText(detail)).toBeInTheDocument();
-      expect(container.innerHTML).not.toMatch(/PRIVATE_TOKEN|PRIVATE_USER|response\.json/);
-      expect(container.querySelector(".media-task-banner__detail")).not.toHaveAttribute("title");
-      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole("button", { name: recoveryLabel }));
-      if (recoveryAction === "cookies") {
-        expect(openSettingsMock).toHaveBeenCalledTimes(1);
-        expect(openSettingsMock).toHaveBeenCalledWith("cookies");
-      } else {
-        expect(requestMock).toHaveBeenCalledWith("app.exportDiagnostics", {});
-        await waitFor(() => expect(showItemInFolderMock).toHaveBeenCalledWith("/tmp/diagnostics.zip"));
-        expect(openSettingsMock).not.toHaveBeenCalled();
-      }
-      fireEvent.click(screen.getByRole("button", { name: recognizeLabel }));
-      expect(openExtractWindowMock).toHaveBeenCalledTimes(1);
-      expect(openExtractWindowMock).toHaveBeenCalledWith(task.url);
-      expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
-
-      fireEvent.click(screen.getByRole("button", { name: retryLabel }));
-      await waitFor(() => expect(requestMock).toHaveBeenCalledWith("download.retry", { taskId: task.id }));
-      expect(requestMock.mock.calls.filter(([method]) => method === "download.retry")).toHaveLength(1);
-      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    },
-  );
+  it.each(["zh-CN", "en"] as const)("keeps account failure recovery scoped and private in %s", async locale => {
+    setLocale(locale);
+    const task = taskFixture({ id: "original", status: "failed", error_code: "cookie_unavailable", error_message: "Cookie: PRIVATE_TOKEN C:\\PRIVATE_USER\\response.json" });
+    const { container } = render(<MediaTaskBanner task={task} />);
+    expect(container.innerHTML).not.toMatch(/PRIVATE_TOKEN|PRIVATE_USER|response\.json/);
+    expect(container.querySelectorAll(".media-task-banner__recovery-action")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: locale === "en" ? "Try public download" : "尝试公开下载" }));
+    await waitFor(() => expect(requestMock).toHaveBeenCalledWith("download.retry", { taskId: "original", login_mode: "none" }));
+    expect(openSettingsMock).not.toHaveBeenCalled();
+    expect(requestMock).not.toHaveBeenCalledWith("settings.update", expect.anything());
+  });
 
   it("never exposes the raw download error in visible text or a tooltip", () => {
     const raw = "ERROR Cookie: secret-token C:\\Users\\private\\response.json";
@@ -917,7 +866,10 @@ describe("MediaTaskBanner", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: actionLabel }));
+      if (errorCode === "network") {
+        fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: actionLabel }));
+      } else fireEvent.click(screen.getByRole("button", { name: actionLabel }));
 
       expect(openSettingsMock).toHaveBeenCalledWith(settingsFocus);
     },
@@ -961,7 +913,8 @@ describe("MediaTaskBanner", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "导出诊断" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "导出诊断" }));
 
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("app.exportDiagnostics", {}),
@@ -987,7 +940,8 @@ describe("MediaTaskBanner", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "导出诊断" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "导出诊断" }));
 
     await waitFor(() =>
       expect(useAppStore.getState().toasts.at(-1)).toMatchObject({
@@ -1031,23 +985,11 @@ describe("MediaTaskBanner", () => {
     expect(screen.queryByRole("menuitem", { name: "重试" })).toBeNull();
   });
 
-  it("keeps an output-path retry as a one-click action", async () => {
-    render(
-      <MediaTaskBanner
-        task={taskFixture({
-          status: "failed",
-          error_code: "output_path_invalid",
-        })}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "重试" }));
-
-    await waitFor(() =>
-      expect(requestMock).toHaveBeenCalledWith("download.retry", {
-        taskId: "task-1",
-      }),
-    );
+  it("keeps output-path retry available in More without creating a second task", async () => {
+    render(<MediaTaskBanner task={taskFixture({ status: "failed", error_code: "output_path_invalid" })} />);
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "重试" }));
+    await waitFor(() => expect(requestMock).toHaveBeenCalledWith("download.retry", { taskId: "task-1" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
@@ -1210,8 +1152,9 @@ describe("MediaTaskBanner", () => {
       { id: "pp:mp4", label: "转换为 MP4", enabled: true },
       { id: "pp:mp3", label: "提取音频 (MP3)", enabled: true },
       { id: "pp:script", label: "自定义脚本", enabled: true },
-      { id: "login:inherit", label: "此任务使用默认登录来源", type: "radio", checked: true },
-      { id: "login:none", label: "此任务不使用登录状态", type: "radio", checked: false },
+      { id: "login:auto", label: "自动选择（仅此任务）", type: "radio", checked: false },
+      { id: "login:inherit", label: "已配置账号（仅此任务）", type: "radio", checked: true },
+      { id: "login:none", label: "公开下载（仅此任务）", type: "radio", checked: false },
       { id: "cancel", label: "取消下载" },
     ]);
   });
@@ -1476,7 +1419,7 @@ describe("MediaTaskBanner", () => {
 
     fireEvent.keyDown(menu, { key: "ArrowUp" });
     expect(document.activeElement).toBe(
-      screen.getByRole("menuitemradio", { name: "此任务不使用登录状态" }),
+      screen.getByRole("menuitemradio", { name: "公开下载（仅此任务）" }),
     );
 
     fireEvent.keyDown(menu, { key: "Home" });
@@ -1512,9 +1455,9 @@ it("offers explicit built-in retry only for an exact failed Douyin video", async
   const retry = vi.fn().mockResolvedValue({ ok: false, code: "unavailable" });
   window.api.retryEmbeddedDouyin = retry;
   const { rerender } = render(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://www.douyin.com/video/123", error_code: "site_response_unavailable" })} />);
-  fireEvent.click(screen.getByRole("button", { name: "播放后重试原任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "打开作品网页" }));
   await waitFor(() => expect(retry).toHaveBeenCalledWith("task-1"));
   expect(requestMock).not.toHaveBeenCalledWith("download.retry", expect.anything());
   rerender(<MediaTaskBanner task={taskFixture({ status: "failed", url: "https://evil.com/video/123", error_code: "site_response_unavailable" })} />);
-  expect(screen.queryByRole("button", { name: "播放后重试原任务" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "打开作品网页" })).toBeNull();
 });

@@ -191,7 +191,7 @@ export function buildTaskContextTemplate(
     );
   }
   if (status !== "completed" && status !== "downloading") {
-    items.push({ id: "login:inherit", label: t("task.loginDefault", locale), type: "radio", checked: (task.login_mode ?? "inherit") === "inherit" }, { id: "login:none", label: t("task.loginNone", locale), type: "radio", checked: task.login_mode === "none" });
+    items.push({ id: "login:auto", label: t("task.loginAuto", locale), type: "radio", checked: task.login_mode === "auto" }, { id: "login:inherit", label: t("task.loginDefault", locale), type: "radio", checked: (task.login_mode ?? "inherit") === "inherit" }, { id: "login:none", label: t("task.loginNone", locale), type: "radio", checked: task.login_mode === "none" });
   }
   if (status === "downloading") items.push({ id: "pause", label: t("action.pause", locale) });
   if (status === "paused") items.push({ id: "resume", label: t("action.continue", locale) });
@@ -210,6 +210,15 @@ export function buildTaskContextTemplate(
       { id: "reveal", label: t("action.reveal", locale) },
     );
   }
+  if (status === "failed") {
+    const recovery = failureRecoveryFor(task.error_code);
+    for (const action of recovery.actions) {
+      if (action === "recognize" || action === "withoutLogin") continue;
+      const labels = { login: "recovery.accountSettings", network: "recovery.network", updateTool: "recovery.updateTool", downloadSettings: "recovery.downloadSettings", appDownload: "recovery.appDownload", diagnostics: "recovery.diagnostics" } as const;
+      items.push({ id: `recovery:${action}`, label: t(labels[action], locale) });
+    }
+    if (!recovery.actions.includes("diagnostics")) items.push({ id: "recovery:diagnostics", label: t("recovery.diagnostics", locale) });
+  }
   if (status === "completed" || status === "failed" || status === "cancelled") {
     items.push({ id: "remove", label: t("action.remove", locale) });
   }
@@ -224,6 +233,14 @@ export async function dispatchTaskAction(
   requestRetry: () => Promise<void>,
 ): Promise<void> {
   switch (actionId) {
+    case "recovery:login": return commands.openSettings("cookies");
+    case "recovery:network": return commands.openSettings("network");
+    case "recovery:updateTool": return commands.openSettings("downloadTool");
+    case "recovery:downloadSettings": return commands.openSettings("download");
+    case "recovery:appDownload": return commands.openAppDownload();
+    case "recovery:diagnostics": return commands.exportDiagnostics();
+    case "login:auto":
+      return commands.update({ login_mode: "auto" });
     case "login:inherit":
       return commands.update({ login_mode: "inherit" });
     case "login:none":

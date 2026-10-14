@@ -79,7 +79,7 @@ function runPrimaryAction(
 
 const RECOVERY_ACTION_VIEWS = {
   withoutLogin: { labelKey: "recovery.withoutLogin", icon: "download" },
-  login: { labelKey: "recovery.login", icon: "settings" },
+  login: { labelKey: "recovery.login", icon: "capture" },
   network: { labelKey: "recovery.network", icon: "settings" },
   updateTool: { labelKey: "recovery.updateTool", icon: "settings" },
   recognize: { labelKey: "recovery.recognize", icon: "capture" },
@@ -99,7 +99,7 @@ function runRecoveryAction(
     case "withoutLogin":
       return commands.retryWithoutLogin?.() ?? Promise.resolve();
     case "login":
-      return commands.openSettings("cookies");
+      return commands.recognizePage();
     case "network":
       return commands.openSettings("network");
     case "updateTool":
@@ -133,19 +133,23 @@ function FailureRecoveryActions({
   const view = failureRecoveryFor(task.error_code);
 
   const canRetryEmbedded = /^https:\/\/www\.douyin\.com\/video\/\d+$/.test(task.url)
-    && ["need_login", "cookie_unavailable", "site_response_unavailable", "private", "embedded_session_required"].includes(task.error_code ?? "");
+    && ["need_login", "site_response_unavailable", "private", "embedded_session_required"].includes(task.error_code ?? "");
+  if (presentTask(task).primaryAction) return null;
+  if (canRetryEmbedded) {
+    const label = t(task.error_code === "private" ? "recovery.permissions" : "recovery.openWork", locale);
+    return <Button className="media-task-banner__recovery-action media-task-banner__primary-action" size="small" variant="primary" leadingIcon="capture" aria-label={label} title={label} onClick={() => void commands.retryEmbeddedDouyin?.()}><span className="media-task-banner__recovery-label">{label}</span></Button>;
+  }
   return (
     <>
-      {canRetryEmbedded && <Button className="media-task-banner__recovery-action" size="small" variant="ghost" leadingIcon="capture" onClick={() => void commands.retryEmbeddedDouyin?.()}>{t("recovery.embeddedRetry", locale)}</Button>}
-      {view.actions.map((action) => {
+      {view.actions.slice(0, 1).map((action) => {
         const presentation = RECOVERY_ACTION_VIEWS[action];
         const label = t(presentation.labelKey, locale);
         return (
           <Button
             key={action}
-            className="media-task-banner__recovery-action"
+            className="media-task-banner__recovery-action media-task-banner__primary-action"
             size="small"
-            variant="ghost"
+            variant="primary"
             leadingIcon={presentation.icon}
             aria-label={label}
             title={label}

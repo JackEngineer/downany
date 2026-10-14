@@ -433,7 +433,7 @@ export function AddConfirmDialog() {
         onClick={(e) => e.stopPropagation()}
       >
         <h2>{t("parse.confirm", locale)}</h2>
-        {loginMode === "none" && <p className="muted">{t("add.withoutLogin", locale)}</p>}
+        {loginMode !== "auto" && <p className="muted">{t(`add.mode.${loginMode}`, locale)}</p>}
         <ul className="confirm-list">
           {blocks.map((block) => {
             if (block.kind === "single") {

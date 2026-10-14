@@ -1,0 +1,83 @@
+{
+  "version": "0.3.9",
+  "checks": [
+    "no_expert_checkbox",
+    "one_primary_action_per_failure",
+    "explicit_old_account_modes_preserved",
+    "friend_permission_not_fixed_by_signin",
+    "account_selection_scoped_to_add",
+    "advanced_escape_and_outside_close",
+    "sign_in_action_opens_original_page_no_automatic_retry",
+    "permission_action_opens_original_work_manual_playback_only",
+    "recovery_keeps_original_id_no_duplicate_task",
+    "plain_x_add_uses_public_auto",
+    "plain_douyin_add_uses_public_auto",
+    "actual_restricted_work_no_media_or_blind_retry",
+    "restart_policy_persists",
+    "global_settings_unchanged"
+  ],
+  "downloads": [
+    {
+      "case": "explicit_single_task_public_recovery_copy",
+      "taskId": "dfbbdfac-36ab-494d-adc2-3021da2a1345",
+      "loginMode": "none",
+      "fileName": "Ej1wG5QP1IBAJxfl [url-403c8efe].mkv",
+      "bytes": 6813870,
+      "duration": 89.489,
+      "width": 960,
+      "height": 508,
+      "video": "h264",
+      "audio": "aac",
+      "sha256": "570a017fc4efaf3ba29844d6d771ccdfd4ed98708452ae2cada548843aae0b2a",
+      "fullDecodeExit": 0
+    },
+    {
+      "case": "paste_add_x_without_options",
+      "taskId": "7a139add-5883-4af7-8c67-db7896520cf5",
+      "loginMode": "auto",
+      "fileName": "Donald J. Trump - https：⧸⧸t.co⧸3hR8ysrmvX [twitter-2109670602336321536].mkv",
+      "bytes": 4737026,
+      "duration": 89.489,
+      "width": 680,
+      "height": 360,
+      "video": "h264",
+      "audio": "aac",
+      "sha256": "963f95c83d01279c04bec8aa5fa22b5370d655be5ecd8ec416c017a6a6e2cd44",
+      "fullDecodeExit": 0
+    },
+    {
+      "case": "paste_add_douyin_without_options",
+      "taskId": "88cb1a1b-ec1a-47de-86b2-ba297a2df986",
+      "loginMode": "auto",
+      "fileName": "影视精选：换个视角去看《逃出绝命镇》合集 #青年创作者成长计划#抖音精选#悬疑#了不起的精讲团#逃出绝命镇 [douyin-7676036453872274731].mp4",
+      "bytes": 54825310,
+      "duration": 970.896009,
+      "width": 1024,
+      "height": 576,
+      "video": "hevc",
+      "audio": "aac",
+      "sha256": "29db74af388dd446a03eb3eb24ed12b6750d88f3989796bad4bcc24caf3dc9fa",
+      "fullDecodeExit": 0
+    }
+  ],
+  "screenshots": [
+    "01-after-basic.png",
+    "02-add-options.png",
+    "03-public-download-progress.png",
+    "04-restricted-work.png",
+    "05-final.png"
+  ],
+  "displayOnlyStates": [
+    "need_login",
+    "private"
+  ],
+  "errors": [],
+  "runtime": {
+    "appVersion": "0.3.9",
+    "sidecarVersion": "0.3.9",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "blocker": "locator.click: Target page, context or browser has been closed"
+}

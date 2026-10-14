@@ -5,7 +5,7 @@ import { request, openExtractWindow } from "../../lib/api";
 import { submitAddText } from "../../lib/addFlow";
 import { taskActionToast } from "../../lib/taskActionReport";
 import { refreshQueueAfterChange } from "../../lib/refreshQueue";
-import type { TaskActionReport, ToastItem } from "../../lib/types";
+import type { TaskActionReport, ToastItem, TaskLoginMode } from "../../lib/types";
 import { useAppStore } from "../../store/appStore";
 import { Button, IconButton } from "../ui/Button";
 import { Icon } from "../ui/Icon";
@@ -22,7 +22,8 @@ export function ActionBar() {
   const pushToast = useAppStore((state) => state.pushToast);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [withoutLogin, setWithoutLogin] = useState(false);
+  const [loginMode, setLoginMode] = useState<TaskLoginMode>("auto");
+  const optionsRef = useRef<HTMLDetailsElement>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const batchPending = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -32,6 +33,15 @@ export function ActionBar() {
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
   const disabled = connection !== "connected";
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      const panel = optionsRef.current;
+      if (panel?.open && event.target instanceof Node && !panel.contains(event.target)) panel.open = false;
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+
 
   useEffect(() => {
     if (addFocusSignal > 0) addRef.current?.focus();
@@ -87,8 +97,8 @@ export function ActionBar() {
   const addUrls = async (raw: string) => {
     setBusy(true);
     try {
-      const urls = await submitAddText(raw, withoutLogin ? "none" : "inherit");
-      if (urls.length > 0) { setText(""); setWithoutLogin(false); }
+      const urls = await submitAddText(raw, loginMode);
+      if (urls.length > 0) { setText(""); setLoginMode("auto"); if (optionsRef.current) optionsRef.current.open = false; }
     } finally {
       setBusy(false);
     }
@@ -169,6 +179,22 @@ export function ActionBar() {
       >
         {t("action.add", locale)}
       </Button>
+      <details className="action-bar-options" ref={optionsRef} onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); if (optionsRef.current) { optionsRef.current.open = false; optionsRef.current.querySelector("summary")?.focus(); } }
+      }}>
+        <summary tabIndex={0} aria-label={t("add.options", locale)}>{loginMode === "auto" ? t("add.optionsShort", locale) : t(`add.mode.${loginMode}`, locale)}<Icon name="settings" size={14} /></summary>
+        <div className="action-bar-options__panel" role="dialog" aria-label={t("add.options", locale)}>
+          <strong>{t("add.options", locale)}</strong>
+          <p>{t("add.optionsScope", locale)}</p>
+          <fieldset disabled={disabled || busy}>
+            <legend>{t("add.downloadMode", locale)}</legend>
+            {(["auto", "inherit", "none"] as const).map((mode) => <label key={mode} className="action-bar-options__choice">
+              <input type="radio" name="add-login-mode" checked={loginMode === mode} onChange={() => setLoginMode(mode)} />
+              <span><b>{t(`add.mode.${mode}`, locale)}</b><small>{t(`add.modeDetail.${mode}`, locale)}</small></span>
+            </label>)}
+          </fieldset>
+        </div>
+      </details>
       <Button
         className="action-bar__recognize"
         variant="ghost"
@@ -240,10 +266,7 @@ export function ActionBar() {
         }}
       />
     </section>
-    <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12 }}>
-      <input type="checkbox" checked={withoutLogin} disabled={disabled || busy} onChange={event => setWithoutLogin(event.target.checked)} />
-      {t("add.withoutLogin", locale)}
-    </label>
+
     </>
   );
 }

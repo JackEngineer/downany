@@ -166,3 +166,49 @@ def test_invalid_login_policy_rejected(tmp_path,method):
     ctx=make_context(tmp_path)
     with pytest.raises(HandlerError):
         dispatch(ctx,method.value,{"urls":["https://example.com"],"taskId":"missing","login_mode":"invalid"})
+
+@pytest.mark.parametrize('url,public', [
+    ('https://www.douyin.com/video/123456', True),
+    ('https://x.com/example/status/123456', True),
+    ('https://www.youtube.com/watch?v=existing', False),
+    ('https://www.bilibili.com/video/BVexisting', False),
+    ('https://x.com.evil.invalid/example/status/123456', False),
+])
+def test_auto_only_prefers_guest_for_target_sites(url, public):
+    original=DownloadOptions(login_mode='auto', cookies_from_browser='chrome', cookiefile='/mock-only',
+                             http_headers={'Cookie':'mock-only','Referer':'https://example.com'})
+    resolved=effective_login_options(original,url=url)
+    assert resolved.login_mode=='auto'
+    assert (resolved.cookies_from_browser=='')==public
+    assert (resolved.cookiefile=='')==public
+    assert ('Cookie' not in resolved.http_headers)==public
+    assert original.cookies_from_browser=='chrome' and original.cookiefile=='/mock-only'
+
+
+def test_auto_never_overrides_explicit_account_choice():
+    options=DownloadOptions(login_mode='inherit',cookies_from_browser='chrome',http_headers={'Cookie':'mock-only'})
+    result=effective_login_options(options,url='https://x.com/example/status/123456')
+    assert result.cookies_from_browser=='chrome' and result.http_headers['Cookie']=='mock-only'
+
+
+def test_auto_public_retry_and_restart_keep_same_policy_without_global_changes(tmp_path):
+    cfg,store,manager=config_and_manager(tmp_path)
+    task=DownloadTask(video_info=VideoInfo(url='https://www.douyin.com/video/123456'),status=TaskStatus.FAILED,
+                      options=DownloadOptions(login_mode='auto',cookies_from_browser='chrome'))
+    before=cfg.to_dict();manager.tasks[task.id]=task;store.upsert_task(task)
+    manager.retry_task(task.id)
+    restored=store.load_tasks()[0]
+    assert restored.id==task.id and restored.options.login_mode=='auto'
+    assert restored.options.cookies_from_browser==restored.options.cookiefile==''
+    assert cfg.to_dict()==before
+
+
+def test_auto_mixed_batch_preserves_account_and_other_site_behavior(tmp_path):
+    ctx=make_context(tmp_path)
+    urls=['https://x.com/example/status/123456','https://www.youtube.com/watch?v=existing','https://x.com/example/status/654321']
+    reply=dispatch(ctx,Method.DOWNLOAD_CREATE_TASKS.value,{'urls':urls,'login_mode':'auto','items':[{'url':urls[2],'login_mode':'inherit'}]})
+    a,b,c=[ctx.manager.get_task(id) for id in reply['taskIds']]
+    assert a.options.login_mode=='auto' and a.options.cookies_from_browser==''
+    assert b.options.login_mode=='auto' and b.options.cookies_from_browser=='chrome'
+    assert c.options.login_mode=='inherit' and c.options.cookies_from_browser=='chrome'
+    assert ctx.config.to_dict()['cookies_from_browser']=='chrome'

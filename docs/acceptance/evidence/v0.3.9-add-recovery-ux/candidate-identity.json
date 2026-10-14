@@ -1,0 +1,11 @@
+{
+  "version": "0.3.9",
+  "dmgBytes": 181395781,
+  "dmgSha256": "d74064a0837e05921ca38d8c397b2eee5c3b446f30c6b0bf2e97e088ad5a5d6e",
+  "finalAppAsarSha256": "58dc77a9f33d1f4c724ca034811a6fc54cabe8f052e96947de98d13d1a519324",
+  "sidecarSha256": "e657c94c6a30ab747129e50772579e56b796878065a35733e2e48e761dc61467",
+  "initialFunctionalCandidateSidecarSha256": "e657c94c6a30ab747129e50772579e56b796878065a35733e2e48e761dc61467",
+  "finalChangesAfterFunctionalRun": "opaque options panel, primary login icon, readable recovery labels and wrapping detail text; final UI and both public downloads rerun",
+  "installedFinalCandidateTest": "installed-results.json",
+  "finalVisualTest": "visual-results.json"
+}

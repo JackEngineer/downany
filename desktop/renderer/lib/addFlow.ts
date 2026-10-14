@@ -18,7 +18,7 @@ export async function createTasksAndRefresh(
     group_title?: string;
     playlist_index?: number;
   }[],
-  loginMode: TaskLoginMode = "inherit",
+  loginMode: TaskLoginMode = "auto",
 ): Promise<boolean> {
   const { pushToast } = useAppStore.getState();
   const readiness = await request<{ ready?: boolean; reason?: string }>(
@@ -55,7 +55,7 @@ export async function createTasksAndRefresh(
  * - 播放列表/合集 URL → 即使自动开始也先进确认窗（选集）
  * - 其余自动开始 → 直入队（Sidecar 对 playlist URL 仍会兜底展开）
  */
-export async function submitAddText(raw: string, loginMode: TaskLoginMode = "inherit"): Promise<string[]> {
+export async function submitAddText(raw: string, loginMode: TaskLoginMode = "auto"): Promise<string[]> {
   const { pushToast, settings, setPendingAddUrls } = useAppStore.getState();
   const urls = extractUrls(raw);
   if (urls.length === 0) {

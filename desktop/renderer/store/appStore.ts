@@ -142,7 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   netError: "",
   addFocusSignal: 0,
   pendingAddUrls: null,
-  pendingAddLoginMode: "inherit",
+  pendingAddLoginMode: "auto",
   tasks: [],
   settings: defaultSettings,
   logDir: "",
@@ -161,7 +161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearNetSearch: () =>
     set({ netSearchId: "", netSearching: false, netResults: [], netError: "" }),
   requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),
-  setPendingAddUrls: (pendingAddUrls, loginMode = "inherit") => set({ pendingAddUrls, pendingAddLoginMode: pendingAddUrls ? loginMode : "inherit" }),
+  setPendingAddUrls: (pendingAddUrls, loginMode = "auto") => set({ pendingAddUrls, pendingAddLoginMode: pendingAddUrls ? loginMode : "auto" }),
   setLogDir: (logDir) => set({ logDir }),
 
   hydrateSnapshot: (snap) => {

@@ -1,0 +1,51 @@
+{
+  "version": "0.3.9",
+  "checks": [
+    "default-auto-both-public-sites",
+    "global-settings-unchanged",
+    "normal-restart-preserves-auto-and-completed"
+  ],
+  "downloads": [
+    {
+      "case": "installed_paste_add_without_options",
+      "taskId": "d9ab4276-ce2b-452a-b736-be8315d1c7e6",
+      "loginMode": "auto",
+      "fileName": "Donald J. Trump - https：⧸⧸t.co⧸3hR8ysrmvX [twitter-2109670602336321536].mkv",
+      "bytes": 6884274,
+      "duration": 89.489,
+      "width": 960,
+      "height": 508,
+      "video": "h264",
+      "audio": "aac",
+      "sha256": "bb44120a467f341b65b69dcdc93728811139815071b9682949b3808ed23af871",
+      "fullDecodeExit": 0
+    },
+    {
+      "case": "installed_paste_add_without_options",
+      "taskId": "8e4c96ba-96fb-436b-ae27-34281424abab",
+      "loginMode": "auto",
+      "fileName": "影视精选：换个视角去看《逃出绝命镇》合集 #青年创作者成长计划#抖音精选#悬疑#了不起的精讲团#逃出绝命镇 [douyin-7676036453872274731].mp4",
+      "bytes": 52336917,
+      "duration": 970.896009,
+      "width": 1280,
+      "height": 720,
+      "video": "hevc",
+      "audio": "aac",
+      "sha256": "ebab1b3e889ae3cca8dede38ac26afdc625e73a97d67df74d02dbdc49fb58ace",
+      "fullDecodeExit": 0
+    }
+  ],
+  "screenshots": [
+    "installed-public-complete.png"
+  ],
+  "displayOnlyStates": [],
+  "errors": [],
+  "runtime": {
+    "appVersion": "0.3.9",
+    "sidecarVersion": "0.3.9",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "passed": true
+}

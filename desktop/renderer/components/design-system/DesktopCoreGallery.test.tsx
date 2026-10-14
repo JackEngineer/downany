@@ -41,7 +41,7 @@ describe("DesktopCoreGallery", () => {
       "下载中",
       "已暂停",
       "已完成",
-      "下载失败",
+      "需要登录",
       "已取消",
     ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);

@@ -35,7 +35,7 @@ from src.core.error_codes import (
     OutputVerificationFailed,
     classify_download_error,
 )
-from src.core.login_policy import effective_login_options, validate_login_mode
+from src.core.login_policy import effective_login_options, validate_login_mode, prefers_public_download
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.downloader import (
     DownloadCancelled,
@@ -486,12 +486,12 @@ class DownloadManager:
             self._refresh_task_proxy(task)
             return
         task.options.proxy = current.proxy
-        task.options.cookies_from_browser = "" if task.options.browser_extension or task.options.login_mode == "none" else current.cookies_from_browser
+        task.options.cookies_from_browser = "" if task.options.browser_extension or prefers_public_download(task.options, task.video_info.url) else current.cookies_from_browser
         if task.options.browser_extension:
             task.options.cookiefile = ""
         task.options.speed_limit = current.speed_limit
         task.options.concurrent_fragments = current.concurrent_fragments
-        task.options = effective_login_options(task.options)
+        task.options = effective_login_options(task.options, url=task.video_info.url)
         logger.info("重试任务已刷新恢复设置")
 
     def _normalize_task_url(self, task: DownloadTask) -> None:
@@ -766,10 +766,10 @@ class DownloadManager:
     def _set_task_login_mode(self, task: DownloadTask, login_mode: str) -> None:
         mode = validate_login_mode(login_mode)
         options = task.options
-        if mode == "inherit" and options.login_mode != "inherit":
+        if mode in ("inherit", "auto") and options.login_mode != mode:
             current = self.config.build_download_options(output_path=options.output_path)
             options = replace(options, cookies_from_browser=current.cookies_from_browser, cookiefile=current.cookiefile)
-        task.options = effective_login_options(options, mode)
+        task.options = effective_login_options(options, mode, url=task.video_info.url)
 
     def retry_with_login_mode(self, task_id: str, login_mode: str) -> None:
         mode = validate_login_mode(login_mode)
@@ -1056,7 +1056,7 @@ class DownloadManager:
                     return
                 if task.requires_embedded_session and not task.embedded_media_url:
                     raise EmbeddedSessionRequired("临时媒体地址已释放，请主动使用内置登录重试")
-                task.options = effective_login_options(task.options)
+                task.options = effective_login_options(task.options, url=task.video_info.url)
                 self._refresh_task_proxy(task)
                 self._normalize_task_url(task)
                 task.status = TaskStatus.DOWNLOADING
@@ -1100,7 +1100,7 @@ class DownloadManager:
                 task.video_info.platform == Platform.YOUTUBE
                 or PlatformDetector.detect(task.video_info.url) == Platform.YOUTUBE
             )
-            if extract_url and not is_youtube_task and not task.requires_embedded_session and not task.options.direct_media and not (is_douyin_url(task.video_info.url) and task.options.login_mode == "none"):
+            if extract_url and not is_youtube_task and not task.requires_embedded_session and not task.options.direct_media and not (is_douyin_url(task.video_info.url) and prefers_public_download(task.options, task.video_info.url)):
                 proxy = task.options.proxy or None
                 info = VideoInfoExtractor.extract(
                     extract_url,
@@ -1220,7 +1220,7 @@ class DownloadManager:
                 staging_dir=staging_dir,
                 **({"preferred_title": task.video_info.title} if task.video_info.media_title_verified else {}),
                 **({"ephemeral_source_url": task.video_info.url} if task.requires_embedded_session else {}),
-                **({"public_douyin": True, "public_quality": task.options.quality} if is_douyin_url(task.video_info.url) and task.options.login_mode == "none" else {}),
+                **({"public_douyin": True, "public_quality": task.options.quality} if is_douyin_url(task.video_info.url) and prefers_public_download(task.options, task.video_info.url) else {}),
             )
 
             with self._lock:

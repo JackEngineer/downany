@@ -28,16 +28,18 @@ beforeEach(() => {
   } as unknown as DesktopApi;
   useAppStore.setState({ tasks: [], settings: settingsFixture(), toasts: [], connection: "connected", pendingAddUrls: null });
 });
-afterEach(() => { cleanup(); setLocale("zh-CN"); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); setLocale("zh-CN"); });
 
 describe("English key download paths", () => {
-  it("updates task actions and recovery explanations in a mounted row", () => {
+  it("updates task actions and recovery explanations in a mounted row", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 100, y: 100, top: 100, left: 100, right: 296, bottom: 380, width: 196, height: 280, toJSON: () => ({}) });
     render(<MediaTaskBanner task={taskFixture({ status: "failed", error_code: "network", title: "我的任务" })} />);
     expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Network settings" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Network settings" })).toBeEnabled());
     expect(screen.getByText("我的任务")).toBeInTheDocument();
     act(() => setLocale("zh-CN"));
-    expect(screen.getByRole("button", { name: "检查网络设置" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "检查网络设置" })).toBeEnabled();
   });
 
   it("keeps the retry confirmation and cancel control in the selected language", () => {
