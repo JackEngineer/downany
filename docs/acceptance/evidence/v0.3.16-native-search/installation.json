@@ -1,0 +1,13 @@
+{
+  "version": "0.3.16",
+  "previousVersion": "0.3.15",
+  "normalShutdown": true,
+  "dataBackupVerified": true,
+  "candidateAllFilesVerified": true,
+  "atomicReplacement": true,
+  "oldAppRetainedUntilVerification": true,
+  "queueCount": 48,
+  "historyCount": 41,
+  "fileCount": 33,
+  "restoredDmgSha256": "5cbc10bd73699b2d73a4b862bb1ed0a3347265b040f54bbff2c5dd013a660ad4"
+}

@@ -1,0 +1,13 @@
+{
+  "originalDmgMissing": true,
+  "missingCause": "unknown; Trash inspection denied by macOS privacy",
+  "recreatedFromVerifiedApp": true,
+  "recompiled": false,
+  "coreHashesMatchOriginalCandidate": true,
+  "sourceCommit": "945d58cd0fa3bcbe957aac264ac5b3f64b4bc8ab",
+  "file": "Downany-0.3.16-mac-restored.dmg",
+  "bytes": 196926811,
+  "sha256": "5cbc10bd73699b2d73a4b862bb1ed0a3347265b040f54bbff2c5dd013a660ad4",
+  "readOnlyMountedCoreCheck": true,
+  "integrityPassed": true
+}
