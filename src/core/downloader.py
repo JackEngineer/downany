@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 import yt_dlp
 
+from src.core.dailymotion_public import dailymotion_id, resolve_public_dailymotion
 from src.core.download_task import VideoInfo
 from src.core.douyin_public import public_douyin_id, resolve_public_douyin, PublicDouyinUnavailable
 from src.core.error_codes import OutputVerificationFailed
@@ -340,10 +341,10 @@ def _merge_fallback_info(info: object, fallback: VideoInfo) -> object:
         merged["duration"] = int(fallback.duration)
     if fallback.platform.value != "unknown":
         merged["extractor"] = fallback.platform.value
-    source_id = extract_tweet_id(fallback.url) or public_douyin_id(fallback.url)
+    source_id = extract_tweet_id(fallback.url) or public_douyin_id(fallback.url) or dailymotion_id(fallback.url)
     if source_id:
         merged["id"] = source_id
-    if public_douyin_id(fallback.url):
+    if public_douyin_id(fallback.url) or dailymotion_id(fallback.url):
         merged["direct"] = False
         merged["webpage_url"] = fallback.url
     return merged
@@ -564,32 +565,40 @@ class Downloader:
     ) -> DownloadResult:
         """Download into staging and return only postprocessed output facts."""
         cookie_path: Optional[str] = None
+        public_dm = bool(dailymotion_id(url))
         try:
             staging = _resolved_staging_directory(staging_dir)
             preexisting_files = _existing_stage_files(staging)
             ydl_options = self._ydl_options(plan, toolchain, staging)
-            if ephemeral_source_url:
+            if ephemeral_source_url or public_dm:
                 ydl_options["logger"] = _YtDlpQuietLogger(suppress=True)
                 ydl_options["http_headers"] = dict(DEFAULT_HTTP_HEADERS)
                 for key in ("cookiefile", "cookiesfrombrowser", "username", "password", "videopassword"):
                     ydl_options.pop(key, None)
                 ydl_options.update(cachedir=False, writeinfojson=False, writethumbnail=False)
+                if public_dm:
+                    ydl_options.update(retries=0, fragment_retries=0, extractor_retries=0, socket_timeout=10)
                 ydl_options["postprocessors"] = [p for p in ydl_options.get("postprocessors", []) if p.get("key") not in ("FFmpegMetadata", "EmbedThumbnail")]
-                logger.info("开始下载内置会话解析的媒体（无登录凭证）")
+                logger.info("开始下载公开媒体（不使用登录凭证）" if public_dm else "开始下载内置会话解析的媒体（无登录凭证）")
             else:
                 logger.info("开始下载: %s", url)
             self.last_filename = ""
             self.last_info = None
             self.last_ydl_info = None
             self._observed_transfer = False
-            if not ephemeral_source_url:
+            if not ephemeral_source_url and not public_dm:
                 cookie_path = apply_cookiefile_from_headers(ydl_options, url)
 
             try:
                 public_source = (public_douyin and public_douyin_id(url) and not ephemeral_source_url
                                  and not ydl_options.get("cookiesfrombrowser") and not ydl_options.get("cookiefile")
                                  and not any(k.lower() in {"cookie", "authorization"} for k in ydl_options.get("http_headers", {})))
-                if public_source:
+                if public_dm:
+                    info, media = resolve_public_dailymotion(url, proxy=ydl_options.get("proxy"))
+                    self.last_info = info
+                    result = self._download_with_ydl(media, ydl_options, plan, staging, preexisting_files,
+                                                     source_url=url, metadata_fallback=info)
+                elif public_source:
                     info, media = resolve_public_douyin(url, proxy=ydl_options.get("proxy"), quality=public_quality)
                     self.last_info = info
                     ydl_options["http_headers"]["Referer"] = "https://www.douyin.com/"
@@ -641,8 +650,8 @@ class Downloader:
                 self.error_callback(str(exc))
             raise
         except Exception as exc:
-            if ephemeral_source_url:
-                message = "内置会话解析后的媒体下载失败，请主动重试"
+            if ephemeral_source_url or public_dm:
+                message = "Dailymotion 公开媒体下载失败，作品可能不可用，请稍后重试" if public_dm else "内置会话解析后的媒体下载失败，请主动重试"
                 logger.error("%s", message)
                 if self.error_callback:
                     self.error_callback(message)

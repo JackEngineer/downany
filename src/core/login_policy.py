@@ -20,7 +20,7 @@ def prefers_public_download(options: DownloadOptions, url: str) -> bool:
         host = urlsplit(url).hostname or ""
     except ValueError:
         return False
-    return host in {"x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com", "video.twimg.com", "www.douyin.com", "douyin.com", "v.douyin.com"}
+    return host in {"dailymotion.com", "www.dailymotion.com", "dai.ly", "x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com", "video.twimg.com", "www.douyin.com", "douyin.com", "v.douyin.com"}
 
 
 def effective_login_options(options: DownloadOptions, mode: str | None = None, *, url: str = "") -> DownloadOptions:

@@ -21,6 +21,8 @@ export interface NetSearchItem {
 }
 
 export interface NetSearchResultPayload {
+  page?: number;
+  hasMore?: boolean;
   searchId: string;
   ok: boolean;
   query?: string;

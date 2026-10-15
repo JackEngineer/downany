@@ -30,6 +30,7 @@ class Platform(Enum):
     """支持的平台枚举"""
     YOUTUBE = "youtube"
     BILIBILI = "bilibili"
+    DAILYMOTION = "dailymotion"
     DOUYIN = "douyin"
     TIKTOK = "tiktok"
     TWITTER = "twitter"

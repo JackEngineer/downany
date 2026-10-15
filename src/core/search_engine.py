@@ -11,6 +11,7 @@ from typing import Callable, List, Optional
 import yt_dlp
 
 from src.core.download_task import Platform, VideoInfo
+from src.core.dailymotion_public import search_dailymotion_page
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
 from src.core.ytdlp_opts import REMOTE_COMPONENTS
 from src.utils.logger import setup_logger
@@ -30,7 +31,7 @@ class SearchEngine:
     SEARCH_PREFIXES = {
         Platform.YOUTUBE: "ytsearch",
     }
-    SEARCHABLE_PLATFORMS = frozenset({Platform.YOUTUBE, Platform.BILIBILI})
+    SEARCHABLE_PLATFORMS = frozenset({Platform.YOUTUBE, Platform.BILIBILI, Platform.DAILYMOTION})
 
     @staticmethod
     def supports(platform: Platform) -> bool:
@@ -187,6 +188,8 @@ class SearchEngine:
 
         try:
             check_cancelled()
+            if platform == Platform.DAILYMOTION:
+                return search_dailymotion_page(query, count=max_results, proxy=proxy, cancelled=cancelled).items
             if platform == Platform.BILIBILI:
                 videos = SearchEngine._search_bilibili(
                     query, max_results, proxy, cancelled

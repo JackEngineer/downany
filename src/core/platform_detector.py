@@ -69,6 +69,7 @@ class PlatformDetector:
             r"(?:https?://)?(?:www\.)?youtu\.be/",
             r"(?:https?://)?(?:m\.)?youtube\.com/",
         ],
+        Platform.DAILYMOTION: [r"https?://(?:www\.)?dailymotion\.com/", r"https?://dai\.ly/"],
         Platform.BILIBILI: [
             r"(?:https?://)?(?:www\.)?bilibili\.com/",
             r"(?:https?://)?(?:m\.)?bilibili\.com/",

@@ -28,6 +28,9 @@ interface AppState {
   setSortOrder: (order: DownloadSortOrder) => void;
   searchQuery: string;
   searchMode: SearchMode;
+  netPage: number;
+  netRequestedPage: number;
+  netHasMore: boolean;
   netSearchId: string;
   netQuery: string;
   netPlatform: string;
@@ -53,7 +56,7 @@ interface AppState {
   setFilter: (filter: ListFilter) => void;
   setSearchQuery: (query: string) => void;
   setSearchMode: (mode: SearchMode) => void;
-  startNetSearch: (searchId: string, query?: string, platform?: string) => void;
+  startNetSearch: (searchId: string, query?: string, platform?: string, page?: number) => void;
   failNetSearch: (searchId: string, error: string) => void;
   clearNetSearch: () => void;
   requestAddFocus: () => void;
@@ -146,6 +149,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   searchQuery: "",
   searchMode: "filter",
+  netPage: 0, netRequestedPage: 1, netHasMore: false,
   netSearchId: "",
   netQuery: "", netPlatform: "youtube", netSubmittedQuery: "", netSubmittedPlatform: "youtube", netCancelled: false, netAddingUrls: [],
   netSearching: false,
@@ -166,15 +170,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setNetQuery: (netQuery) => set({ netQuery }),
   setNetPlatform: (netPlatform) => set({ netPlatform }),
   setNetAddPending: (url, pending) => set({ netAddingUrls: pending ? [...new Set([...get().netAddingUrls, url])] : get().netAddingUrls.filter(v => v !== url) }),
-  cancelNetSearch: () => set({ netSearchId: "", netSearching: false, netError: "", netCancelled: true }),
-  startNetSearch: (netSearchId, query, platform) =>
-    set({ netSearchId, netSearching: true, netResults: [], netError: "", netCancelled: false, netSubmittedQuery: query ?? get().netQuery.trim(), netSubmittedPlatform: platform ?? get().netPlatform }),
+  cancelNetSearch: () => set({ netSearchId: "", netSearching: false, netError: "", netCancelled: get().netResults.length === 0 }),
+  startNetSearch: (netSearchId, query, platform, page = 1) =>
+    set({ netSearchId, netSearching: true, netRequestedPage: page, netPage: page === 1 ? 0 : get().netPage,
+      netHasMore: page === 1 ? false : get().netHasMore, netResults: page === 1 ? [] : get().netResults,
+      netError: "", netCancelled: false, netSubmittedQuery: query ?? get().netQuery.trim(), netSubmittedPlatform: platform ?? get().netPlatform }),
   failNetSearch: (netSearchId, netError) => {
     if (netSearchId !== get().netSearchId) return;
-    set({ netSearching: false, netResults: [], netError });
+    set({ netSearching: false, netResults: get().netRequestedPage > 1 ? get().netResults : [], netError });
   },
   clearNetSearch: () =>
-    set({ netSearchId: "", netSearching: false, netResults: [], netError: "", netCancelled: false, netSubmittedQuery: "" }),
+    set({ netSearchId: "", netSearching: false, netResults: [], netError: "", netCancelled: false, netSubmittedQuery: "", netPage: 0, netRequestedPage: 1, netHasMore: false }),
   requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),
   setPendingAddUrls: (pendingAddUrls, loginMode = "auto") => set({ pendingAddUrls, pendingAddLoginMode: pendingAddUrls ? loginMode : "auto" }),
   setLogDir: (logDir) => set({ logDir }),
@@ -264,9 +270,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (event.event === "search.result") {
       const result = payload as unknown as NetSearchResultPayload;
       if (result.searchId && result.searchId === get().netSearchId) {
+        const state = get();
+        if (result.page !== undefined && result.page !== state.netRequestedPage) return;
+        const previous = state.netRequestedPage > 1 ? state.netResults : [];
+        const items = result.ok ? [...new Map([...previous, ...(result.items || [])].map(item => [item.url, item])).values()] : previous;
         set({
-          netSearching: false,
-          netResults: result.ok ? result.items || [] : [],
+          netSearching: false, netResults: items,
+          netPage: result.ok ? state.netRequestedPage : state.netPage,
+          netHasMore: result.ok ? result.hasMore === true : state.netHasMore,
           netError: result.ok ? "" : result.error || "搜索失败",
         });
       }

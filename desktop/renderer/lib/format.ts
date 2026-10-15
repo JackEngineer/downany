@@ -34,6 +34,8 @@ export function platformLabel(platform: string | undefined | null, locale: Local
   switch (key) {
     case "youtube":
       return "YouTube";
+    case "dailymotion":
+      return "Dailymotion";
     case "bilibili":
       return "Bilibili";
     case "douyin":

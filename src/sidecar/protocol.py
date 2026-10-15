@@ -5,7 +5,7 @@ from enum import Enum
 
 PROTOCOL_VERSION = 1
 APP_NAME = "Downany"
-APP_VERSION = "0.3.15"
+APP_VERSION = "0.3.16"
 
 
 class MessageType(str, Enum):

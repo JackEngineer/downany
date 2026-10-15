@@ -52,3 +52,9 @@
 .workbench .wb-web-import>.secondary { flex-shrink:0; font-size:12px; min-height:36px; }
 .workbench .wb-web-search-flow .wb-result-error>.wb-search-reset { margin-left:14px; }
 @media(max-width:800px){.workbench .wb-unified-search>select{flex-basis:164px;width:164px;font-size:11px;}.workbench .wb-web-import{align-items:flex-start;gap:18px;}.workbench .wb-unified-search>.primary{padding:8px 12px;}}
+
+.workbench .wb-search-pagination { display:flex; justify-content:center; align-items:center; gap:18px; padding:24px 0; color:var(--text-secondary); font-size:12px; }
+.workbench .wb-search-pagination>.secondary { min-height:34px; font-size:12px; }
+
+.workbench .wb-unified-search>select { flex-basis:218px; width:218px; }
+@media(max-width:800px){.workbench .wb-unified-search>select {flex-basis:196px;width:196px;}}

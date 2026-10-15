@@ -25,6 +25,7 @@ from src.core.error_codes import OutputPathInvalid
 from src.core.login_policy import effective_login_options, validate_login_mode, prefers_public_download
 from src.core.output_paths import ensure_output_directory_ready
 from src.core.platform_detector import PlatformDetector, normalize_thumbnail_url
+from src.core.dailymotion_public import search_dailymotion_page
 from src.core.search_engine import SearchEngine
 from src.core.task_actions import TaskAction, TaskActionOutcome
 from src.core.twitter_fallback import is_twitter_url, normalize_twitter_url
@@ -1004,6 +1005,12 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
     except (TypeError, ValueError):
         max_results = 10
     max_results = max(1, min(max_results, 30))
+    try:
+        page = int(payload.get("page", 1))
+    except (ValueError, TypeError) as exc:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "分页参数无效") from exc
+    if not 1 <= page <= 100 or (page > 1 and platform != Platform.DAILYMOTION):
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "该平台不支持此分页")
     proxy = ctx.config.get_proxy_for_download()
     # Renderer 在发请求前登记 searchId，避免快速结果先于 response 到达时
     # 被客户端误判为旧事件。未传时继续生成，保持旧客户端兼容。
@@ -1019,9 +1026,14 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
 
     def worker():
         try:
-            videos = SearchEngine.search(
-                platform, query, max_results=max_results, proxy=proxy, cancelled=cancelled.is_set
-            )
+            has_more = False
+            if platform == Platform.DAILYMOTION:
+                result = search_dailymotion_page(query, page=page, count=max_results, proxy=proxy, cancelled=cancelled.is_set)
+                videos, has_more = result.items, result.has_more
+            else:
+                videos = SearchEngine.search(
+                    platform, query, max_results=max_results, proxy=proxy, cancelled=cancelled.is_set
+                )
             if cancelled.is_set():
                 return
             ctx.emit_event(
@@ -1031,6 +1043,8 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
                     "ok": True,
                     "query": query,
                     "platform": platform.value,
+                    "page": page,
+                    "hasMore": has_more,
                     "items": [
                         {
                             "url": v.url,

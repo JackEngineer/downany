@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import yt_dlp
 
+from src.core.dailymotion_public import dailymotion_id, resolve_public_dailymotion
 from src.core.download_task import VideoInfo
 from src.core.douyin_url import is_douyin_url, normalize_douyin_url
 from src.core.http_headers import DEFAULT_HTTP_HEADERS
@@ -27,6 +28,12 @@ class VideoInfoExtractor:
         proxy: Optional[str] = None,
         http_headers: Optional[Dict[str, str]] = None,
     ) -> Optional[VideoInfo]:
+        if dailymotion_id(url):
+            try:
+                return resolve_public_dailymotion(url, proxy=proxy)[0]
+            except Exception:
+                logger.warning("Dailymotion 未提供可解析的公开媒体")
+                return None
         if is_douyin_url(url):
             url = normalize_douyin_url(url)
         headers = dict(DEFAULT_HTTP_HEADERS)

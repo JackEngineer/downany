@@ -2,6 +2,7 @@
 export const SEARCH_PLATFORMS = [
   { key: "youtube", label: "YouTube", kind: "in-app" },
   { key: "bilibili", label: "Bilibili", kind: "in-app" },
+  { key: "dailymotion", label: "Dailymotion", kind: "in-app" },
   { key: "x", label: "X", kind: "web" },
   { key: "douyin", label: "抖音", kind: "web" },
   { key: "kuaishou", label: "快手", kind: "web" },

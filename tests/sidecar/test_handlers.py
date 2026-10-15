@@ -864,3 +864,19 @@ def test_search_cancel_validates_identity_and_is_idempotent(tmp_path):
         dispatch(ctx, "search.cancel", {})
     assert dispatch(ctx, "search.cancel", {"searchId": "already-finished"}) == {"ok": True}
     assert dispatch(ctx, "search.cancel", {"searchId": "already-finished"}) == {"ok": True}
+
+
+def test_dailymotion_search_page_contract_and_validation(tmp_path,monkeypatch):
+    from src.core.dailymotion_public import PublicSearchPage
+    ctx,events=_ctx(tmp_path)
+    monkeypatch.setattr("src.sidecar.handlers.threading.Thread",_InlineThread)
+    seen=[]
+    def search(query,**kwargs):
+        seen.append((query,kwargs));return PublicSearchPage([VideoInfo(url="https://www.dailymotion.com/video/xabc",title="Public",platform=Platform.DAILYMOTION)],2,True)
+    monkeypatch.setattr("src.sidecar.handlers.search_dailymotion_page",search)
+    dispatch(ctx,Method.SEARCH_QUERY.value,{"platform":"dailymotion","query":"Blender","searchId":"page-two","page":2,"maxResults":3})
+    event=events[-1][1]
+    assert event['page']==2 and event['hasMore'] is True and event['items'][0]['platform']=='dailymotion'
+    assert seen[0][1]['page']==2 and seen[0][1]['count']==3 and not ctx._search_jobs
+    for platform,page in [('youtube',2),('dailymotion',0),('dailymotion',101),('dailymotion','bad')]:
+        with pytest.raises(HandlerError):dispatch(ctx,Method.SEARCH_QUERY.value,{'platform':platform,'query':'q','page':page})
