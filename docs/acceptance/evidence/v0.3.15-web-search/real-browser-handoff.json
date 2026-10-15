@@ -1,0 +1,10 @@
+{
+  "platform": "x",
+  "query": "Blender",
+  "url": "https://x.com/search?q=Blender&src=typed_query&f=video",
+  "browserContentsInspected": false,
+  "platformResultsVerified": false,
+  "appVersion": "0.3.15",
+  "realShellOpenExternalResolved": true,
+  "passed": true
+}

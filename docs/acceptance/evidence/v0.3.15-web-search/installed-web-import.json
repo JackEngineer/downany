@@ -1,0 +1,54 @@
+{
+  "checks": [
+    "grouped-five-platforms-empty-web-search-no-launch",
+    "enter-opens-three-official-encoded-urls-no-fake-results",
+    "double-click-opens-one-browser-request",
+    "browser-open-failure-explicit-retry",
+    "explicit-import-no-clipboard-read-close-cancels-parser-preserves-search-focus-and-no-late-task",
+    "manual-link-import-real-parse-explicit-create-once-completed-full-decode-return-context",
+    "three-web-platforms-760-wide-short-light-dark-import-no-overflow",
+    "navigation-retains-keyword-platform-keyboard-and-no-automatic-clipboard"
+  ],
+  "screenshots": [
+    "x-wide.png",
+    "douyin-wide.png",
+    "kuaishou-wide.png",
+    "web-open-error.png",
+    "import-ready-wide.png",
+    "x-760x800-light.png",
+    "x-760x800-dark.png",
+    "douyin-760x800-light.png",
+    "douyin-760x800-dark.png",
+    "kuaishou-760x800-light.png",
+    "kuaishou-760x800-dark.png",
+    "import-760x600-dark.png",
+    "x-760x600-light.png",
+    "x-760x600-dark.png",
+    "douyin-760x600-light.png",
+    "douyin-760x600-dark.png",
+    "kuaishou-760x600-light.png",
+    "kuaishou-760x600-dark.png"
+  ],
+  "opened": [
+    {
+      "platform": "x",
+      "url": "https://x.com/search?q=%E6%B5%B7%E5%B2%B8%20%2F%20%26%20%3F%20%23%E6%91%84%E5%BD%B1%20%2B%20%F0%9F%98%80&src=typed_query&f=video"
+    },
+    {
+      "platform": "douyin",
+      "url": "https://www.douyin.com/search/%E6%B5%B7%E5%B2%B8%20%2F%20%26%20%3F%20%23%E6%91%84%E5%BD%B1%20%2B%20%F0%9F%98%80?type=video"
+    },
+    {
+      "platform": "kuaishou",
+      "url": "https://www.kuaishou.com/search/video?searchKey=%E6%B5%B7%E5%B2%B8%20%2F%20%26%20%3F%20%23%E6%91%84%E5%BD%B1%20%2B%20%F0%9F%98%80"
+    }
+  ],
+  "download": {
+    "status": "completed",
+    "taskId": "ce3501fe-2e08-4669-9820-4ff2a08441eb",
+    "bytes": 5126673,
+    "fullDecode": true,
+    "source": "isolated-local-http-not-platform-download"
+  },
+  "passed": true
+}
