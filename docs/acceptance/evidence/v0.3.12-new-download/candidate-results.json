@@ -1,0 +1,23 @@
+{
+  "checks": [
+    "invalid-input-no-task",
+    "escape-cancels-parse-keeps-draft-ignores-late-result",
+    "explicit-parse-cancel-no-late-task",
+    "mixed-parse-dedup-common-options-760x600-fixed-header-footer",
+    "mixed-success-only-started-once-output-decodes",
+    "close-reopen-keeps-results",
+    "retry-only-failed-link-after-real-server-recovery",
+    "restart-tasks-persist-original-sha-unchanged"
+  ],
+  "external": {
+    "passed": true,
+    "status": "completed",
+    "errorCode": "",
+    "bytes": 41589942
+  },
+  "controlledOutput": {
+    "name": "coast-1792055760381_NA [url-c05368dc].mp4",
+    "bytes": 5126701
+  },
+  "passed": true
+}

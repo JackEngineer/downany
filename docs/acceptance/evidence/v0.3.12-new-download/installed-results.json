@@ -1,0 +1,25 @@
+{
+  "checks": [
+    "tab-focus-contained-and-enter-parse",
+    "invalid-input-no-task",
+    "escape-cancels-parse-keeps-draft-ignores-late-result",
+    "explicit-parse-cancel-no-late-task",
+    "actual-web-recognition-window-no-automatic-enqueue",
+    "mixed-parse-dedup-common-options-760x600-fixed-header-footer",
+    "mixed-success-only-started-once-output-decodes",
+    "close-reopen-keeps-results",
+    "retry-only-failed-link-after-real-server-recovery",
+    "restart-tasks-persist-original-sha-unchanged"
+  ],
+  "external": {
+    "passed": true,
+    "status": "completed",
+    "errorCode": "",
+    "bytes": 41589942
+  },
+  "controlledOutput": {
+    "name": "coast-1792055904937_NA [url-43d9db07].mp4",
+    "bytes": 5126701
+  },
+  "passed": true
+}

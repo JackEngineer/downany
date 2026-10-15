@@ -1,0 +1,15 @@
+{
+  "checks": [
+    {
+      "profile": "ui-final",
+      "createdTasks": 3,
+      "taskOptionsPersistedAfterRestart": true
+    },
+    {
+      "profile": "ui-installed",
+      "createdTasks": 3,
+      "taskOptionsPersistedAfterRestart": true
+    }
+  ],
+  "passed": true
+}
