@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "service": "downany-bridge",
+  "sidecarReady": true,
+  "appVersion": "0.3.13",
+  "sidecarVersion": "0.3.13",
+  "connection": "connected",
+  "bridge": "listening",
+  "versionMismatch": false,
+  "capabilities": [
+    "explicit-routes",
+    "enqueue-receipts",
+    "task-retry",
+    "task-focus",
+    "task-reveal"
+  ]
+}

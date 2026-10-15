@@ -1,0 +1,39 @@
+{
+  "checks": [
+    "one-task-list-no-bottom-button-wall",
+    "single-queue-list-context-toolbar-clear-confirm-cancel-safe",
+    "scoped-management-search-opens-detail-with-consistent-return",
+    "collections-collapsed-summary-expand-five-real-seeded-tasks",
+    "history-context-delete-confirm-cancel-preserves-records",
+    "independent-search-navigation-and-task-filter-sort",
+    "settings-opens-from-low-frequency-application-menu",
+    "760-wide-short-light-dark-four-views-no-horizontal-overflow",
+    "keyboard-navigation-dialog-and-safe-data"
+  ],
+  "screenshots": [
+    "tasks-wide.png",
+    "queue-wide.png",
+    "queue-selection.png",
+    "collections-wide.png",
+    "history-wide.png",
+    "search-wide.png",
+    "tasks-760x800-light.png",
+    "tasks-760x800-dark.png",
+    "queue-760x800-light.png",
+    "queue-760x800-dark.png",
+    "collections-760x800-light.png",
+    "collections-760x800-dark.png",
+    "history-760x800-light.png",
+    "history-760x800-dark.png",
+    "tasks-760x600-light.png",
+    "tasks-760x600-dark.png",
+    "queue-760x600-light.png",
+    "queue-760x600-dark.png",
+    "collections-760x600-light.png",
+    "collections-760x600-dark.png",
+    "history-760x600-light.png",
+    "history-760x600-dark.png",
+    "new-download-760x600.png"
+  ],
+  "passed": true
+}

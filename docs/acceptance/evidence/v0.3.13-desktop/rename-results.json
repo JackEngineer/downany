@@ -1,0 +1,7 @@
+{
+  "checks": [
+    "real-inline-rename-save-and-restore-in-isolated-queue"
+  ],
+  "screenshots": [],
+  "passed": true
+}

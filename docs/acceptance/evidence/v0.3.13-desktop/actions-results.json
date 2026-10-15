@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "actual-selected-pause-only-own-download",
+    "actual-queue-reorder-preserves-priority-contract",
+    "actual-selected-resume-and-two-outputs-full-decode",
+    "confirmed-cleanup-only-isolated-records-keeps-paused-history-files",
+    "confirmed-isolated-history-delete-keeps-output-files"
+  ],
+  "passed": true
+}

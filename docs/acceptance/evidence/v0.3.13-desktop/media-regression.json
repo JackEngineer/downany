@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "native-trim-2-to-8-and-invalid-range",
+    "native-current-frame-and-audio",
+    "all-output-identities-duration-streams-and-full-decode",
+    "actual-cancel-cleans-staging",
+    "renderer-path-injection-rejected",
+    "keyboard-and-760-light-dark",
+    "restart-output-index-no-autoplay-original-sha-unchanged"
+  ],
+  "outputs": [
+    "coast_clip_1792059769377_f23197a6.mp4",
+    "coast_frame_1792059770561_810fe6db.jpg",
+    "coast_audio_1792059770983_b158e054.m4a"
+  ],
+  "originalSha256": "ab179bd3e15dcf24a9a0570b290706ccae20503051ff2276d473c76aa1570aba",
+  "passed": true
+}

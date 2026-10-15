@@ -1,24 +1,28 @@
-# New download dialog 0.3.12 design QA
+# Desktop navigation 0.3.13 visual QA
 
-Source truth: approved standalone prototype and NEW-DOWNLOAD-DESIGN.md. Captured local source new-download-r23/prototype-new-wide.png,1120×800 CSS/pixels,DPR1. Final candidate new-download-r23/ui-final/new-input-wide.png,1120×800CSS,2240×1600pixels,DPR2. Downsampled implementation to1120×800 and put both in one input new-download-r23/comparison-input.png. Focused header/input comparison new-download-r23/comparison-header-input.png. Both comparisons opened/reviewed; the same empty, light new-download state is compared. Underlying task content differs deliberately (real isolated queue vs prototype demo), so this QA judges dialog and overlay rather than claiming the background fixtures match.
+Scope: the user's requested modern desktop information architecture, with the accepted task/detail preview and new-download dialog retained. This is a deliberate redesign, not a pixel clone of the old duplicate-list screen.
 
-Findings and repair history:
-- P2: old workbench button specificity made close/paste/recovery buttons lose compact styles. Scoped new stylesheet beneath.workbench, recaptured final candidate and installed screenshots. Close and paste now match the source compact alignment and prominence.
-- No remaining actionable P0/P1/P2 in the verified Chinese download flow. Legacy source demo links, example results and demo-only labels are intentionally removed; account scope and real errors replace demo controls.
+Visual evidence: first captured and opened the real daily0.3.12 application, desktop-r24/before-current.png; after installation opened the real daily0.3.13 capture desktop-r24/after-current.png. Both are local-only personal screenshots. For the normalized management comparison, ran the preserved0.3.12 rollback with the same48 safe seeded tasks in an independent profile, captured desktop-r24/before-queue-1120.png. Final installed0.3.13 screenshot desktop-r24/ui/queue-wide.png uses the same data and1120×800CSS viewport. Both captures2240×1600px,DPR2, normalized to1120×800 and composed together in desktop-r24/comparison-queue.png; opened and reviewed together. Different per-profile display sort is intentional and not measured as content drift. No sensitive screenshot uploaded or committed.
 
-Required surfaces:
-- Typography: existing system/PingFang stack,21px title,12px labels,13px input and11px supporting copy maintain source hierarchy. Real media titles truncate within rows and path text can wrap. New English labels remain a documented localization limitation.
-- Spacing/layout:600px centered dialog, original15px corners, header/body/footer padding and restrained overlay maintained.760×600 shows fixed accessible header/footer with independently scrolling body, no horizontal overflow. Explicit account settings replace the source sample row, preserving a similar initial height.
-- Tokens: source warm-white/orange and green-gray dark palette, semantic warning/status colors and blue focus ring retained. Shallow control styles no longer inherit larger workbench dimensions.
-- Images/assets: source empty state has no required media imagery. Results display actual parsed thumbnails only when available; missing metadata uses the existing Icon library, no fake sample media. Source and app use the same supplied workbench structure, no generated placeholders.
-- Copy/content: real parse progress, partial failures, task addition and permission handling; no simulation success, no automatic account switch. Format list follows actual backend capabilities. Webpage recognition explicitly uses the existing real separate native window. No promise of M4A/WebM or standalone cover saving without backend support.
+Findings/iteration:
+- P1 duplicate task lists and broad picture cards: removed the sidebar entirely for management/history/search, replaced queue cards with one compact list. Source/current comparison confirms each task appears once.
+- P1 footer tool wall and competing top actions: moved task search/filter/sort above the list, grouped five stable global destinations in the window toolbar, one explicit New Download primary action, settings under labelled Downany application menu with Cmd+, retained.
+- P2 old grid still restricted full-width management to a narrow column: initial screenshot rejected. Changed grid by scope, rebuilt, recaptured; final header/search/rows use available width at1120 and760.
+- P2 closed dialog aria-modal blocked Cmd+F: narrowed modal guard, added test and reran native shortcut check.
+- P2 Electron prompt would not support management rename: replaced with inline input; native save/restore passed.
+- P3 disabled reorder clutter and stacked history actions: hid inactive reorder controls, moved collection actions into a compact menu and aligned history buttons; final screenshots inspected.
 
-Interaction evidence: source first native pass; final candidate8groups plus real YouTube download; installed10groups plus real YouTube download. Enter parses, Tab remains within dialog, Escape/explicit cancel prevent late creation, close/reopen keeps draft/results, duplicate clicks add once, failed links retry without readding successes, directory/format/naming persist on created tasks after restart. Existing media preview/export7group candidate regression passed. IME guard is synthetic-event tested, not actual human composition. No new full-app console-zero claim.
+Required fidelity surfaces:
+- Fonts/typography: same system/PingFang UI family,12px task row text,10–11px secondary metadata,24–26px management headings. Long titles truncate in rows; detail headings wrap. Historical raw status strings replaced with readable Chinese. Full English localization remains a documented follow-up.
+- Spacing/layout:64px toolbar (56px in short windows), stable global navigation,280px task sidebar (240px at760),76px queue rows, consistent management padding.760×800 and760×600 verified in all four task/queue/collection/history states, light/dark. No horizontal overflow; persistent global actions remain visible.
+- Colors/tokens: retained warm white/orange and dark green-gray palette from the approved workbench, consistent semantic states and selected/hover/focus cues; destructive record cleanup placed under maintenance and explicit confirmation.
+- Images/assets: existing media imagery is retained for actual task preview; queue management uses the existing Icon library instead of decorative banner images. No fake thumbnails or generated visual replacements. Source/after safe queues share the same media fixture.
+- Copy/content: named global destinations, scoped searches and selection counts, real backend status, explicit cleanup consequences and file preservation; no implementation/demo success text. Global cleanup says that it includes ended rows outside current filters. Labels/tooltips remain available when narrow layout hides decorative icons.
 
-Final evidence: ui-final/new-input-wide.png; ui-installed/new-ready-760-short-light.png and dark.png; candidate-results.json; installed-results.json; options-persistence.json; media-regression.json. Actual installed0.3.12 matches candidate core hashes and preserves daily data.
+Focused evidence: app toolbar, queue selection/maintenance, confirmation and history action regions examined in full-resolution native screenshots; task preview/edit and new-download dialog checked independently. User's original actual screenshot and installed actual screenshot confirm the shipped application changed, rather than merely a mock.
 
-Follow-up P3: finer icon silhouette matching; full English localization. Downloaded-task persistence is verified; the draft intentionally remains current-session memory only.
+Validation: candidate and installed each9native groups/23screenshots; real controlled queue pause/resume/reorder/confirmed record cleanup/history delete5groups and SHA checks; inline rename save/restore1group; new-download9groups; existing preview/crop/JPG/audio7groups; Desktop87files700tests; protocol4tests. No full accessibility or external-site quality claim.
 
-Implementation checklist: source read and captured; real capabilities wired; specificity fixed and recaptured; same viewport full/focused comparison reviewed; short/narrow themes and key flows tested; no destructive data or sensitive-setting change.
+Checklist: actual screen inspected before edits; single-list structure implemented; low-frequency settings separated; contextual actions and clear confirmation implemented; narrow/short themes and keyboard tested; rejected intermediate layouts recaptured; actual installed0.3.13/daily health/data integrity verified; old0.3.12 rollback retained.
 
 final result: passed
