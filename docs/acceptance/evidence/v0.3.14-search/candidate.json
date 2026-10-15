@@ -1,0 +1,17 @@
+{
+  "version": "0.3.14",
+  "productCommits": [
+    "5e0d3ba",
+    "150b27e"
+  ],
+  "dmgBytes": 181466691,
+  "dmgSha256": "92a1db9f9f547f473c5ac9110c838c1a3d7323ffed2e04df35de969bcc15ef38",
+  "coreHashes": {
+    "Contents/MacOS/Downany": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+    "Contents/Resources/app.asar": "48b2e3e9733d80dc99bfb9bff71aea859ae61aa462f79c3bd7910eefd12b4910",
+    "Contents/Resources/sidecar/DownanySidecar/DownanySidecar": "b1809c4ca9ec0989a478baedae9661479df097b944c745465b8dcbeafb9756ab"
+  },
+  "installed": false,
+  "installedVersion": "0.3.13",
+  "installationBlocker": "Automatic approval rejected application replacement because earlier trusted user instruction prohibited installation; explicit user approval requested."
+}

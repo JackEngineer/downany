@@ -1,0 +1,22 @@
+{
+  "platforms": [
+    {
+      "platform": "youtube",
+      "query": "Big Buck Bunny",
+      "count": 12,
+      "message": "“Big Buck Bunny” · 12 个结果\nYouTube\n清除结果\n10:35\nAnimated Short Film \"Big Buck Bunny\", 4K, Full Length\nAnimalsReview · YouTube\n打开原网页\n加入下载\n9:57\nBig Buck Bunny\nBlender · YouTube\n打开原网页\n加入下载\n10:35\nBig Buck Bunny (1080p, 60 fps)\nCnews.cz · YouTube\n打开原网页\n加入下载\n2:07\nBig Buck Bunny: The Golden Berry Chase (Ep. 1) - Funny 3D Short Film\nBig Buck Bunny V2 · YouTube\n打开原网页\n加入下载\n4:08\nBig Buck Bunny\nWallace McCanless · YouTube\n打开原网页\n加入下载\n0:34\nBig Buck Bunny Trailer\nFlixScene · YouTube\n打开原网页\n加入下载\n2:22\nBig Buck Bunny",
+      "thumbnailCount": 12,
+      "loadedThumbnails": 2
+    },
+    {
+      "platform": "bilibili",
+      "query": "Blender",
+      "count": 0,
+      "message": "平台暂时限制了搜索请求，请稍后重试。\n\n重试搜索",
+      "thumbnailCount": 0,
+      "loadedThumbnails": 0
+    }
+  ],
+  "source": "real-public-search-no-interception",
+  "completed": true
+}

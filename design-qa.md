@@ -1,28 +1,15 @@
-# Desktop navigation 0.3.13 visual QA
+# 搜索页设计与交互核验（0.3.14 候选）
 
-Scope: the user's requested modern desktop information architecture, with the accepted task/detail preview and new-download dialog retained. This is a deliberate redesign, not a pixel clone of the old duplicate-list screen.
+基线：实际0.3.13搜索窗口截图，本地search-r25/before-current.png。候选源码5e0d3ba、150b27e；身份见docs/acceptance/evidence/v0.3.14-search/candidate.json。
 
-Visual evidence: first captured and opened the real daily0.3.12 application, desktop-r24/before-current.png; after installation opened the real daily0.3.13 capture desktop-r24/after-current.png. Both are local-only personal screenshots. For the normalized management comparison, ran the preserved0.3.12 rollback with the same48 safe seeded tasks in an independent profile, captured desktop-r24/before-queue-1120.png. Final installed0.3.13 screenshot desktop-r24/ui/queue-wide.png uses the same data and1120×800CSS viewport. Both captures2240×1600px,DPR2, normalized to1120×800 and composed together in desktop-r24/comparison-queue.png; opened and reviewed together. Different per-profile display sort is intentional and not measured as content drift. No sensitive screenshot uploaded or committed.
+发现：旧搜索页重复外/内标题、双返回入口、嵌套框和重复空态，主操作不集中。已移除这些层级，采用一个标题、一体搜索入口、直接结果行。平台限制和失败作为可重试状态，结果显式加入真实下载。未引入虚假播放界面或额外平台。
 
-Findings/iteration:
-- P1 duplicate task lists and broad picture cards: removed the sidebar entirely for management/history/search, replaced queue cards with one compact list. Source/current comparison confirms each task appears once.
-- P1 footer tool wall and competing top actions: moved task search/filter/sort above the list, grouped five stable global destinations in the window toolbar, one explicit New Download primary action, settings under labelled Downany application menu with Cmd+, retained.
-- P2 old grid still restricted full-width management to a narrow column: initial screenshot rejected. Changed grid by scope, rebuilt, recaptured; final header/search/rows use available width at1120 and760.
-- P2 closed dialog aria-modal blocked Cmd+F: narrowed modal guard, added test and reran native shortcut check.
-- P2 Electron prompt would not support management rename: replaced with inline input; native save/restore passed.
-- P3 disabled reorder clutter and stacked history actions: hid inactive reorder controls, moved collection actions into a compact menu and aligned history buttons; final screenshots inspected.
+已查看最终候选截图：ui-candidate/search-empty-wide.png、search-results-wide.png、search-error.png、search-results-760x800-light.png、search-results-760x800-dark.png、search-results-760x600-light.png、search-results-760x600-dark.png；另查看最终真实外站external-youtube-final.png。文件仅本地search-r25。
 
-Required fidelity surfaces:
-- Fonts/typography: same system/PingFang UI family,12px task row text,10–11px secondary metadata,24–26px management headings. Long titles truncate in rows; detail headings wrap. Historical raw status strings replaced with readable Chinese. Full English localization remains a documented follow-up.
-- Spacing/layout:64px toolbar (56px in short windows), stable global navigation,280px task sidebar (240px at760),76px queue rows, consistent management padding.760×800 and760×600 verified in all four task/queue/collection/history states, light/dark. No horizontal overflow; persistent global actions remain visible.
-- Colors/tokens: retained warm white/orange and dark green-gray palette from the approved workbench, consistent semantic states and selected/hover/focus cues; destructive record cleanup placed under maintenance and explicit confirmation.
-- Images/assets: existing media imagery is retained for actual task preview; queue management uses the existing Icon library instead of decorative banner images. No fake thumbnails or generated visual replacements. Source/after safe queues share the same media fixture.
-- Copy/content: named global destinations, scoped searches and selection counts, real backend status, explicit cleanup consequences and file preservation; no implementation/demo success text. Global cleanup says that it includes ended rows outside current filters. Labels/tooltips remain available when narrow layout hides decorative icons.
+修正：搜索输入双焦点框改为外层统一焦点提示；外站图片失败保留链接占位图标，避免空白卡片。真实外站截图不作为媒体生成素材或受控占位，内容与作者来自实际结果。
 
-Focused evidence: app toolbar, queue selection/maintenance, confirmation and history action regions examined in full-resolution native screenshots; task preview/edit and new-download dialog checked independently. User's original actual screenshot and installed actual screenshot confirm the shipped application changed, rather than merely a mock.
+最终候选搜索8组通过，原生无横向溢出、唯一标题/入口、键盘搜索/取消、会话返回、迟到结果隔离、打开精确原URL。隔离HTTP结果显式入队后完成一次真实下载并完整解码。新建下载9组、其余页面9组23截图回归通过。真实YouTube查询12结果、12缩略图中2张加载；其余显示回退。Bilibili最终遭平台限制，正确显示重试；此前开发构建可返回12条。
 
-Validation: candidate and installed each9native groups/23screenshots; real controlled queue pause/resume/reorder/confirmed record cleanup/history delete5groups and SHA checks; inline rename save/restore1group; new-download9groups; existing preview/crop/JPG/audio7groups; Desktop87files700tests; protocol4tests. No full accessibility or external-site quality claim.
+安装门槛未关闭：自动审批拒绝替换/Applications/Downany.app，已请求明确批准，未绕过。0.3.14仅本地候选；当前安装仍0.3.13。48任务、41历史、33文件与配置保持已核对。
 
-Checklist: actual screen inspected before edits; single-list structure implemented; low-frequency settings separated; contextual actions and clear confirmation implemented; narrow/short themes and keyboard tested; rejected intermediate layouts recaptured; actual installed0.3.13/daily health/data integrity verified; old0.3.12 rollback retained.
-
-final result: passed
+范围：本轮按中文验收，英文完整翻译与完整屏幕阅读器合规未覆盖；未做Windows、签名公证、真实外站下载矩阵、账号/代理/权限设置或公共发布。
