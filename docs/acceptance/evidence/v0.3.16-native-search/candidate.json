@@ -1,0 +1,61 @@
+{
+  "version": "0.3.16",
+  "sourceCommit": "945d58cd0fa3bcbe957aac264ac5b3f64b4bc8ab",
+  "baseline": "8d7b882",
+  "platform": "macOS arm64",
+  "installed": false,
+  "published": false,
+  "signed": false,
+  "notarized": false,
+  "package": {
+    "file": "Downany-0.3.16-mac.dmg",
+    "bytes": 181480975,
+    "sha256": "6a8a64294ff56b04edeff0819e00ccc554014b841bdf66783e7ac973825005c9"
+  },
+  "coreHashes": {
+    "Contents/MacOS/Downany": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+    "Contents/Resources/app.asar": "0b551f784a23c39fe954db956055334e63a6350b6ae3b4c29f8c7c7002038c55",
+    "Contents/Resources/sidecar/DownanySidecar/DownanySidecar": "0b4d51b9059dd5672b65d1bf954e081a49a4dc85ba812ecce58077a2da2a5be9"
+  },
+  "sourceHashes": {
+    "desktop/package-lock.json": "c81af3d7d877039f51cb41c2762bdb10aef008588adba0550d93f1c4e79fd055",
+    "desktop/package.json": "dcb16517f0a9a649c4b3dee6639d6708e3eded4f46104fcea57b21f5e479d128",
+    "desktop/renderer/components/NetSearchPanel.test.tsx": "523d13333e72db4ccb9832b8ce76775abbc0cf784bd58523e20996f0a2cdbd6d",
+    "desktop/renderer/components/NetSearchPanel.tsx": "5ce2683d4e1275c89a3669a80f6b57841c08564bfc1f3fa3fca7251598514a45",
+    "desktop/renderer/lib/format.ts": "41634bb43387d2a8cce871d91538c184f144fd0832606d3c8635804ecb3962b9",
+    "desktop/renderer/lib/searchPlatforms.test.ts": "163eaf78f72a28c260528e3381aed0b93711604b841b1faa3ce09466ceda521c",
+    "desktop/renderer/lib/searchPlatforms.ts": "0fbb10df69d942c3cae759edcdce80dbf3e9735bda206d104342fa02dd2876da",
+    "desktop/renderer/lib/types.ts": "4007d2b654fc5827d4ec8162fbe712a4a58357594c906eb00d0379efe403457e",
+    "desktop/renderer/store/appStore.ts": "bab6409a0c6d9c2205076ca9e9fe69e32eccdeaa97aec49eaf829eba4ef7eb44",
+    "desktop/renderer/styles/search-workspace.css": "013997626c96732a94f41eb2147ed5e5533991c7e9f228f37881077bec14eb13",
+    "src/core/dailymotion_public.py": "54eb1ae6f3a4dcb729e8b911bb0e686a10e4053533a0fa0cae775daf2fa8ca59",
+    "src/core/download_task.py": "6d2d4d37f9a57edfb8ba11785ba78adcba04f2defbfc19693ed694d59334ab67",
+    "src/core/downloader.py": "9ceea46b0a93d8a1f04cf3283b0f4bed71ca96a054a17fbf867199a92ede3297",
+    "src/core/login_policy.py": "e673b7d2b02e4ccbcb99abbef36c5a0b0450776f77c60788033f42b21cb360d0",
+    "src/core/platform_detector.py": "77c52164080484b8acb4880737263438ee4a8e2c1a1a7abdeacd692fdd02773f",
+    "src/core/search_engine.py": "b83dd0434198cb601df07f9b8703c3d0d4d12fec37910ac3786331bcad3cbe3d",
+    "src/core/video_info_extractor.py": "d9404569e84b741f547bbb924cbca89602fc522a73498c4baaa9f7584a5b2b6c",
+    "src/sidecar/handlers.py": "981b19301488f2c480feafed6a63c950235daab3620412b60da440a0252b5d1b",
+    "src/sidecar/protocol.py": "1b3ba20e337dd8eb2af3ad2a89da9c0b0b4b51047a006a626c4775c087d5ebc7",
+    "tests/core/test_dailymotion_public.py": "a1ed67d91ea6a0f3dd364964475d6afdde679ff70cf668a54031a8d4148a69d3",
+    "tests/sidecar/test_handlers.py": "429e30b199b44d9ebc94d2e65c72101ca480635966118ef3dd8abb9f819f2aaf",
+    "tests/sidecar/test_protocol.py": "a48422a0b096da09c34459c6c8cfbb3f6effe87da6d97c476f6f2eae66dabf09"
+  },
+  "sidecarVersion": "0.3.16",
+  "tests": {
+    "pythonPassed": 1177,
+    "pythonSkippedWindowsOnly": 3,
+    "desktopPassed": 718,
+    "targetedBackendPassed": 98,
+    "targetedFrontendPassed": 56,
+    "productionBuild": true,
+    "candidateNativeSearchChecks": 5,
+    "candidateExistingSearchChecks": 8,
+    "sidecarSmoke": true,
+    "mediaToolsSmoke": true,
+    "dmgIntegrity": true
+  },
+  "externalSearchPassed": true,
+  "externalDownloadPassed": false,
+  "externalDownloadBoundary": "Development build selected x1s5yos once: access_denied; no bypass or retry. Final candidate did not repeat refused download."
+}

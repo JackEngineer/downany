@@ -1,0 +1,12 @@
+{
+  "queueCount": 48,
+  "historyCount": 41,
+  "existingFiles": 33,
+  "allQueueFieldsUnchanged": true,
+  "allHistoryFieldsUnchanged": true,
+  "configBytesUnchanged": true,
+  "existingFileHashesUnchanged": true,
+  "installedCoreHashesUnchanged": true,
+  "installedVersion": "0.3.15",
+  "passed": true
+}

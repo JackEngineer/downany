@@ -1,0 +1,116 @@
+{
+  "checks": [
+    "real-native-query-metadata-two-pages-deduplicated-no-webview",
+    "real-paged-results-retained-across-navigation",
+    "native-result-list-and-platform-label-760-light-dark-no-overflow",
+    "controlled-load-more-error-retry-cancel-late-page-and-dedup",
+    "controlled-empty-first-page-failure-safe-retry"
+  ],
+  "screenshots": [
+    "dailymotion-real-wide.png",
+    "native-760x800-light.png",
+    "native-760x800-dark.png",
+    "native-760x600-light.png",
+    "native-760x600-dark.png",
+    "real-open-movie-results.png",
+    "load-more-error-preserves-results.png",
+    "native-error-retry.png"
+  ],
+  "realSearches": [
+    {
+      "query": "Blender",
+      "page": 1,
+      "count": 12,
+      "items": [
+        {
+          "url": "https://www.dailymotion.com/video/xfllfd",
+          "title": "Blender",
+          "uploader": "Freetronic",
+          "duration": 18
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x2700ph",
+          "title": "Blender",
+          "uploader": "Action24_",
+          "duration": 56
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x6gkr07",
+          "title": "Blender: Introducción a Blender 3",
+          "uploader": "Alberto Chavez",
+          "duration": 560
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x92hwsk",
+          "title": "blender",
+          "uploader": "Saqib Hassan",
+          "duration": 24
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x6gnvwh",
+          "title": "Blender: Introducción a Blender. Curvas",
+          "uploader": "Alberto Chavez",
+          "duration": 571
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x32yya",
+          "title": "blender",
+          "uploader": "matt",
+          "duration": 44
+        },
+        {
+          "url": "https://www.dailymotion.com/video/xfeiog",
+          "title": "Blender",
+          "uploader": "bobinne13",
+          "duration": 10
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x6tzqly",
+          "title": "Blender",
+          "uploader": "Radio verdulandia",
+          "duration": 34
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x2axg4",
+          "title": "Blender",
+          "uploader": "Le Labo, Espace Culture Multimédia de Beauvais",
+          "duration": 53
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x4cee8",
+          "title": "Array blender",
+          "uploader": "lapinjumper",
+          "duration": 10
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x5kfhic",
+          "title": "Blender sesi",
+          "uploader": "yakup yüzbaşı",
+          "duration": 39
+        },
+        {
+          "url": "https://www.dailymotion.com/video/x7npt05",
+          "title": "Blender TBE",
+          "uploader": "D. Russell",
+          "duration": 239
+        }
+      ]
+    },
+    {
+      "query": "Blender",
+      "page": 2,
+      "count": 12,
+      "combinedUnique": 24
+    },
+    {
+      "query": "Big Buck Bunny trailer",
+      "page": 1,
+      "count": 12
+    }
+  ],
+  "externalDownload": {
+    "status": "not-started"
+  },
+  "searchPassed": true,
+  "passed": true
+}

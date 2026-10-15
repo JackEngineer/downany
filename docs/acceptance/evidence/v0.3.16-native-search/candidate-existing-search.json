@@ -1,0 +1,28 @@
+{
+  "checks": [
+    "single-heading-form-no-duplicate-return",
+    "controlled-metadata-result-opens-exact-original-url-no-fake-player",
+    "session-draft-results-preserved-navigation-and-command-f",
+    "superseded-search-cancelled-late-result-ignored",
+    "explicit-cancel-rejects-late-result",
+    "empty-safe-error-retry",
+    "narrow-short-light-dark-no-overflow",
+    "explicit-add-real-create-download-completed-once-isolated-local-http"
+  ],
+  "screenshots": [
+    "search-empty-wide.png",
+    "search-results-wide.png",
+    "search-error.png",
+    "search-results-760x800-light.png",
+    "search-results-760x800-dark.png",
+    "search-results-760x600-light.png",
+    "search-results-760x600-dark.png"
+  ],
+  "external": [],
+  "fullDecode": true,
+  "download": {
+    "status": "completed",
+    "taskId": "78eceb29-d7d2-4e19-8b98-d06c37943273"
+  },
+  "passed": true
+}

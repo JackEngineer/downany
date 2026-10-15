@@ -1,0 +1,35 @@
+[
+  {
+    "platform": "x",
+    "target": "https://x.com/search?q=Blender&src=typed_query&f=video",
+    "data": {
+      "url": "https://x.com/i/jf/onboarding/web?redirect_after_login=%2Fsearch%3Fsrc%3Dtyped_query%26f%3Dvideo%26q%3DBlender&mode=login",
+      "title": "X - 包罗万象的应用 / X",
+      "text": "",
+      "videoCount": 0,
+      "links": []
+    }
+  },
+  {
+    "platform": "douyin",
+    "target": "https://www.douyin.com/search/Blender?type=video",
+    "data": {
+      "url": "https://www.douyin.com/search/Blender?type=video",
+      "title": "验证码中间页",
+      "text": "    ",
+      "videoCount": 0,
+      "links": []
+    }
+  },
+  {
+    "platform": "kuaishou",
+    "target": "https://www.kuaishou.com/search/video?searchKey=Blender",
+    "data": {
+      "url": "https://www.kuaishou.com/search/video?searchKey=Blender",
+      "title": "Blender - 快手",
+      "text": "搜索\n上传作品\n添加桌面\n快手Mac版\n快币充值\n返回旧版\n推荐\n发现\n关注\n直播\n赛事\nAcfun\n可灵AI\n登录即可享受\n更懂你的优质内容\n点赞、评论和收藏\n更好交流互动\n立即\n登录\nwww.kuaishou.com 2026 @ All rights Reserved 京ICP备15023266号-136\n京公网安备 11010802038443号\n网上有害信息举报专区\n中央网信办（国家网信办）违法和不良信息举报中心\n扫黄打非举报专区\n快手举报专线： 4000066666\n未成年人关怀热线： 4001502277\n举报邮箱： support@kuaishou.com\n营业执照\n增值电信业务经营许可证\n网络文化经营许可证 京网文〔2025〕0487-152号\n广播电视节目制作经营许可证\n人力资源服务许可证\n互联网宗教信息服务许可证 京(2025)0000012\n信息网络传播视听节目许可证\n药品医疗器械网络信息服务备案\n互联网新闻信息服务许可证11220240001\n京ICP备15023266号-136\n更多\n视频\n用户",
+      "videoCount": 0,
+      "links": []
+    }
+  }
+]
