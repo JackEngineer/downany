@@ -11,7 +11,8 @@
     "Contents/Resources/app.asar": "48b2e3e9733d80dc99bfb9bff71aea859ae61aa462f79c3bd7910eefd12b4910",
     "Contents/Resources/sidecar/DownanySidecar/DownanySidecar": "b1809c4ca9ec0989a478baedae9661479df097b944c745465b8dcbeafb9756ab"
   },
-  "installed": false,
-  "installedVersion": "0.3.13",
-  "installationBlocker": "Automatic approval rejected application replacement because earlier trusted user instruction prohibited installation; explicit user approval requested."
+  "installed": true,
+  "installedVersion": "0.3.14",
+  "installationBlocker": null,
+  "previousApprovalBlockerResolved": "User explicitly approved backup/install/start at 2026-10-15 11:19:30 UTC; same operation retried and approved."
 }
