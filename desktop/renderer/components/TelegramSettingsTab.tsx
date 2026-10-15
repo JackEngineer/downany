@@ -39,8 +39,8 @@ export function TelegramSettingsTab({ disabled }: { disabled: boolean }): JSX.El
       setTargets(next.discoveredTargets || []);
       const page = await window.api.telegram.listDeliveries(0, 10);
       setDeliveries(page.items || []);
-    } catch (err) {
-      setError(String(err));
+    } catch {
+      setError("操作未完成，请检查连接后重试。");
     }
   };
 
@@ -83,8 +83,8 @@ export function TelegramSettingsTab({ disabled }: { disabled: boolean }): JSX.El
       setMessage(success);
       void window.api.telegram.listDeliveries(0, 10).then((page) => setDeliveries(page.items || [])).catch(() => undefined);
       return result;
-    } catch (err) {
-      setError(String(err));
+    } catch {
+      setError("操作未完成，请检查连接后重试。");
       return null;
     } finally {
       setBusy("");
@@ -242,8 +242,8 @@ export function TelegramSettingsTab({ disabled }: { disabled: boolean }): JSX.El
         </>
       )}
 
-      {message && <p className="muted">{message}</p>}
-      {error && <p className="field-error">{error}</p>}
+      {message && <p className="muted" role="status">{message}</p>}
+      {error && <p className="field-error" role="alert">{error}</p>}
     </div>
   );
 }

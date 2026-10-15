@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useId, cloneElement, isValidElement, type ReactNode } from "react";
 
 import type { MigrationResult, SettingsFocus } from "../electron/preload";
+import { Icon, type IconName } from "./components/ui/Icon";
 import { RuntimeStatus } from "./components/RuntimeStatus";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { SitesPanel } from "./components/SitesPanel";
@@ -32,372 +33,179 @@ type EngineStateInfo = { recoveryRequired?: unknown; current?: { version?: unkno
 type EngineUpdateResult = { ok?: unknown; state?: unknown; version?: unknown; currentVersion?: unknown };
 type EngineUpdateOutcome = "prepared" | "rolled_back" | "failed" | null;
 
-type TabKey = "general" | "quality" | "postprocess" | "appearance" | "telegram";
+type TabKey = "general" | "output" | "appearance" | "network" | "telegram" | "advanced" | "about";
 
 const SETTINGS_FOCUS_IDS: Record<SettingsFocus, string> = {
-  cookies: "settings-focus-cookies",
-  network: "settings-focus-network",
-  downloadTool: "settings-focus-download-tool",
-  download: "settings-focus-download",
+  cookies: "settings-focus-cookies", network: "settings-focus-network",
+  downloadTool: "settings-focus-download-tool", download: "settings-focus-download",
 };
-
+const FOCUS_TABS: Record<SettingsFocus, TabKey> = {
+  cookies: "network", network: "network", downloadTool: "about", download: "general",
+};
 function focusSettingsControl(focus: SettingsFocus): boolean {
   const control = document.getElementById(SETTINGS_FOCUS_IDS[focus]);
   if (!control) return false;
-  if (typeof control.scrollIntoView === "function") {
-    control.scrollIntoView({ block: "center" });
-  }
+  control.scrollIntoView?.({ block: "center" });
   control.focus();
   return true;
 }
-
-const TABS: { key: TabKey; labelKey: string }[] = [
-  { key: "general", labelKey: "settings.general" },
-  { key: "quality", labelKey: "settings.quality" },
-  { key: "postprocess", labelKey: "settings.postprocess" },
-  { key: "appearance", labelKey: "settings.appearance" },
-  { key: "telegram", labelKey: "Telegram" },
+const TABS: { key: TabKey; labelKey: string; icon: IconName; group: "everyday" | "more" }[] = [
+  { key: "general", labelKey: "settings.nav.download", icon: "download", group: "everyday" },
+  { key: "output", labelKey: "settings.nav.output", icon: "folder", group: "everyday" },
+  { key: "appearance", labelKey: "settings.nav.appearance", icon: "settings", group: "everyday" },
+  { key: "network", labelKey: "settings.nav.network", icon: "link", group: "everyday" },
+  { key: "telegram", labelKey: "Telegram", icon: "open", group: "more" },
+  { key: "advanced", labelKey: "settings.nav.advanced", icon: "settings", group: "more" },
+  { key: "about", labelKey: "settings.nav.about", icon: "more", group: "more" },
 ];
-
 function useBootstrap() {
-  const themeMode = useAppStore((s) => s.settings?.theme_mode);
-
-  useDocumentTheme(themeMode);
-
+  useDocumentTheme(useAppStore((s) => s.settings?.theme_mode));
   useEffect(() => startSettingsSession(window.api), []);
-
 }
-
 interface TabProps {
-  draft: AppSettings;
-  disabled: boolean;
-  update: (partial: Partial<AppSettings>) => void;
-  pickDir: () => Promise<void>;
+  draft: AppSettings; disabled: boolean;
+  update: (partial: Partial<AppSettings>) => void; pickDir: () => Promise<void>;
 }
-
+function SettingRow({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  const id = useId();
+  const control = isValidElement<{ "aria-labelledby"?: string; "aria-describedby"?: string }>(children)
+    && (children.type === "input" || children.type === "select")
+    ? cloneElement(children, { "aria-labelledby": `${id}-title`, "aria-describedby": hint ? `${id}-hint` : undefined })
+    : children;
+  return <label className="settings-row">
+    <span className="settings-row__copy"><span id={`${id}-title`} className="settings-row__title">{title}</span>{hint && <small id={`${id}-hint`}>{hint}</small>}</span>
+    <span className="settings-row__control">{control}</span>
+  </label>;
+}
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="settings-group"><h2>{title}</h2><div className="settings-card">{children}</div></section>;
+}
 function GeneralTab({ draft, disabled, update, pickDir }: TabProps) {
   const locale = useLocale();
-  return (
-    <div className="settings-grid">
-      <label className="settings-row">
-        <span>{t("settings.downloadDir", locale)}</span>
-        <div className="settings-control">
-          <input
-            id="settings-focus-download"
-            value={draft.download_dir}
-            disabled={disabled}
-            onChange={(e) => update({ download_dir: e.target.value })}
-          />
-          <button type="button" disabled={disabled} onClick={() => void pickDir()}>
-            {t("settings.chooseDir", locale)}
-          </button>
-        </div>
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.concurrent", locale)}</span>
-        <input
-          type="number"
-          min={1}
-          max={10}
-          value={draft.concurrent_downloads}
-          disabled={disabled}
-          onChange={(e) => update({ concurrent_downloads: Number(e.target.value) })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.speedLimit", locale)}</span>
-        <input
-          type="number"
-          min={0}
-          value={draft.speed_limit}
-          disabled={disabled}
-          onChange={(e) => update({ speed_limit: Number(e.target.value) })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.cookies", locale)}</span>
-        <select
-          id="settings-focus-cookies"
-          value={draft.cookies_from_browser || ""}
-          disabled={disabled}
-          onChange={(e) => update({ cookies_from_browser: e.target.value })}
-        >
-          <option value="">{t("settings.noCookies", locale)}</option>
-          <option value="chrome">Chrome</option>
-          {window.api?.platform === "darwin" && <option value="safari">Safari</option>}
-          <option value="firefox">Firefox</option>
-          <option value="edge">Edge</option>
+  return <div className="settings-grid">
+    <SettingsGroup title={t("settings.group.destination", locale)}>
+      <SettingRow title={t("settings.downloadDir", locale)} hint={t("settings.hint.directory", locale)}>
+        <span className="settings-control settings-control--directory">
+          <input id="settings-focus-download" title={draft.download_dir} aria-label={t("settings.downloadDir", locale)} value={draft.download_dir} disabled={disabled} onChange={(e) => update({ download_dir: e.target.value })} />
+          <button type="button" disabled={disabled} onClick={() => void pickDir()}>{t("settings.chooseDir", locale)}</button>
+        </span>
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.group.defaults", locale)}>
+      <SettingRow title={t("settings.defaultQuality", locale)} hint={t("settings.hint.quality", locale)}>
+        <select value={draft.default_quality} disabled={disabled} onChange={(e) => update({ default_quality: e.target.value })}>
+          <option value="best">{t("settings.best", locale)}</option>{["1080p", "720p", "480p"].map(v => <option key={v} value={v}>{v}</option>)}
         </select>
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.metadata", locale)}</span>
-        <input
-          type="checkbox"
-          checked={draft.embed_metadata !== false}
-          disabled={disabled}
-          onChange={(e) => update({ embed_metadata: e.target.checked })}
-        />
-      </label>
-      <p className="muted small">{t("settings.metadataHint", locale)}</p>
-
-      <label className="settings-row">
-        <span>{t("settings.fragments", locale)}</span>
-        <input
-          type="number"
-          min={0}
-          max={32}
-          value={draft.concurrent_fragments ?? 4}
-          disabled={disabled}
-          onChange={(e) => update({ concurrent_fragments: Number(e.target.value) })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.telemetry", locale)}</span>
-        <input
-          type="checkbox"
-          checked={Boolean(draft.telemetry_enabled)}
-          disabled={disabled}
-          onChange={(e) => update({ telemetry_enabled: e.target.checked })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.language", locale)}</span>
-        <select
-          value={locale}
-          disabled={disabled}
-          onChange={(e) => {
-            setLocale(e.target.value as Locale);
-          }}
-        >
-          <option value="zh-CN">简体中文</option>
-          <option value="en">English</option>
-        </select>
-      </label>
-
-      <SitesPanel />
-
-      <label className="settings-row">
-        <span>{t("settings.clipboard", locale)}</span>
-        <input
-          type="checkbox"
-          checked={Boolean(draft.clipboard_monitor)}
-          disabled={disabled}
-          onChange={(e) => update({ clipboard_monitor: e.target.checked })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.proxyEnabled", locale)}</span>
-        <input
-          id="settings-focus-network"
-          type="checkbox"
-          checked={Boolean(draft.proxy_enabled)}
-          disabled={disabled}
-          onChange={(e) => update({ proxy_enabled: e.target.checked })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.proxyUrl", locale)}</span>
-        <input
-          value={draft.proxy_url}
-          disabled={disabled || !draft.proxy_enabled}
-          aria-invalid={draft.proxy_enabled && !draft.proxy_url.trim()}
-          onChange={(e) => update({ proxy_url: e.target.value })}
-        />
-      </label>
-    </div>
-  );
+      </SettingRow>
+      <SettingRow title={t("settings.askQuality", locale)} hint={t("settings.hint.confirm", locale)}>
+        <input type="checkbox" checked={draft.auto_start_downloads === false} disabled={disabled} onChange={(e) => update({ auto_start_downloads: !e.target.checked })} />
+      </SettingRow>
+      <SettingRow title={t("settings.concurrent", locale)} hint={t("settings.hint.concurrent", locale)}>
+        <input type="number" min={1} max={10} value={draft.concurrent_downloads} disabled={disabled} onChange={(e) => update({ concurrent_downloads: Number(e.target.value) })} />
+      </SettingRow>
+    </SettingsGroup>
+  </div>;
 }
-
-function QualityTab({ draft, disabled, update }: TabProps) {
+function OutputTab({ draft, disabled, update }: TabProps) {
   const locale = useLocale();
   const subtitleMode = subtitleModeFromSettings(draft);
-  const mp3UsesExternalSubtitles =
-    draft.postprocessing === "mp3" &&
-    (subtitleMode === "embedded" || subtitleMode === "both");
-
-  return (
-    <div className="settings-grid">
-      <label className="settings-row">
-        <span>{t("settings.defaultQuality", locale)}</span>
-        <select
-          value={draft.default_quality}
-          disabled={disabled}
-          onChange={(e) => update({ default_quality: e.target.value })}
-        >
-          <option value="best">{t("settings.best", locale)}</option>
-          <option value="1080p">1080p</option>
-          <option value="720p">720p</option>
-          <option value="480p">480p</option>
+  const mp3UsesExternalSubtitles = draft.postprocessing === "mp3" && (subtitleMode === "embedded" || subtitleMode === "both");
+  return <div className="settings-grid">
+    <SettingsGroup title={t("settings.group.format", locale)}>
+      <SettingRow title={t("settings.postprocess", locale)} hint={t("settings.hint.format", locale)}>
+        <select value={draft.postprocessing || "none"} disabled={disabled} onChange={(e) => update({ postprocessing: e.target.value })}>
+          <option value="none">{t("settings.formatOriginal", locale)}</option><option value="mp4">{t("settings.formatMP4", locale)}</option><option value="mp3">{t("settings.formatMP3", locale)}</option><option value="script">{t("settings.formatScript", locale)}</option>
         </select>
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.askQuality", locale)}</span>
-        <input
-          type="checkbox"
-          checked={draft.auto_start_downloads === false}
-          disabled={disabled}
-          onChange={(e) => update({ auto_start_downloads: !e.target.checked })}
-        />
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.subtitles", locale)}</span>
-        <select
-          value={subtitleMode}
-          disabled={disabled}
-          onChange={(e) =>
-            update(subtitleModePatch(e.target.value as SubtitleMode))
-          }
-        >
-          <option value="none">{t("settings.subtitlesNone", locale)}</option>
-          <option value="external">{t("settings.subtitlesExternal", locale)}</option>
-          <option value="embedded">{t("settings.subtitlesEmbedded", locale)}</option>
-          <option value="both">{t("settings.subtitlesBoth", locale)}</option>
+      </SettingRow>
+      {draft.postprocessing === "script" && <SettingRow title={t("settings.script", locale)} hint={t("settings.hint.script", locale)}>
+        <input value={draft.postprocess_script || ""} disabled={disabled} onChange={(e) => update({ postprocess_script: e.target.value })} />
+      </SettingRow>}
+      <SettingRow title={t("settings.metadata", locale)} hint={t("settings.metadataHint", locale)}>
+        <input type="checkbox" checked={draft.embed_metadata !== false} disabled={disabled} onChange={(e) => update({ embed_metadata: e.target.checked })} />
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.subtitles", locale)}>
+      <SettingRow title={t("settings.subtitles", locale)} hint={t("settings.hint.subtitles", locale)}>
+        <select value={subtitleMode} disabled={disabled} onChange={(e) => update(subtitleModePatch(e.target.value as SubtitleMode))}>
+          <option value="none">{t("settings.subtitlesNone", locale)}</option><option value="external">{t("settings.subtitlesExternal", locale)}</option><option value="embedded">{t("settings.subtitlesEmbedded", locale)}</option><option value="both">{t("settings.subtitlesBoth", locale)}</option>
         </select>
-      </label>
-
-      <label className="settings-row">
-        <span>{t("settings.subtitleLanguages", locale)}</span>
-        <input
-          value={draft.subtitle_langs || ""}
-          disabled={disabled}
-          placeholder={t("settings.subtitleHint", locale)}
-          onChange={(e) => update({ subtitle_langs: e.target.value })}
-        />
-      </label>
-
-      {mp3UsesExternalSubtitles ? (
-        <p className="muted small">
-          {t("settings.mp3Subtitles", locale)}
-        </p>
-      ) : null}
-    </div>
-  );
+      </SettingRow>
+      <SettingRow title={t("settings.subtitleLanguages", locale)} hint={t("settings.subtitleHint", locale)}>
+        <input value={draft.subtitle_langs || ""} disabled={disabled} placeholder="zh-Hans,en" onChange={(e) => update({ subtitle_langs: e.target.value })} />
+      </SettingRow>
+      {mp3UsesExternalSubtitles && <p className="settings-card__note" role="status">{t("settings.mp3Subtitles", locale)}</p>}
+    </SettingsGroup>
+  </div>;
 }
-
-function PostprocessTab({ draft, disabled, update }: TabProps) {
-  return (
-    <div className="settings-grid">
-      <label className="settings-row">
-        <span>默认后处理</span>
-        <select
-          value={draft.postprocessing || "none"}
-          disabled={disabled}
-          onChange={(e) => update({ postprocessing: e.target.value })}
-        >
-          <option value="none">无</option>
-          <option value="mp4">转换为 MP4</option>
-          <option value="mp3">提取音频 (MP3)</option>
-          <option value="script">自定义脚本</option>
+function NetworkTab({ draft, disabled, update }: TabProps) {
+  const locale = useLocale();
+  return <div className="settings-grid">
+    <SettingsGroup title={t("settings.group.account", locale)}>
+      <SettingRow title={t("settings.cookies", locale)} hint={t("settings.hint.account", locale)}>
+        <select id="settings-focus-cookies" value={draft.cookies_from_browser || ""} disabled={disabled} onChange={(e) => update({ cookies_from_browser: e.target.value })}>
+          <option value="">{t("settings.noCookies", locale)}</option><option value="chrome">Chrome</option>{window.api?.platform === "darwin" && <option value="safari">Safari</option>}<option value="firefox">Firefox</option><option value="edge">Edge</option>
         </select>
-      </label>
-
-      {draft.postprocessing === "script" && (
-        <>
-          <label className="settings-row">
-            <span>后处理脚本</span>
-            <input
-              value={draft.postprocess_script || ""}
-              disabled={disabled}
-              placeholder="例如：/Users/me/bin/process {file}"
-              onChange={(e) => update({ postprocess_script: e.target.value })}
-            />
-          </label>
-          <p className="muted small">
-            {"{file}"} 会被替换为下载完成的文件路径；脚本在每次下载完成后执行，请只填写可信命令。
-          </p>
-        </>
-      )}
-
-      <label className="settings-row">
-        <span>文件名模板</span>
-        <input
-          value={draft.filename_template || ""}
-          disabled={disabled}
-          placeholder="%(title)s.%(ext)s（留空使用默认）"
-          onChange={(e) => update({ filename_template: e.target.value })}
-        />
-      </label>
-      <p className="muted small">
-        支持占位符：%(title)s、%(uploader)s、%(id)s、%(upload_date)s、%(resolution)s，需包含
-        %(ext)s。
-      </p>
-    </div>
-  );
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.group.proxy", locale)}>
+      <SettingRow title={t("settings.proxyEnabled", locale)} hint={t("settings.hint.proxy", locale)}>
+        <input id="settings-focus-network" type="checkbox" checked={Boolean(draft.proxy_enabled)} disabled={disabled} onChange={(e) => update({ proxy_enabled: e.target.checked })} />
+      </SettingRow>
+      <SettingRow title={t("settings.proxyUrl", locale)} hint="http://127.0.0.1:7890 / socks5://127.0.0.1:1080">
+        <input value={draft.proxy_url} disabled={disabled || !draft.proxy_enabled} aria-invalid={draft.proxy_enabled && !draft.proxy_url.trim()} onChange={(e) => update({ proxy_url: e.target.value })} />
+      </SettingRow>
+    </SettingsGroup>
+  </div>;
 }
-
-function menuBarModeCopy(): { label: string; hint: string } {
-  const ua = navigator.userAgent;
-  if (ua.includes("Windows")) {
-    return {
-      label: "关闭时最小化到托盘",
-      hint: "开启后关闭主窗口不退出，应用驻留系统托盘，可从托盘恢复或退出。",
-    };
-  }
-  if (ua.includes("Mac")) {
-    return {
-      label: "菜单栏模式",
-      hint: "开启后隐藏 Dock 图标，关闭主窗口不退出，驻留系统菜单栏。",
-    };
-  }
-  return {
-    label: "菜单栏模式",
-    hint: "开启后关闭主窗口不退出，应用驻留系统托盘。",
-  };
+function AdvancedTab({ draft, disabled, update }: TabProps) {
+  const locale = useLocale();
+  return <div className="settings-grid">
+    <SettingsGroup title={t("settings.group.transfer", locale)}>
+      <SettingRow title={t("settings.speedLimit", locale)} hint={t("settings.hint.speed", locale)}>
+        <input type="number" min={0} value={draft.speed_limit} disabled={disabled} onChange={(e) => update({ speed_limit: Number(e.target.value) })} />
+      </SettingRow>
+      <SettingRow title={t("settings.fragments", locale)} hint={t("settings.hint.fragments", locale)}>
+        <input type="number" min={0} max={32} value={draft.concurrent_fragments ?? 4} disabled={disabled} onChange={(e) => update({ concurrent_fragments: Number(e.target.value) })} />
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.group.naming", locale)}>
+      <SettingRow title={t("settings.filenameTemplate", locale)} hint={t("settings.hint.filename", locale)}>
+        <input value={draft.filename_template || ""} disabled={disabled} placeholder="%(title)s.%(ext)s" onChange={(e) => update({ filename_template: e.target.value })} />
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.group.privacy", locale)}>
+      <SettingRow title={t("settings.telemetry", locale)} hint={t("settings.hint.telemetry", locale)}>
+        <input type="checkbox" checked={Boolean(draft.telemetry_enabled)} disabled={disabled} onChange={(e) => update({ telemetry_enabled: e.target.checked })} />
+      </SettingRow>
+    </SettingsGroup>
+  </div>;
 }
-
 function AppearanceTab({ draft, disabled, update }: TabProps) {
-  const menuBarMode = menuBarModeCopy();
-  return (
-    <div className="settings-grid">
-      <label className="settings-row">
-        <span>主题</span>
-        <select
-          value={draft.theme_mode}
-          disabled={disabled}
-          onChange={(e) =>
-            update({ theme_mode: e.target.value as AppSettings["theme_mode"] })
-          }
-        >
-          <option value="system">跟随系统</option>
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
+  const locale = useLocale();
+  const isMac = window.api?.platform === "darwin";
+  return <div className="settings-grid">
+    <SettingsGroup title={t("settings.group.display", locale)}>
+      <SettingRow title={t("settings.theme", locale)} hint={t("settings.hint.theme", locale)}>
+        <select value={draft.theme_mode} disabled={disabled} onChange={(e) => update({ theme_mode: e.target.value as AppSettings["theme_mode"] })}>
+          <option value="system">{t("settings.themeSystem", locale)}</option><option value="light">{t("settings.themeLight", locale)}</option><option value="dark">{t("settings.themeDark", locale)}</option>
         </select>
-      </label>
-
-      <label className="settings-row">
-        <span>{menuBarMode.label}</span>
-        <input
-          type="checkbox"
-          checked={Boolean(draft.menu_bar_mode)}
-          disabled={disabled}
-          onChange={(e) => update({ menu_bar_mode: e.target.checked })}
-        />
-      </label>
-      <p className="muted small">{menuBarMode.hint}</p>
-
-      {window.api?.platform === "darwin" && (
-        <label className="settings-row">
-          <span>Dock 进度条</span>
-          <input
-            type="checkbox"
-            checked={draft.dock_progress !== false}
-            disabled={disabled}
-            onChange={(e) => update({ dock_progress: e.target.checked })}
-          />
-        </label>
-      )}
-    </div>
-  );
+      </SettingRow>
+      <SettingRow title={t("settings.language", locale)} hint={t("settings.hint.language", locale)}>
+        <select value={locale} disabled={disabled} onChange={(e) => setLocale(e.target.value as Locale)}><option value="zh-CN">简体中文</option><option value="en">English</option></select>
+      </SettingRow>
+    </SettingsGroup>
+    <SettingsGroup title={t("settings.group.behavior", locale)}>
+      <SettingRow title={t("settings.clipboard", locale)} hint={t("settings.hint.clipboard", locale)}>
+        <input type="checkbox" checked={Boolean(draft.clipboard_monitor)} disabled={disabled} onChange={(e) => update({ clipboard_monitor: e.target.checked })} />
+      </SettingRow>
+      <SettingRow title={t(isMac ? "settings.menuBar" : "settings.tray", locale)} hint={t(isMac ? "settings.hint.menuBar" : "settings.hint.tray", locale)}>
+        <input type="checkbox" checked={Boolean(draft.menu_bar_mode)} disabled={disabled} onChange={(e) => update({ menu_bar_mode: e.target.checked })} />
+      </SettingRow>
+      {isMac && <SettingRow title={t("settings.dockProgress", locale)} hint={t("settings.hint.dock", locale)}>
+        <input type="checkbox" checked={draft.dock_progress !== false} disabled={disabled} onChange={(e) => update({ dock_progress: e.target.checked })} />
+      </SettingRow>}
+    </SettingsGroup>
+  </div>;
 }
 
 export function SettingsApp() {
@@ -453,7 +261,7 @@ export function SettingsApp() {
   useEffect(() => {
     const navigate = (focus: SettingsFocus) => {
       pendingFocus.current = focus;
-      setTab("general");
+      setTab(FOCUS_TABS[focus]);
       if (focusSettingsControl(focus)) pendingFocus.current = null;
     };
     const initial = new URLSearchParams(window.location.search).get("focus");
@@ -463,7 +271,7 @@ export function SettingsApp() {
 
   useEffect(() => {
     const focus = pendingFocus.current;
-    if (!draft || tab !== "general" || !focus) return;
+    if (!draft || !focus || tab !== FOCUS_TABS[focus]) return;
     if (focusSettingsControl(focus)) pendingFocus.current = null;
   }, [draft, tab]);
 
@@ -651,7 +459,7 @@ export function SettingsApp() {
 
   if (!draft) {
     return (
-      <div className="settings-shell">
+      <div className="settings-shell settings-loading">
         {ytOutcome === "failed"
           ? <p className="field-error" role="alert">{t("settings.toolServiceFailed", locale)}</p>
           : <p className="muted">{t("settings.loading", locale)}</p>}
@@ -683,34 +491,44 @@ export function SettingsApp() {
   return (
     <div className="settings-shell">
       <div className="settings-drag-strip" />
-      <header className="row">
+      <aside className="settings-sidebar">
         <h1>{t("settings.open", locale)}</h1>
-        <span className={`save-state ${saveState}`}>{statusLabel}</span>
-      </header>
-      <RuntimeStatus />
-      {error && <p className="field-error">{error}</p>}
+        <nav className="settings-tabs" aria-label={t("settings.categories", locale)} onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          if (index < 0) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+            : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+          buttons[next]?.focus(); buttons[next]?.click();
+        }}>
+          {(["everyday", "more"] as const).map(group => <div className="settings-nav-group" key={group}>
+            <p>{t(`settings.nav.${group}`, locale)}</p>
+            {TABS.filter(item => item.group === group).map(item => <button key={item.key} type="button"
+              className={tab === item.key ? "settings-tab active" : "settings-tab"}
+              aria-current={tab === item.key ? "page" : undefined} aria-controls="settings-content"
+              onClick={() => { setTab(item.key); document.getElementById("settings-content")?.scrollTo?.(0, 0); }}>
+              <Icon name={item.icon} size={18} /><span>{t(item.labelKey, locale)}</span>
+            </button>)}
+          </div>)}
+        </nav>
+      </aside>
+      <main id="settings-content" className="settings-content" tabIndex={-1}>
+        <header className="settings-page-header">
+          <h2>{t(TABS.find(item => item.key === tab)!.labelKey, locale)}</h2>
+          <p>{t(`settings.intro.${tab}`, locale)}</p>
+        </header>
+        {tab === "general" && <GeneralTab {...tabProps} />}
+        {tab === "output" && <OutputTab {...tabProps} />}
+        {tab === "appearance" && <AppearanceTab {...tabProps} />}
+        {tab === "network" && <NetworkTab {...tabProps} />}
+        {tab === "advanced" && <AdvancedTab {...tabProps} />}
+        {tab === "telegram" && <TelegramSettingsTab disabled={disabled} />}
 
-      <nav className="settings-tabs" aria-label={t("settings.categories", locale)}>
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={tab === item.key ? "settings-tab active" : "settings-tab"}
-            onClick={() => setTab(item.key)}
-          >
-            {t(item.labelKey, locale)}
-          </button>
-        ))}
-      </nav>
-
-      {tab === "general" && <GeneralTab {...tabProps} />}
-      {tab === "quality" && <QualityTab {...tabProps} />}
-      {tab === "postprocess" && <PostprocessTab {...tabProps} />}
-      {tab === "appearance" && <AppearanceTab {...tabProps} />}
-      {tab === "telegram" && <TelegramSettingsTab disabled={disabled} />}
-
-      {tab === "general" && (
-        <>
+      {tab === "about" && (
+        <div className="settings-maintenance">
+          <RuntimeStatus />
           <section className="settings-section">
             <h2>{t("settings.downloadTool", locale)}</h2>
             <p className="muted">
@@ -806,10 +624,26 @@ export function SettingsApp() {
               </button>
             </div>
           </section>
-        </>
+          <section className="settings-section"><SitesPanel /></section>
+        </div>
       )}
-
-      <p className="muted">{t("settings.autoSave", locale)}</p>
+      </main>
+      <footer className="settings-save-bar">
+        <span className={`save-state ${saveState}`} role="status" aria-live="polite">
+          {saveState === "error" ? error : statusLabel || t("settings.autoSave", locale)}
+        </span>
+        {saveState === "saved" && <span className="settings-save-hint">{t("settings.appliesNow", locale)}</span>}
+        {saveState === "error" && <div className="settings-control">
+          <button type="button" disabled={disabled} onClick={() => {
+            if (draftRef.current) { setSaveState("saving"); setError(""); void persist(draftRef.current, editVersion.current); }
+          }}>{t("settings.retrySave", locale)}</button>
+          <button type="button" onClick={() => {
+            if (timer.current !== null) window.clearTimeout(timer.current);
+            const version = ++editVersion.current; savedVersion.current = version;
+            draftRef.current = settings; setDraft(settings); setSaveState("idle"); setError("");
+          }}>{t("settings.discardUnsaved", locale)}</button>
+        </div>}
+      </footer>
       <ToastHost />
     </div>
   );

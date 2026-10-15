@@ -38,11 +38,11 @@ beforeEach(() => {
   useAppStore.setState({ settings: settingsFixture(), connection: "connected", toasts: [] });
 });
 afterEach(() => { cleanup(); setLocale("zh-CN"); });
-async function mount() { render(<SettingsApp />); await act(async () => { await Promise.resolve(); }); }
+async function mount() { render(<SettingsApp />); await act(async () => { await Promise.resolve(); }); fireEvent.click(screen.getByRole("button", { name: /关于与维护|About & maintenance/ })); }
 
 describe("settings language and safe results", () => {
   it.each([
-    ["cookies", "从浏览器导入 Cookie"],
+    ["cookies", "浏览器账号"],
     ["network", "启用代理"],
     ["download", "下载目录"],
     ["downloadTool", "检查更新"],
@@ -90,6 +90,7 @@ describe("settings language and safe results", () => {
     });
     expect(screen.getByRole("button", { name: "Export diagnostics" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Check app updates" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance & behavior" }));
     expect(screen.getByRole("combobox", { name: "Language" })).toHaveValue("en");
     expect(document.body.textContent).not.toMatch(/electron-updater|docs\/RELEASE/);
   });

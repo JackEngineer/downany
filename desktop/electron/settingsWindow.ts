@@ -21,10 +21,10 @@ export function openSettingsWindow(
   }
 
   settingsWindow = new BrowserWindow({
-    width: 640,
-    height: 660,
-    minWidth: 540,
-    minHeight: 480,
+    width: 960,
+    height: 740,
+    minWidth: 760,
+    minHeight: 600,
     title: "设置",
     show: false,
     ...windowChromeOptions(),

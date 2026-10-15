@@ -43,6 +43,8 @@ afterEach(() => { cleanup(); setLocale("zh-CN"); });
 async function mount() {
   render(<SettingsApp />);
   await act(async () => { await Promise.resolve(); });
+  const about = screen.queryByRole("button", { name: /关于与维护|About & maintenance/ });
+  if (about) fireEvent.click(about);
 }
 
 async function checkAndUpdate() {

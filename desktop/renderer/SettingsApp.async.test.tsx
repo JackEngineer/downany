@@ -110,4 +110,55 @@ describe("settings autosave ordering", () => {
     await act(async () => { saves[0].resolve(settingsFixture({ download_dir: "C:\\late" })); });
     expect(useAppStore.getState().settings).toEqual(settings);
   });
+  it("retries a rejected save without losing the draft", async () => {
+    await mount();
+    changeDirectory(settings.download_dir, "C:\\retry");
+    await debounce();
+    await act(async () => { saves[0].reject(new Error("private")); });
+    expect(screen.getByRole("status")).toHaveTextContent("设置未保存");
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    expect(saves).toHaveLength(2);
+    const latest = settingsFixture({ download_dir: "C:\\retry" });
+    await act(async () => { saves[1].resolve(latest); });
+    expect(screen.getByRole("status")).toHaveTextContent("已保存");
+    expect(screen.getByDisplayValue("C:\\retry")).toBeInTheDocument();
+  });
+
+  it("discards only the unsaved draft after a rejection", async () => {
+    await mount();
+    changeDirectory(settings.download_dir, "C:\\rejected");
+    await debounce();
+    await act(async () => { saves[0].reject(new Error("private")); });
+    fireEvent.click(screen.getByRole("button", { name: "还原未保存修改" }));
+    expect(screen.getByDisplayValue(settings.download_dir)).toBeInTheDocument();
+    await debounce();
+    expect(saves).toHaveLength(1);
+    expect(useAppStore.getState().settings).toEqual(settings);
+  });
+
+  it("keeps settings unchanged when the directory picker is cancelled", async () => {
+    window.api.selectDirectory = vi.fn().mockResolvedValue(null);
+    await mount();
+    fireEvent.click(screen.getByRole("button", { name: "选择…" }));
+    await act(async () => { await Promise.resolve(); });
+    await debounce();
+    expect(screen.getByDisplayValue(settings.download_dir)).toBeInTheDocument();
+    expect(saves).toHaveLength(0);
+  });
+
+  it("keeps pending edits when navigating and supports keyboard category changes", async () => {
+    await mount();
+    changeDirectory(settings.download_dir, "C:\\pending");
+    const download = screen.getByRole("button", { name: "下载" });
+    download.focus();
+    fireEvent.keyDown(download, { key: "ArrowDown" });
+    expect(screen.getByRole("button", { name: "格式与字幕" })).toHaveFocus();
+    expect(screen.getByLabelText("字幕", { exact: true })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(download).toHaveFocus();
+    expect(screen.getByDisplayValue("C:\\pending")).toBeInTheDocument();
+    await debounce();
+    expect(saves).toHaveLength(1);
+  });
+
 });
