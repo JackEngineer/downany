@@ -1,0 +1,12 @@
+{
+  "desktopTestFiles": 83,
+  "desktopTestsPassed": 670,
+  "protocolTestsPassed": 4,
+  "mainRendererTypecheckPassed": true,
+  "productionBuildPassed": true,
+  "packagedSidecarProtocolAndDiagnosticsPassed": true,
+  "packagedMediaToolsPassed": true,
+  "diffCheckPassed": true,
+  "backendFullSuiteRerun": false,
+  "scope": "Mac settings redesign only"
+}

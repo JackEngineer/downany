@@ -1,0 +1,11 @@
+{
+  "version": "0.3.10",
+  "sourceCommit": "45bdebdf0dd74707c6edd271e60ae80af3e0def4",
+  "dmgBytes": 181448994,
+  "dmgSha256": "3c7ad65f2596bcf41a4faad242d6f0ec7b75d797eaa9e876609045e9d56fd29a",
+  "appAsarSha256": "d7aac877f4735e00b2c892b1b695e60f70544c8a542496c151804293b155fd6f",
+  "sidecarSha256": "13fc961eed1283b6f5830907b085ed5586db4f1ee1c32a3448bb87194bb7679d",
+  "settingsVerification": "settings-verification.json",
+  "installedVerification": "installed-settings.json",
+  "dataPreservation": "data-preservation.json"
+}

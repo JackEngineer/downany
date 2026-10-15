@@ -1,0 +1,25 @@
+{
+  "version": "0.3.10",
+  "checks": [
+    "actual-installed-app-and-sidecar-0.3.10",
+    "real-settings-save",
+    "installed-normal-restart-persists-settings",
+    "installed-dark-760-no-overflow",
+    "isolated-sensitive-baseline-unchanged"
+  ],
+  "screenshots": [
+    "installed-downloads-light.png",
+    "installed-appearance-dark-760.png"
+  ],
+  "errors": [],
+  "scope": "isolated-settings-only",
+  "controlledCases": [],
+  "runtime": {
+    "appVersion": "0.3.10",
+    "sidecarVersion": "0.3.10",
+    "connection": "connected",
+    "bridge": "listening",
+    "versionMismatch": false
+  },
+  "passed": true
+}
