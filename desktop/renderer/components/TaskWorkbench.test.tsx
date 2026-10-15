@@ -1,0 +1,27 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DesktopApi } from "../../electron/preload";
+import type { MediaInfo } from "../../electron/mediaTypes";
+import { TaskWorkbench, sourceName, taskState } from "./TaskWorkbench";
+import { useAppStore } from "../store/appStore";
+import { taskFixture } from "../test/taskFixture";
+import { settingsFixture } from "../test/settingsFixture";
+import { setLocale } from "../i18n";
+const inspect=vi.fn(), request=vi.fn(), exportMedia=vi.fn(), cancel=vi.fn();
+const first=taskFixture({id:"one",title:"第一段",status:"completed",url:"https://media.example.com/watch?token=secret",platform:"unknown",file_path:"/safe/one.mp4"});
+const second=taskFixture({id:"two",title:"第二段",status:"completed",file_path:"/safe/two.mp4"});
+const info=(id:string):MediaInfo=>({taskId:id,duration:24,width:1280,height:720,video:"h264",audio:"aac",files:[{id:"original",name:id+".mp4",path:"/safe/"+id+".mp4",bytes:1000,kind:"video",url:"downany-media://local/"+"a".repeat(48)}]});
+beforeEach(()=>{localStorage.clear();setLocale("zh-CN");inspect.mockReset().mockImplementation(async id=>info(id));request.mockReset().mockImplementation(async method=>method==="app.getSnapshot"?{tasks:[first,second],settings:settingsFixture()}:{});exportMedia.mockReset();cancel.mockReset();
+Object.defineProperty(HTMLMediaElement.prototype,"pause",{configurable:true,value:vi.fn()});Object.defineProperty(HTMLMediaElement.prototype,"load",{configurable:true,value:vi.fn()});
+window.api={platform:"darwin",request,media:{inspect,jobs:vi.fn().mockResolvedValue([]),export:exportMedia,cancel,open:vi.fn().mockResolvedValue(undefined)},onHighlightTask:()=>()=>undefined,onEvent:()=>()=>undefined,openSettings:vi.fn(),openExtractWindow:vi.fn().mockResolvedValue(undefined)} as unknown as DesktopApi;
+useAppStore.setState({tasks:[first,second],settings:settingsFixture(),connection:"connected",filter:"all",searchMode:"filter",searchQuery:"",sortOrder:"oldest",toasts:[],addFocusSignal:0});});
+afterEach(()=>{cleanup();vi.restoreAllMocks()});
+describe("production task workbench",()=>{
+ it("uses reliable host names without exposing URL credentials or signed query strings",()=>{expect(sourceName(first)).toBe("media.example.com");expect(sourceName({...first,url:"javascript:alert(1)"})).toBe("来源待确认");expect(sourceName({...first,url:"file:///safe/a.mp4"})).toBe("本地文件");});
+ it("shows completed details and local preview without autoplay",async()=>{const view=render(<TaskWorkbench/>);await screen.findByText("one.mp4");expect(screen.getByRole("heading",{name:"第一段"})).toBeInTheDocument();expect(view.container.querySelector("video")).not.toHaveAttribute("autoplay");expect(view.container.textContent).not.toContain("token=secret");});
+ it("ignores a late metadata reply after switching tasks",async()=>{let resolve!: (v:MediaInfo)=>void;inspect.mockImplementation(id=>id==="one"?new Promise(r=>{resolve=r}):Promise.resolve(info(id)));render(<TaskWorkbench/>);fireEvent.click(screen.getByRole("button",{name:"选择任务 第二段"}));await screen.findByText("two.mp4");await act(async()=>resolve(info("one")));expect(screen.queryByText("one.mp4")).not.toBeInTheDocument();});
+ it("searches names and domains and supports arrow key task selection",async()=>{render(<TaskWorkbench/>);await screen.findByText("one.mp4");fireEvent.change(screen.getByRole("textbox",{name:"搜索任务"}),{target:{value:"media.example.com"}});expect(screen.queryByRole("button",{name:"选择任务 第二段"})).not.toBeInTheDocument();fireEvent.change(screen.getByRole("textbox",{name:"搜索任务"}),{target:{value:""}});const row=screen.getByRole("button",{name:"选择任务 第一段"});row.focus();fireEvent.keyDown(row,{key:"ArrowDown"});expect(screen.getByRole("button",{name:"选择任务 第二段"})).toHaveFocus();});
+ it("distinguishes processing and missing local files",async()=>{expect(taskState(taskFixture({status:"downloading",progress:100}))).toBe("正在处理与校验");inspect.mockResolvedValue({...info("one"),files:[],error:"missing_or_unsupported"});render(<TaskWorkbench/>);await screen.findByText("本地文件缺失或暂不支持预览");expect(screen.getByRole("button",{name:"播放视频"})).toBeDisabled();});
+ it("keeps login recovery explicit and does not turn it into an automatic retry",async()=>{useAppStore.setState({tasks:[taskFixture({id:"login",status:"failed",error_code:"need_login"})]});render(<TaskWorkbench/>);fireEvent.click(screen.getByRole("button",{name:"打开网页登录"}));await waitFor(()=>expect(window.api.openExtractWindow).toHaveBeenCalled());expect(request).not.toHaveBeenCalledWith("download.retry",expect.anything());});
+ it("submits bounded editing values and shows rejection rather than simulated success",async()=>{exportMedia.mockRejectedValue(new Error("denied"));render(<TaskWorkbench/>);await screen.findByText("one.mp4");fireEvent.click(screen.getByRole("button",{name:"编辑副本"}));fireEvent.change(screen.getByLabelText("起点秒数"),{target:{value:"2"}});fireEvent.change(screen.getByLabelText("终点秒数"),{target:{value:"5"}});fireEvent.click(screen.getByRole("button",{name:"导出副本"}));await waitFor(()=>expect(exportMedia).toHaveBeenCalledWith({taskId:"one",fileId:"original",kind:"clip",start:2,end:5}));expect(await screen.findByRole("alert")).toHaveTextContent("未能开始导出");expect(screen.queryByText("副本已保存")).not.toBeInTheDocument();});
+});

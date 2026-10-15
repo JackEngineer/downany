@@ -12,6 +12,8 @@ import {
   session,
   shell,
 } from "electron";
+import { MediaWorkbench } from "./mediaWorkbench";
+import type { ExportRequest } from "./mediaTypes";
 import { writeStderr } from "./stdio";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -85,7 +87,10 @@ import { createQuitHandler } from "./quitSequence";
 /** 本地抽帧封面：sidecar 写入 Downany 数据目录 thumbnails/{taskId}.jpg */
 const LOCAL_THUMB_SCHEME = "downany-thumb";
 
+let mediaWorkbench: MediaWorkbench | undefined;
+
 protocol.registerSchemesAsPrivileged([
+  { scheme: "downany-media", privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
   {
     scheme: LOCAL_THUMB_SCHEME,
     privileges: {
@@ -901,6 +906,28 @@ function registerIpc(): void {
     if (engineActivating) throw new Error("下载工具正在启用，请稍后重试");
     return telegramController;
   });
+  mediaWorkbench = new MediaWorkbench({
+    dataDir: resolveDownanyDataDir(process.env, process.platform, app.getPath("home")), binDir: path.join(resourcesRoot(__dirname), "bin"),
+    lookup: async (id) => {
+      if (sidecarStartup) await sidecarStartup;
+      const result = await sidecar?.request("app.getSnapshot", {}) as { tasks?: { id: string; status: string; file_path: string }[] } | undefined;
+      return result?.tasks?.find(task => task.id === id);
+    },
+    changed: job => broadcastAll("sidecar:event", { event: "media.export", payload: { job } }),
+  });
+  protocol.handle("downany-media", request => mediaWorkbench!.respond(request));
+  ipcMain.handle("media:inspect", async (_event, id: unknown) => {
+    try { return await mediaWorkbench!.inspect(id); } catch { return { taskId: typeof id === "string" ? id : "", files: [], duration: 0, width: 0, height: 0, video: "", audio: "", error: "not_ready" }; }
+  });
+  ipcMain.handle("media:jobs", () => mediaWorkbench!.listJobs());
+  ipcMain.handle("media:export", async (_event, input: ExportRequest) => {
+    if (isQuitting || engineActivating) throw Error("应用忙碌，请稍后重试");
+    try { return await mediaWorkbench!.start(input); } catch { throw Error("无法导出，请检查文件与时间范围，或等待当前导出结束"); }
+  });
+  ipcMain.handle("media:cancel", (_event, id: unknown) => mediaWorkbench!.cancel(id));
+  ipcMain.handle("media:open", async (_event, taskId: unknown, fileId: unknown, reveal: unknown) => {
+    try { const filePath = await mediaWorkbench!.filePath(taskId, fileId); if (reveal === true) shell.showItemInFolder(filePath); else { const error = await shell.openPath(filePath); if (error) throw Error("open_failed"); } } catch { throw Error("文件不存在或无法打开"); }
+  });
   ipcMain.handle("sidecar:request", async (_evt, method: string, payload: unknown) => {
     if (sidecarStartup) {
       await sidecarStartup;
@@ -1100,6 +1127,7 @@ app.on("activate", () => {
 app.on("before-quit", createQuitHandler(async () => {
   isQuitting = true;
   taskProgressRelay.dispose();
+  await mediaWorkbench?.stop();
   if (mainWindow) saveWindowState(mainWindow);
   sidecarReady = false;
   clipboardWatcher.stop();

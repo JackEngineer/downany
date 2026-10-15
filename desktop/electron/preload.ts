@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { ConnectionState, ProtocolEvent } from "./protocol";
+import type { MediaInfo, ExportJob, ExportRequest } from "./mediaTypes";
 import type { RuntimeInfo } from "./runtimeInfo";
 import type {
   TelegramConfig,
@@ -34,6 +35,13 @@ export type ContextMenuTemplateItem = {
 
 const api = {
   platform: process.platform as NodeJS.Platform,
+  media: {
+    inspect: (taskId: string): Promise<MediaInfo> => ipcRenderer.invoke("media:inspect", taskId),
+    jobs: (): Promise<ExportJob[]> => ipcRenderer.invoke("media:jobs"),
+    export: (input: ExportRequest): Promise<ExportJob> => ipcRenderer.invoke("media:export", input),
+    cancel: (id: string): Promise<void> => ipcRenderer.invoke("media:cancel", id),
+    open: (taskId: string, fileId: string, reveal = false): Promise<void> => ipcRenderer.invoke("media:open", taskId, fileId, reveal),
+  },
   request(method: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     return ipcRenderer.invoke("sidecar:request", method, payload);
   },

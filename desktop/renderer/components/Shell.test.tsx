@@ -35,6 +35,7 @@ beforeEach(() => {
   });
   window.api = ({
     platform: "darwin",
+    media: { inspect: vi.fn().mockResolvedValue({taskId:"task-1",files:[],duration:0,width:0,height:0,video:"",audio:"",error:"not_ready"}), jobs: vi.fn().mockResolvedValue([]), export: vi.fn(), cancel: vi.fn(), open: vi.fn() },
     request: vi.fn().mockResolvedValue({}),
     setThemeSource: vi.fn().mockResolvedValue(undefined),
     openSettings: vi.fn().mockResolvedValue(undefined),
@@ -53,13 +54,13 @@ beforeEach(() => {
 });
 
 describe("Shell network search workspace", () => {
-  it("uses the only main scroll region and hides task filters", () => {
+  it("uses one detail scroll region while keeping task navigation", () => {
     render(<Shell />);
 
     const main = screen.getByRole("main");
     expect(within(main).getByRole("region", { name: "网络搜索结果" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "任务筛选" })).not.toBeInTheDocument();
-    expect(main).toHaveClass("window-main--search");
+    expect(main).toHaveClass("detail");
   });
 
   it("returns to the task workspace for native queue navigation", () => {
@@ -68,7 +69,7 @@ describe("Shell network search workspace", () => {
     act(() => navigate?.("queue"));
 
     expect(useAppStore.getState().searchMode).toBe("filter");
-    expect(screen.getByRole("group", { name: "任务筛选" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "任务筛选" })).toBeInTheDocument();
   });
 
   it("keeps a completed task when browser enqueue refresh returns an older snapshot", async () => {

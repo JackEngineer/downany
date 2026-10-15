@@ -7,13 +7,8 @@ import { useDocumentTheme } from "../lib/documentTheme";
 import { useAppStore } from "../store/appStore";
 import { AddConfirmDialog } from "./AddConfirmDialog";
 import { ConnectionGate } from "./ConnectionGate";
-import { HistorySection } from "./HistorySection";
-import { NetSearchPanel } from "./NetSearchPanel";
-import { TaskList } from "./TaskList";
+import { TaskWorkbench } from "./TaskWorkbench";
 import { ToastHost } from "./ToastHost";
-import { ActionBar } from "./shell/ActionBar";
-import { FilterBar } from "./shell/FilterBar";
-import { WindowChrome } from "./shell/WindowChrome";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -24,8 +19,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 export function Shell() {
   const connection = useAppStore((s) => s.connection);
-  const filter = useAppStore((s) => s.filter);
-  const searchMode = useAppStore((s) => s.searchMode);
   const settings = useAppStore((s) => s.settings);
 
   useDocumentTheme(settings?.theme_mode);
@@ -132,21 +125,7 @@ export function Shell() {
 
   return (
     <div className="window-shell" data-platform={window.api.platform}>
-      <WindowChrome />
-      <ActionBar />
-      {searchMode === "filter" ? <FilterBar /> : null}
-      <main
-        className={searchMode === "network" ? "window-main window-main--search" : "window-main"}
-        id="main"
-      >
-        {searchMode === "network" ? (
-          <NetSearchPanel />
-        ) : filter === "history" ? (
-          <HistorySection />
-        ) : (
-          <TaskList />
-        )}
-      </main>
+      <TaskWorkbench />
       <AddConfirmDialog />
       <ToastHost />
     </div>
