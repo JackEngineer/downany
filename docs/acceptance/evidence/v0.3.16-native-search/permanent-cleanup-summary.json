@@ -1,0 +1,11 @@
+{
+  "authorization": "User confirmation limited to exact 78 previously trashed Downany artifacts",
+  "freeBytesBefore": 15901175808,
+  "emptiedWholeTrash": false,
+  "freeBytesAfter": 37807067136,
+  "success": 78,
+  "skipped": 0,
+  "failed": 0,
+  "freeBytesDelta": 21905891328,
+  "scope": "Exact 78 previously trashed Downany artifacts, individually approved; no other Trash or Chrome items"
+}

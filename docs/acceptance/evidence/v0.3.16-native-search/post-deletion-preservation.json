@@ -1,0 +1,16 @@
+{
+  "queueCount": 48,
+  "historyCount": 41,
+  "existingFiles": 33,
+  "allQueueFieldsUnchanged": true,
+  "allHistoryFieldsUnchanged": true,
+  "configBytesUnchanged": true,
+  "existingFileHashesUnchanged": true,
+  "exportIndexBytesUnchanged": true,
+  "installedCoreUnchanged": true,
+  "candidateCoreUnchanged": true,
+  "appVersion": "0.3.16",
+  "sidecarVersion": "0.3.16",
+  "connection": "connected",
+  "versionMismatch": false
+}
