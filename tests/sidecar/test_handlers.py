@@ -570,7 +570,7 @@ def test_search_query_emits_result(tmp_path, monkeypatch):
     _inline_threads(monkeypatch)
     monkeypatch.setattr(
         "src.sidecar.handlers.SearchEngine.search",
-        lambda platform, query, max_results=10, proxy=None: [
+        lambda platform, query, max_results=10, proxy=None, cancelled=None: [
             VideoInfo(
                 url="https://www.youtube.com/watch?v=abc",
                 title="lofi mix",
@@ -831,3 +831,36 @@ def test_new_download_rejects_invalid_overrides_before_creating_tasks(tmp_path, 
     with pytest.raises(HandlerError):
         dispatch(ctx, Method.DOWNLOAD_CREATE_TASKS.value, {"urls": ["https://example.com/a"], "task_options": options})
     assert ctx.manager.get_snapshot() == []
+
+
+def test_cancel_search_suppresses_late_results_and_retains_worker_gate(tmp_path, monkeypatch):
+    import threading
+    import time
+    ctx, events = _ctx(tmp_path)
+    started, release = threading.Event(), threading.Event()
+    def search(*args, **kwargs):
+        started.set()
+        assert release.wait(2)
+        assert kwargs["cancelled"]()
+        return []
+    monkeypatch.setattr("src.sidecar.handlers.SearchEngine.search", search)
+    try:
+        dispatch(ctx, "search.query", {"query": "neutral", "searchId": "owned"})
+        assert started.wait(1)
+        assert dispatch(ctx, "search.cancel", {"searchId": "owned"}) == {"ok": True}
+        assert len(ctx._search_jobs) == 1
+    finally:
+        release.set()
+        deadline = time.monotonic() + 2
+        while ctx._search_jobs and time.monotonic() < deadline:
+            time.sleep(.01)
+    assert not ctx._search_jobs and not ctx._search_controls
+    assert not [e for e in events if e[0] == "search.result"]
+
+
+def test_search_cancel_validates_identity_and_is_idempotent(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    with pytest.raises(HandlerError):
+        dispatch(ctx, "search.cancel", {})
+    assert dispatch(ctx, "search.cancel", {"searchId": "already-finished"}) == {"ok": True}
+    assert dispatch(ctx, "search.cancel", {"searchId": "already-finished"}) == {"ok": True}

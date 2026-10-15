@@ -118,3 +118,25 @@ def test_entries_without_url_are_dropped(monkeypatch):
 def test_unsupported_platform_raises():
     with pytest.raises(SearchError):
         SearchEngine.search(Platform.TWITTER, "x")
+
+
+def test_cancelled_search_does_not_start_network(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("cancelled search must not access network")
+    monkeypatch.setattr("src.core.search_engine.yt_dlp.YoutubeDL", forbidden)
+    with pytest.raises(SearchError, match="search_cancelled"):
+        SearchEngine.search(Platform.YOUTUBE, "neutral", cancelled=lambda: True)
+
+
+def test_youtube_search_has_bounded_network_wait_and_does_not_log_keywords(monkeypatch, caplog):
+    seen = {}
+    class YDL(_FakeYDL):
+        def __init__(self, opts):
+            seen.update(opts)
+        def extract_info(self, query, download=False):
+            return {"entries": []}
+    monkeypatch.setattr("src.core.search_engine.yt_dlp.YoutubeDL", YDL)
+    SearchEngine.search(Platform.YOUTUBE, "not-a-search-history-unique-keyword")
+    assert seen["socket_timeout"] == 8
+    assert seen["retries"] == 1
+    assert "not-a-search-history-unique-keyword" not in caplog.text

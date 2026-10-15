@@ -29,6 +29,16 @@ interface AppState {
   searchQuery: string;
   searchMode: SearchMode;
   netSearchId: string;
+  netQuery: string;
+  netPlatform: string;
+  netSubmittedQuery: string;
+  netSubmittedPlatform: string;
+  netCancelled: boolean;
+  netAddingUrls: string[];
+  setNetQuery: (query: string) => void;
+  setNetPlatform: (platform: string) => void;
+  setNetAddPending: (url: string, pending: boolean) => void;
+  cancelNetSearch: () => void;
   netSearching: boolean;
   netResults: NetSearchItem[];
   netError: string;
@@ -43,7 +53,7 @@ interface AppState {
   setFilter: (filter: ListFilter) => void;
   setSearchQuery: (query: string) => void;
   setSearchMode: (mode: SearchMode) => void;
-  startNetSearch: (searchId: string) => void;
+  startNetSearch: (searchId: string, query?: string, platform?: string) => void;
   failNetSearch: (searchId: string, error: string) => void;
   clearNetSearch: () => void;
   requestAddFocus: () => void;
@@ -137,6 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   searchQuery: "",
   searchMode: "filter",
   netSearchId: "",
+  netQuery: "", netPlatform: "youtube", netSubmittedQuery: "", netSubmittedPlatform: "youtube", netCancelled: false, netAddingUrls: [],
   netSearching: false,
   netResults: [],
   netError: "",
@@ -152,14 +163,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFilter: (filter) => set({ filter }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setSearchMode: (searchMode) => set({ searchMode }),
-  startNetSearch: (netSearchId) =>
-    set({ netSearchId, netSearching: true, netResults: [], netError: "" }),
+  setNetQuery: (netQuery) => set({ netQuery }),
+  setNetPlatform: (netPlatform) => set({ netPlatform }),
+  setNetAddPending: (url, pending) => set({ netAddingUrls: pending ? [...new Set([...get().netAddingUrls, url])] : get().netAddingUrls.filter(v => v !== url) }),
+  cancelNetSearch: () => set({ netSearchId: "", netSearching: false, netError: "", netCancelled: true }),
+  startNetSearch: (netSearchId, query, platform) =>
+    set({ netSearchId, netSearching: true, netResults: [], netError: "", netCancelled: false, netSubmittedQuery: query ?? get().netQuery.trim(), netSubmittedPlatform: platform ?? get().netPlatform }),
   failNetSearch: (netSearchId, netError) => {
     if (netSearchId !== get().netSearchId) return;
     set({ netSearching: false, netResults: [], netError });
   },
   clearNetSearch: () =>
-    set({ netSearchId: "", netSearching: false, netResults: [], netError: "" }),
+    set({ netSearchId: "", netSearching: false, netResults: [], netError: "", netCancelled: false, netSubmittedQuery: "" }),
   requestAddFocus: () => set({ addFocusSignal: get().addFocusSignal + 1 }),
   setPendingAddUrls: (pendingAddUrls, loginMode = "auto") => set({ pendingAddUrls, pendingAddLoginMode: pendingAddUrls ? loginMode : "auto" }),
   setLogDir: (logDir) => set({ logDir }),

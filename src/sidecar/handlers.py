@@ -168,6 +168,7 @@ class HandlerContext:
         self._parse_lock = threading.Lock()
         self._parse_closing = False
         self._search_jobs: set[str] = set()
+        self._search_controls: Dict[str, tuple[str, threading.Event]] = {}
         self._search_lock = threading.Lock()
         self.engine_updates = ytdlp_updater.EngineUpdateService(paths)
         # 准入锁只保护计数和冻结状态，不跨解析、网络或下载执行持有。
@@ -228,6 +229,7 @@ def dispatch(ctx: HandlerContext, method: str, payload: Dict[str, Any]) -> Dict[
         Method.DOWNLOAD_PARSE_URLS.value: _parse_urls,
         Method.DOWNLOAD_CANCEL_PARSE.value: _cancel_parse,
         Method.SEARCH_QUERY.value: _search_query,
+        Method.SEARCH_CANCEL.value: _cancel_search,
         Method.HISTORY_LIST.value: _history_list,
         Method.HISTORY_DELETE.value: _history_delete,
         Method.HISTORY_CLEAR.value: _history_clear,
@@ -988,7 +990,7 @@ def _cancel_parse(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
 
 def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
     query = str(payload.get("query") or "").strip()
-    if not query:
+    if not query or len(query) > 300:
         raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少 query")
     platform_name = str(payload.get("platform") or "youtube").strip().lower()
     try:
@@ -1009,14 +1011,19 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         payload.get("searchId") or payload.get("search_id") or ""
     ).strip()
     search_id = requested_search_id or str(uuid.uuid4())
+    if len(search_id) > 160:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "searchId过长")
     # 客户端可以重复 searchId；内部句柄必须逐次独立，防止较快任务遮住旧任务。
     job_id = str(uuid.uuid4())
+    cancelled = threading.Event()
 
     def worker():
         try:
             videos = SearchEngine.search(
-                platform, query, max_results=max_results, proxy=proxy
+                platform, query, max_results=max_results, proxy=proxy, cancelled=cancelled.is_set
             )
+            if cancelled.is_set():
+                return
             ctx.emit_event(
                 EventName.SEARCH_RESULT.value,
                 {
@@ -1038,7 +1045,9 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
                 },
             )
         except Exception as exc:
-            logger.warning("搜索失败: %s", exc)
+            logger.warning("搜索失败: %s", type(exc).__name__)
+            if cancelled.is_set():
+                return
             ctx.emit_event(
                 EventName.SEARCH_RESULT.value,
                 {
@@ -1052,16 +1061,31 @@ def _search_query(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
         finally:
             with ctx._search_lock:
                 ctx._search_jobs.discard(job_id)
+                ctx._search_controls.pop(job_id, None)
 
     with ctx._search_lock:
         ctx._search_jobs.add(job_id)
+        ctx._search_controls[job_id] = (search_id, cancelled)
     try:
         threading.Thread(target=worker, daemon=True).start()
     except Exception:
         with ctx._search_lock:
             ctx._search_jobs.discard(job_id)
+            ctx._search_controls.pop(job_id, None)
         raise
     return {"searchId": search_id}
+
+
+
+def _cancel_search(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:
+    search_id = str(payload.get("searchId") or "").strip()
+    if not search_id or len(search_id) > 160:
+        raise HandlerError(ErrorCode.INVALID_PARAMS, "缺少有效searchId")
+    with ctx._search_lock:
+        for owned_id, cancelled in ctx._search_controls.values():
+            if owned_id == search_id:
+                cancelled.set()
+    return {"ok": True}
 
 
 def _history_list(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any]:

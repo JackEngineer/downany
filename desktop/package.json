@@ -1,6 +1,6 @@
 {
   "name": "downany-desktop",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "private": true,
   "author": "Jack Lee",
   "description": "Downany · 百纳 desktop shell (Electron + Python Sidecar)",

@@ -6,7 +6,7 @@ import json
 import re
 import urllib.parse
 import urllib.request
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import yt_dlp
 
@@ -68,6 +68,7 @@ class SearchEngine:
         query: str,
         max_results: int,
         proxy: Optional[str],
+        cancelled: Optional[Callable[[], bool]] = None,
     ) -> List[VideoInfo]:
         limit = max(0, max_results)
         if limit == 0:
@@ -82,6 +83,8 @@ class SearchEngine:
         videos: List[VideoInfo] = []
         page_count = (limit + 19) // 20
         for page in range(1, page_count + 1):
+            if cancelled and cancelled():
+                raise SearchError("search_cancelled")
             params = urllib.parse.urlencode(
                 {
                     "Search_key": query,
@@ -111,6 +114,8 @@ class SearchEngine:
                 payload = json.loads(
                     response.read().decode("utf-8", errors="replace")
                 )
+            if cancelled and cancelled():
+                raise SearchError("search_cancelled")
             if not isinstance(payload, dict) or str(payload.get("code")) != "0":
                 message = (
                     str(payload.get("message") or "Bilibili 搜索失败")
@@ -170,19 +175,25 @@ class SearchEngine:
         query: str,
         max_results: int = 20,
         proxy: Optional[str] = None,
+        cancelled: Optional[Callable[[], bool]] = None,
     ) -> List[VideoInfo]:
         if not SearchEngine.supports(platform):
             raise SearchError(f"平台 {platform.value} 不支持搜索")
 
+        def check_cancelled(_info=None, *, incomplete=False):
+            if cancelled and cancelled():
+                raise SearchError("search_cancelled")
+            return None
+
         try:
+            check_cancelled()
             if platform == Platform.BILIBILI:
                 videos = SearchEngine._search_bilibili(
-                    query, max_results, proxy
+                    query, max_results, proxy, cancelled
                 )
                 logger.info(
-                    "搜索完成: %s - %s - 找到 %d 个结果",
+                    "搜索完成: %s - 找到 %d 个结果",
                     platform.value,
-                    query,
                     len(videos),
                 )
                 return videos
@@ -205,12 +216,17 @@ class SearchEngine:
                 "no_color": True,
                 "http_headers": headers,
                 "remote_components": REMOTE_COMPONENTS,
+                "socket_timeout": 8,
+                "retries": 1,
+                "extractor_retries": 1,
+                "match_filter": check_cancelled,
             }
             if proxy:
                 ydl_opts["proxy"] = proxy
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 result = ydl.extract_info(search_query, download=False)
 
+            check_cancelled()
             if not result or "entries" not in result:
                 return []
 
@@ -237,11 +253,11 @@ class SearchEngine:
                     continue
                 videos.append(video_info)
 
-            logger.info(f"搜索完成: {platform.value} - {query} - 找到 {len(videos)} 个结果")
+            logger.info("搜索完成: %s - 找到 %d 个结果", platform.value, len(videos))
             return videos
 
         except SearchError:
             raise
         except Exception as e:
-            logger.error(f"搜索失败: {str(e)}")
+            logger.error("搜索失败: %s", type(e).__name__)
             raise SearchError(str(e)) from e

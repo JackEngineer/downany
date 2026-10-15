@@ -1,159 +1,23 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { NetSearchPanel } from "./NetSearchPanel";
-import type { NetSearchItem } from "../lib/types";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { DesktopApi } from "../../electron/preload";
+import { NetSearchPanel, safeSearchError } from "./NetSearchPanel";
 import { useAppStore } from "../store/appStore";
-
-const requestMock = vi.fn();
-
-afterEach(() => cleanup());
-
-function item(partial: Partial<NetSearchItem> = {}): NetSearchItem {
-  return {
-    url: "https://www.youtube.com/watch?v=a",
-    title: "lofi mix",
-    duration: 61,
-    thumbnail_url: "",
-    uploader: "someone",
-    platform: "youtube",
-    ...partial,
-  };
-}
-
-describe("NetSearchPanel", () => {
-  beforeEach(() => {
-    requestMock.mockReset();
-    requestMock.mockResolvedValue({ taskIds: ["t1"], tasks: [], settings: null });
-    (window as unknown as { api: unknown }).api = {
-      request: requestMock,
-      onEvent: () => () => undefined,
-      onState: () => () => undefined,
-      getConnectionState: async () => "connected",
-    };
-    useAppStore.setState({
-      searchMode: "network",
-      netSearchId: "s-1",
-      netSearching: false,
-      netResults: [],
-      netError: "",
-      tasks: [],
-      toasts: [],
-    });
-  });
-
-  it("filter 模式下不渲染", () => {
-    useAppStore.setState({ searchMode: "filter" });
-    const { container } = render(<NetSearchPanel />);
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("提供常驻平台、关键词和明确搜索动作", () => {
-    render(<NetSearchPanel />);
-
-    expect(screen.getByRole("heading", { name: "网络视频" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "搜索平台" })).toHaveValue("youtube");
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "YouTube",
-      "Bilibili",
-    ]);
-    expect(screen.getByRole("searchbox", { name: "搜索网络视频" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "搜索" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "返回下载列表" })).toBeInTheDocument();
-  });
-
-  it("进入网络搜索后直接聚焦关键词输入框", async () => {
-    render(<NetSearchPanel />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("searchbox", { name: "搜索网络视频" })).toHaveFocus();
-    });
-  });
-
-  it("在发请求前登记 searchId，不丢失立即返回的结果", async () => {
-    requestMock.mockImplementationOnce(async (method, payload) => {
-      expect(method).toBe("search.query");
-      const searchId = String((payload as { searchId?: string }).searchId || "");
-      expect(searchId).not.toBe("");
-      useAppStore.getState().applyEvent({
-        event: "search.result",
-        payload: {
-          searchId,
-          ok: true,
-          items: [item({ title: "即时结果" })],
-        },
-      });
-      return { searchId };
-    });
-    useAppStore.setState({ searchQuery: "本地任务", netSearchId: "", netResults: [] });
-    render(<NetSearchPanel />);
-
-    fireEvent.change(screen.getByRole("searchbox", { name: "搜索网络视频" }), {
-      target: { value: "AI" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
-
-    expect(await screen.findByText("即时结果")).toBeInTheDocument();
-    expect(useAppStore.getState().netSearching).toBe(false);
-    expect(useAppStore.getState().searchQuery).toBe("本地任务");
-  });
-
-  it("渲染搜索结果与时长/上传者元信息", () => {
-    useAppStore.setState({ netResults: [item()] });
-    render(<NetSearchPanel />);
-    expect(screen.getByText("lofi mix")).toBeInTheDocument();
-    expect(screen.getByText(/someone · 1:01 · YouTube/)).toBeInTheDocument();
-    expect(screen.getByText("1 个结果")).toBeInTheDocument();
-  });
-
-  it("搜索中与错误状态的提示", () => {
-    useAppStore.setState({ netSearching: true });
-    const { rerender } = render(<NetSearchPanel />);
-    expect(screen.getByText("正在搜索…")).toBeInTheDocument();
-
-    useAppStore.setState({ netSearching: false, netError: "网络不可达" });
-    rerender(<NetSearchPanel />);
-    expect(screen.getByText(/网络不可达/)).toBeInTheDocument();
-  });
-
-  it("点击下载将结果入队", async () => {
-    const target = item();
-    useAppStore.setState({ netResults: [target] });
-    render(<NetSearchPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "下载" }));
-    await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith(
-        "download.createTasks",
-        expect.objectContaining({
-          urls: [target.url],
-          items: [
-            {
-              url: target.url,
-              title: target.title,
-              thumbnail_url: target.thumbnail_url,
-            },
-          ],
-        }),
-      );
-    });
-  });
-
-  it("清除结果重置搜索状态", () => {
-    useAppStore.setState({ netResults: [item()] });
-    render(<NetSearchPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "清除结果" }));
-    expect(useAppStore.getState().netSearchId).toBe("");
-    expect(useAppStore.getState().netResults).toEqual([]);
-  });
-
-  it("返回下载列表时退出网络搜索并清理结果", () => {
-    useAppStore.setState({ netResults: [item()] });
-    render(<NetSearchPanel />);
-
-    fireEvent.click(screen.getByRole("button", { name: "返回下载列表" }));
-
-    expect(useAppStore.getState().searchMode).toBe("filter");
-    expect(useAppStore.getState().netResults).toEqual([]);
-  });
-});
+import { taskFixture } from "../test/taskFixture";
+const request=vi.fn(),open=vi.fn();const item={url:"https://www.youtube.com/watch?v=a",title:"Blender animation",duration:61,thumbnail_url:"",uploader:"Open Studio",platform:"youtube"};
+beforeEach(()=>{request.mockReset().mockImplementation(async m=>m==="settings.checkDownloadDir"?{ready:true}:m==="app.getSnapshot"?{tasks:[],settings:null}:{taskIds:["t"]});open.mockReset().mockResolvedValue(undefined);window.api={request,openExternal:open,readClipboardText:vi.fn(),onEvent:()=>()=>undefined} as unknown as DesktopApi;useAppStore.setState({connection:"connected",searchMode:"network",netSearchId:"",netSearching:false,netResults:[],netError:"",netQuery:"",netPlatform:"youtube",netSubmittedQuery:"",netSubmittedPlatform:"youtube",netCancelled:false,netAddingUrls:[],tasks:[],toasts:[]});});
+afterEach(()=>{cleanup();vi.restoreAllMocks()});
+function results(id="search",items=[item]){useAppStore.setState({netSearchId:id,netResults:items,netSubmittedQuery:"Blender"});}
+it("has one heading and form, two real platforms, and no duplicate return controls",()=>{render(<NetSearchPanel/>);expect(screen.getAllByRole("heading")).toHaveLength(1);expect(screen.getByRole("heading")).toHaveTextContent("搜索视频");expect(screen.getAllByRole("search")).toHaveLength(1);expect(screen.getAllByRole("option").map(o=>o.textContent)).toEqual(["YouTube","Bilibili"]);expect(screen.queryByRole("button",{name:/返回/})).toBeNull();expect(screen.getByRole("button",{name:"搜索"})).toBeDisabled();expect(window.api.readClipboardText).not.toHaveBeenCalled();});
+it("does not render in task mode",()=>{useAppStore.setState({searchMode:"filter"});expect(render(<NetSearchPanel/>).container).toBeEmptyDOMElement();});
+it("focuses the input and supports Cmd+F",async()=>{render(<NetSearchPanel/>);await waitFor(()=>expect(screen.getByRole("searchbox")).toHaveFocus());screen.getByRole("button",{name:"搜索"}).blur();fireEvent.keyDown(window,{key:"f",metaKey:true});expect(screen.getByRole("searchbox")).toHaveFocus();});
+it("registers request identity before a synchronous search result",async()=>{request.mockImplementation(async(m,p)=>{if(m==="search.query"){useAppStore.getState().applyEvent({event:"search.result",payload:{searchId:p.searchId,ok:true,items:[item]}});return {searchId:p.searchId}}return {}});render(<NetSearchPanel/>);fireEvent.change(screen.getByRole("searchbox"),{target:{value:"Blender"}});fireEvent.submit(screen.getByRole("search"));expect(await screen.findByText(item.title)).toBeInTheDocument();expect(useAppStore.getState().netSearching).toBe(false);});
+it("cancels the old request and ignores a late result when the query changes",async()=>{render(<NetSearchPanel/>);fireEvent.change(screen.getByRole("searchbox"),{target:{value:"Old"}});fireEvent.submit(screen.getByRole("search"));const old=useAppStore.getState().netSearchId;fireEvent.change(screen.getByRole("searchbox"),{target:{value:"New"}});expect(request).toHaveBeenCalledWith("search.cancel",{searchId:old});fireEvent.submit(screen.getByRole("search"));const latest=useAppStore.getState().netSearchId;act(()=>useAppStore.getState().applyEvent({event:"search.result",payload:{searchId:old,ok:true,items:[{...item,title:"late old"}]}}));expect(screen.queryByText("late old")).toBeNull();act(()=>useAppStore.getState().applyEvent({event:"search.result",payload:{searchId:latest,ok:true,items:[item]}}));expect(await screen.findByText(item.title)).toBeInTheDocument();});
+it("explicit cancel is immediate and late failures cannot replace the state",()=>{render(<NetSearchPanel/>);fireEvent.change(screen.getByRole("searchbox"),{target:{value:"Blender"}});fireEvent.submit(screen.getByRole("search"));const id=useAppStore.getState().netSearchId;fireEvent.click(screen.getByRole("button",{name:"取消搜索"}));act(()=>useAppStore.getState().applyEvent({event:"search.result",payload:{searchId:id,ok:false,error:"late private secret"}}));expect(screen.getByText(/已取消搜索/)).toBeInTheDocument();expect(screen.queryByText(/secret/)).toBeNull();});
+it("keeps draft, platform and results across unmount without writing search history",()=>{useAppStore.setState({netQuery:"Blender",netPlatform:"bilibili"});results();const v=render(<NetSearchPanel/>);v.unmount();render(<NetSearchPanel/>);expect(screen.getByRole("searchbox")).toHaveValue("Blender");expect(screen.getByRole("combobox")).toHaveValue("bilibili");expect(screen.getByText(item.title)).toBeInTheDocument();expect(request).not.toHaveBeenCalled();});
+it("shows metadata and opens a real webpage instead of embedding fake playback",async()=>{results();const v=render(<NetSearchPanel/>);expect(screen.getByText("1:01")).toBeInTheDocument();expect(screen.getByText(/Open Studio · YouTube/)).toBeInTheDocument();fireEvent.click(screen.getByRole("button",{name:"打开原网页"}));await waitFor(()=>expect(open).toHaveBeenCalledWith(item.url));expect(v.container.querySelector('video, iframe')).toBeNull();});
+it("prevents duplicate enqueue while adding and keeps the lock across view changes",async()=>{let resolve!:(r:{taskIds:string[]})=>void;request.mockImplementation(m=>m==="download.createTasks"?new Promise(r=>{resolve=r}):Promise.resolve(m==="settings.checkDownloadDir"?{ready:true}:{tasks:[],settings:null}));results();const v=render(<NetSearchPanel/>);const b=screen.getByRole("button",{name:"加入下载"});fireEvent.click(b);fireEvent.click(b);await waitFor(()=>expect(request.mock.calls.filter(c=>c[0]==="download.createTasks")).toHaveLength(1));v.unmount();render(<NetSearchPanel/>);expect(screen.getByRole("button",{name:"正在加入…"})).toBeDisabled();await act(async()=>resolve({taskIds:["new"]}));await waitFor(()=>expect(useAppStore.getState().netAddingUrls).toEqual([]));});
+it("marks existing queued results and does not create duplicates",()=>{useAppStore.setState({tasks:[taskFixture({id:"a",url:item.url})]});results();render(<NetSearchPanel/>);expect(screen.getByRole("button",{name:"已在任务中"})).toBeDisabled();expect(request).not.toHaveBeenCalled();});
+it("displays empty result and a safe error with explicit retry",async()=>{results("s",[]);const v=render(<NetSearchPanel/>);expect(screen.getByText(/没有找到相关视频/)).toBeInTheDocument();act(()=>useAppStore.setState({netError:"timeout https://user:secret@host/path",netQuery:"Blender"}));v.rerender(<NetSearchPanel/>);expect(screen.getByRole("alert")).toHaveTextContent("搜索超时");expect(v.container.textContent).not.toContain("secret");fireEvent.click(screen.getByRole("button",{name:"重试搜索"}));await waitFor(()=>expect(request).toHaveBeenCalledWith("search.query",expect.objectContaining({query:"Blender"})));expect(safeSearchError("403")).toContain("限制");});
+it("clearing results preserves the keyword and does not write search history",()=>{useAppStore.setState({netQuery:"Blender"});results();render(<NetSearchPanel/>);fireEvent.click(screen.getByRole("button",{name:"清除结果"}));expect(useAppStore.getState().netResults).toEqual([]);expect(screen.getByRole("searchbox")).toHaveValue("Blender");expect(request).not.toHaveBeenCalled();});
