@@ -31,10 +31,10 @@ function aggregateProgress(tasks: TaskSnapshot[]): {
   return { completed, total, percent };
 }
 
-export function PlaylistGroupCard({ tasks, queueControls }: { tasks: TaskSnapshot[]; queueControls?: ReactNode }) {
+export function PlaylistGroupCard({ tasks, queueControls, initiallyExpanded = true, compactActions = false }: { tasks: TaskSnapshot[]; queueControls?: ReactNode; initiallyExpanded?: boolean; compactActions?: boolean }) {
   const locale = useLocale();
   const pushToast = useAppStore((s) => s.pushToast);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -100,26 +100,8 @@ export function PlaylistGroupCard({ tasks, queueControls }: { tasks: TaskSnapsho
     }
   };
 
-  return (
-    <li className="playlist-group">
-      <div className="playlist-group-header">
-        <button
-          type="button"
-          className="playlist-group-toggle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          <span className="playlist-group-chevron" aria-hidden>
-            <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
-          </span>
-          <div className="playlist-group-heading">
-            <strong className="playlist-group-title">{title}</strong>
-            <span className="playlist-group-meta muted">
-              {t("group.progress", locale, { completed, total, percent })}
-            </span>
-          </div>
-        </button>
-        <div className="playlist-group-actions">
+  const groupActions = <>
+
           {queueControls}
           {hasRunning ? (
             <button
@@ -171,6 +153,28 @@ export function PlaylistGroupCard({ tasks, queueControls }: { tasks: TaskSnapsho
               {t("action.delete", locale)}
             </button>
           ) : null}
+
+  </>;
+  return (
+    <li className="playlist-group">
+      <div className="playlist-group-header">
+        <button
+          type="button"
+          className="playlist-group-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <span className="playlist-group-chevron" aria-hidden>
+            <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
+          </span>
+          <div className="playlist-group-heading">
+            <strong className="playlist-group-title">{title}</strong>
+            <span className="playlist-group-meta muted">
+              {t("group.progress", locale, { completed, total, percent })}
+            </span>
+          </div>
+        </button>
+        <div className="playlist-group-actions">{compactActions ? <details className="wb-group-menu"><summary aria-label={`更多合集操作 ${title}`} title="更多合集操作"><Icon name="more" size={18}/></summary><div className="wb-group-menu-panel">{groupActions}</div></details> : groupActions}
         </div>
       </div>
       <div className="playlist-group-progress" aria-hidden>

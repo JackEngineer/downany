@@ -18,7 +18,7 @@ it("sends global server order, resets pagination, and keeps selection by ID", as
   mocks.request.mockImplementation(async (_method, payload) => ({ items: payload.sort_order === "newest" ? [b, a] : [a, b] }));
   const { container } = render(<HistorySection />);
   await screen.findByText("记录 A");
-  const checkbox = () => within(screen.getByText("记录 A").closest("label")!).getByRole("checkbox");
+  const checkbox = () => within(screen.getByText("记录 A").closest(".history-row")!).getByRole("checkbox");
   fireEvent.click(checkbox());
   expect(checkbox()).toBeChecked();
   act(() => useAppStore.getState().setSortOrder("oldest"));

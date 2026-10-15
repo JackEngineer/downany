@@ -1,44 +1,4 @@
+import { useEffect, useRef } from "react";
 import { t, useLocale } from "../i18n";
-
-interface ConfirmDialogProps {
-  open: boolean;
-  title: string;
-  message: string;
-  confirmLabel?: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-export function ConfirmDialog({
-  open,
-  title,
-  message,
-  confirmLabel,
-  onConfirm,
-  onCancel,
-}: ConfirmDialogProps) {
-  const locale = useLocale();
-  if (!open) return null;
-  return (
-    <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className="dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="confirm-title">{title}</h2>
-        <p>{message}</p>
-        <div className="dialog-actions">
-          <button type="button" onClick={onCancel}>
-            {t("action.cancel", locale)}
-          </button>
-          <button type="button" className="danger" onClick={onConfirm}>
-            {confirmLabel || t("action.confirm", locale)}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+interface ConfirmDialogProps {open:boolean;title:string;message:string;confirmLabel?:string;busy?:boolean;onConfirm:()=>void;onCancel:()=>void;}
+export function ConfirmDialog({open,title,message,confirmLabel,busy=false,onConfirm,onCancel}:ConfirmDialogProps){const locale=useLocale(),root=useRef<HTMLDivElement>(null),cancel=useRef<HTMLButtonElement>(null);useEffect(()=>{if(!open)return;const previous=document.activeElement as HTMLElement;cancel.current?.focus();return()=>{if(previous?.isConnected)previous.focus();};},[open]);if(!open)return null;return <div className="dialog-backdrop" role="presentation" onClick={()=>{if(!busy)onCancel();}}><div ref={root} className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message" onClick={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();if(!busy)onCancel();}if(e.key==="Tab"){const nodes=Array.from(root.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}}><h2 id="confirm-title">{title}</h2><p id="confirm-message">{message}</p><div className="dialog-actions"><button ref={cancel} type="button" disabled={busy} onClick={onCancel}>{t("action.cancel",locale)}</button><button type="button" className="danger" disabled={busy} onClick={onConfirm}>{busy?"正在处理…":confirmLabel||t("action.confirm",locale)}</button></div></div></div>}

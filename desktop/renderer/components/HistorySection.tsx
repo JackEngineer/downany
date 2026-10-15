@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "./ConfirmDialog";
 import { openPath, request } from "../lib/api";
-import { platformLabel } from "../lib/format";
+import { sourceName } from "../lib/workbenchPresentation";
 import type { HistoryItem } from "../lib/types";
 import { useAppStore } from "../store/appStore";
 
@@ -23,6 +23,9 @@ export function HistorySection() {
   const [hasMore, setHasMore] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmSelected, setConfirmSelected] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deletionLock = useRef(false);
   const queryRef = useRef(effectiveQuery);
   const statusRef = useRef(status);
   queryRef.current = effectiveQuery;
@@ -80,18 +83,20 @@ export function HistorySection() {
 
   const deleteSelected = async () => {
     const ids = [...selected];
-    if (ids.length === 0) return;
+    if (ids.length === 0 || deletionLock.current) return;
+    deletionLock.current = true; setDeleting(true);
     try {
       await request("history.delete", { ids });
       setSelected(new Set());
       pushToast({ kind: "success", title: `已删除 ${ids.length} 条` });
-      await fetchPage(0, true);
-    } catch (err) {
-      pushToast({ kind: "error", title: "删除失败", detail: String(err) });
-    }
+      await fetchPage(0, true); setConfirmSelected(false);
+    } catch {
+      pushToast({ kind: "error", title: "删除失败，请稍后重试。" });
+    } finally { deletionLock.current = false; setDeleting(false); }
   };
 
   const clearAll = async () => {
+    if (deletionLock.current) return; deletionLock.current = true; setDeleting(true);
     try {
       await request("history.clear", {});
       setSelected(new Set());
@@ -99,8 +104,8 @@ export function HistorySection() {
       setConfirmClear(false);
       await fetchPage(0, true);
     } catch (err) {
-      pushToast({ kind: "error", title: "清空失败", detail: String(err) });
-    }
+      pushToast({ kind: "error", title: "清空失败，请稍后重试。" });
+    } finally { deletionLock.current = false; setDeleting(false); }
   };
 
   const redownload = async (item: HistoryItem) => {
@@ -125,30 +130,27 @@ export function HistorySection() {
           <option value="failed">失败</option>
           <option value="cancelled">已取消</option>
         </select>
-        <button type="button" disabled={selected.size === 0} onClick={() => void deleteSelected()}>
-          删除{selected.size > 0 ? `（${selected.size}）` : ""}
-        </button>
-        <button type="button" className="danger" onClick={() => setConfirmClear(true)}>
-          清空历史
-        </button>
+        <details className="wb-view-menu"><summary aria-label="历史维护">维护</summary><div><button type="button" onClick={() => setConfirmClear(true)}>清空全部下载历史…</button><small>只删除历史记录，不删除下载文件</small></div></details>
       </div>
 
+      {selected.size > 0 && <div className="wb-selection-toolbar" role="toolbar" aria-label="已选历史操作"><strong>已选{selected.size}条</strong><button disabled={deleting} onClick={() => setConfirmSelected(true)}>删除选中记录…</button><button disabled={deleting} onClick={() => setSelected(new Set())}>取消选择</button></div>}
       {items.length === 0 && !loading ? (
         <p className="muted list-empty">暂无记录</p>
       ) : (
         <ul className="history-list">
           {items.map((item) => (
             <li key={item.id}>
-              <label className="history-row">
+              <div className="history-row">
                 <input
                   type="checkbox"
+                  aria-label={`选择历史 ${item.title}`}
                   checked={selected.has(item.id)}
                   onChange={() => toggle(item.id)}
                 />
                 <div className="grow">
                   <strong>{item.title}</strong>
                   <div className="muted">
-                    {platformLabel(item.platform)} · {item.status}
+                    {sourceName(item)} · {({completed:"已完成",failed:"下载失败",cancelled:"已取消"} as Record<string,string>)[item.status] || "状态待确认"}
                   </div>
                 </div>
                 <div className="card-actions">
@@ -161,7 +163,7 @@ export function HistorySection() {
                     </button>
                   )}
                 </div>
-              </label>
+              </div>
             </li>
           ))}
         </ul>
@@ -173,12 +175,14 @@ export function HistorySection() {
         </button>
       )}
 
+      <ConfirmDialog open={confirmSelected} title={`删除${selected.size}条选中历史？`} message="只删除选中的历史记录，不会删除下载文件或任务列表。此操作不可恢复。" busy={deleting} confirmLabel="删除选中记录" onCancel={() => { if (!deleting) setConfirmSelected(false); }} onConfirm={() => void deleteSelected()} />
       <ConfirmDialog
         open={confirmClear}
         title="清空历史？"
-        message="此操作不可恢复，将删除全部下载历史记录。"
+        message="将删除全部下载历史记录，包括当前搜索与筛选之外的记录。此操作不可恢复，但不会删除下载文件或任务列表。"
+        busy={deleting}
         confirmLabel="清空"
-        onCancel={() => setConfirmClear(false)}
+        onCancel={() => { if (!deleting) setConfirmClear(false); }}
         onConfirm={() => void clearAll()}
       />
     </div>
