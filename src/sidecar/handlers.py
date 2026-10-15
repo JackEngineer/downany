@@ -518,6 +518,38 @@ def _create_tasks(ctx: HandlerContext, payload: Dict[str, Any]) -> Dict[str, Any
             options = replace(options, login_mode=validate_login_mode(payload["login_mode"]))
         except ValueError as exc:
             raise HandlerError(ErrorCode.INVALID_PARAMS, str(exc)) from None
+    # Per-request overrides affect new tasks only; never persist global settings.
+    overrides = payload.get("task_options")
+    if overrides is not None:
+        allowed = {"output_path", "quality", "postprocessing", "download_subtitles", "filename_template"}
+        if not isinstance(overrides, dict) or set(overrides) - allowed:
+            raise HandlerError(ErrorCode.INVALID_PARAMS, "下载选项无效")
+        changes = {}
+        if "output_path" in overrides:
+            from pathlib import Path
+            value = overrides["output_path"]
+            if not isinstance(value, str) or not Path(value).is_absolute() or "\x00" in value:
+                raise HandlerError(ErrorCode.OUTPUT_PATH_INVALID, "请选择有效的保存位置")
+            changes["output_path"] = value
+        if "quality" in overrides:
+            if overrides["quality"] not in {"best", "1080p", "720p", "480p", "360p"}:
+                raise HandlerError(ErrorCode.INVALID_PARAMS, "画质选项无效")
+            changes["quality"] = overrides["quality"]
+        if "postprocessing" in overrides:
+            value = overrides["postprocessing"]
+            if value not in {"none", "mp4", "mp3"}:
+                raise HandlerError(ErrorCode.INVALID_PARAMS, "格式选项无效")
+            changes.update(postprocessing=value, postprocessing_pipeline=[], audio_only=value == "mp3", postprocess_script="")
+        if "download_subtitles" in overrides:
+            if type(overrides["download_subtitles"]) is not bool:
+                raise HandlerError(ErrorCode.INVALID_PARAMS, "字幕选项无效")
+            changes["download_subtitles"] = overrides["download_subtitles"]
+        if "filename_template" in overrides:
+            value = overrides["filename_template"]
+            if value not in {"", "%(title)s_%(upload_date)s.%(ext)s"}:
+                raise HandlerError(ErrorCode.INVALID_PARAMS, "命名选项无效")
+            changes["filename_template"] = value
+        options = replace(options, **changes)
     try:
         ensure_output_directory_ready(options.output_path)
     except OutputPathInvalid as exc:

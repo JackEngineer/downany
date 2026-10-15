@@ -803,3 +803,31 @@ def test_priority_update_reports_all_affected_group_members(tmp_path):
     assert result["task"]["id"] == "first"
     assert {task["id"] for task in result["tasks"]} == {"first", "second"}
     assert all(task["priority"] == 1 for task in result["tasks"])
+
+
+def test_new_download_task_options_are_scoped_and_persisted(tmp_path):
+    ctx, _ = _ctx(tmp_path)
+    before = ctx.config.to_dict()
+    target = str(tmp_path / "scoped-output")
+    result = dispatch(ctx, Method.DOWNLOAD_CREATE_TASKS.value, {
+        "urls": ["https://example.com/a"], "login_mode": "none",
+        "task_options": {"output_path": target, "quality": "720p", "postprocessing": "mp3", "download_subtitles": True, "filename_template": "%(title)s_%(upload_date)s.%(ext)s"},
+    })
+    task = ctx.manager.get_task(result["taskIds"][0])
+    assert task.options.output_path == target
+    assert task.options.audio_only and task.options.postprocessing == "mp3"
+    assert task.options.quality == "720p"
+    assert task.options.download_subtitles
+    assert task.options.login_mode == "none"
+    assert ctx.config.to_dict() == before
+
+
+@pytest.mark.parametrize("options", [
+    {"output_path": "relative"}, {"quality": "-bad"}, {"postprocessing": "script"},
+    {"filename_template": "../../bad"}, {"download_subtitles": "false"}, {"cookies_from_browser": "chrome"},
+])
+def test_new_download_rejects_invalid_overrides_before_creating_tasks(tmp_path, options):
+    ctx, _ = _ctx(tmp_path)
+    with pytest.raises(HandlerError):
+        dispatch(ctx, Method.DOWNLOAD_CREATE_TASKS.value, {"urls": ["https://example.com/a"], "task_options": options})
+    assert ctx.manager.get_snapshot() == []

@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
 import { t } from "../i18n";
-import { submitAddText } from "../lib/addFlow";
+
 import { refreshQueueAfterChange } from "../lib/refreshQueue";
 import { useDocumentTheme } from "../lib/documentTheme";
 import { useAppStore } from "../store/appStore";
-import { AddConfirmDialog } from "./AddConfirmDialog";
+
 import { ConnectionGate } from "./ConnectionGate";
 import { TaskWorkbench } from "./TaskWorkbench";
 import { ToastHost } from "./ToastHost";
@@ -33,7 +33,7 @@ export function Shell() {
       } else if ((e.key === "v" || e.key === "V") && !isEditableTarget(e.target)) {
         e.preventDefault();
         void window.api.readClipboardText().then((text) => {
-          if (text) void submitAddText(text);
+          if (text) useAppStore.getState().setPendingAddUrls([text]);
         });
       }
     };
@@ -52,7 +52,7 @@ export function Shell() {
         e.dataTransfer?.getData("text/uri-list") ||
         e.dataTransfer?.getData("text/plain") ||
         "";
-      if (text) void submitAddText(text);
+      if (text) useAppStore.getState().setPendingAddUrls([text]);
     };
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("drop", onDrop);
@@ -126,7 +126,6 @@ export function Shell() {
   return (
     <div className="window-shell" data-platform={window.api.platform}>
       <TaskWorkbench />
-      <AddConfirmDialog />
       <ToastHost />
     </div>
   );
