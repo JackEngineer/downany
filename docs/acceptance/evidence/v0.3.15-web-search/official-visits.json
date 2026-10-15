@@ -1,0 +1,19 @@
+[
+  {
+    "platform": "x",
+    "url": "https://x.com/search?q=Blender&src=typed_query&f=video",
+    "outcome": "ERR_HTTP_RESPONSE_CODE_FAILURE; web fetch 403; no authenticated session"
+  },
+  {
+    "platform": "douyin",
+    "url": "https://www.douyin.com/search/Blender?type=video",
+    "httpStatus": 200,
+    "outcome": "验证码中间页; normal result DOM not verified"
+  },
+  {
+    "platform": "kuaishou",
+    "url": "https://www.kuaishou.com/search/video?searchKey=Blender",
+    "httpStatus": 200,
+    "outcome": "site error JSON result=2; official homepage has same outcome; normal result DOM not verified"
+  }
+]

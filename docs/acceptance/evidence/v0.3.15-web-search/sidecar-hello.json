@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "payload": {
+    "app": "Downany",
+    "appVersion": "0.3.15"
+  },
+  "timestamp": "2026-10-15T13:31:16.405764+00:00"
+}

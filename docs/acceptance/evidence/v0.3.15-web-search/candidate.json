@@ -1,0 +1,25 @@
+{
+  "version": "0.3.15",
+  "sourceCommit": "53aa21a",
+  "baselineCommit": "76909cb",
+  "dmgBytes": 181494940,
+  "dmgSha256": "19f2b15f918e3ce5626e41740278d9b22e693fe232c063474ce737ac299ad67a",
+  "coreHashes": {
+    "Contents/MacOS/Downany": "d1383e07b3dd17b2783c3364a1df372403b6cc50c3372046f06bb85b92d12920",
+    "Contents/Resources/app.asar": "e51e6dc5575a8ac9bba2e3ce4a740beda6a66a562bb66466ef8392e48e310da0",
+    "Contents/Resources/sidecar/DownanySidecar/DownanySidecar": "67db932ff093e6796b02fb3757239222eaffa6e558c5b00324249dd547d8a159"
+  },
+  "sourceHashes": {
+    "desktop/package-lock.json": "d181d8d2eaa683f4bd6671c79f84588526c0834e41e7ffe15b1ea022116361b0",
+    "desktop/package.json": "ae91fd6f19b4e6beb878cfe399ae788bf9ab192c1a1f8d2f5269a8918117c01a",
+    "desktop/renderer/components/NetSearchPanel.test.tsx": "8816f0047ddbc0c2cd60646992449a11ee8254a1892ade35d09834716fe44b93",
+    "desktop/renderer/components/NetSearchPanel.tsx": "e9b97739e273cbce8c9f8355004950febd0ffed206ee607947adc2f209d1a0f3",
+    "desktop/renderer/lib/searchPlatforms.test.ts": "fa847fd97b7c02488759f7e547d05b81881da1ac186ec74502514a4ff9c0e140",
+    "desktop/renderer/lib/searchPlatforms.ts": "0e355859722bc225d115e8eb3ea340e3a55c0cbf5f1df59a812d432477a23ce7",
+    "desktop/renderer/styles/search-workspace.css": "fe4145a7dbf767f30909c63a044bf6e45f8ea00e8f327374cb679b038c84f759",
+    "src/sidecar/protocol.py": "cbb3364a883781013906f24a69c32f0dd9f66749afa5ed63ee727b2512f31054",
+    "tests/sidecar/test_protocol.py": "11bc3d21ca70f0e94281d8bd1ccaa2a80edbf442f378f04ffe40a4a32ff8e844"
+  },
+  "installed": false,
+  "existingInstalledVersion": "0.3.14"
+}

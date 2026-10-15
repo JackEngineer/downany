@@ -1,0 +1,13 @@
+{
+  "queueCount": 48,
+  "historyCount": 41,
+  "existingFiles": 33,
+  "allQueueFieldsUnchanged": true,
+  "allHistoryFieldsUnchanged": true,
+  "configBytesUnchanged": true,
+  "existingFileHashesUnchanged": true,
+  "installedAppUnchanged": true,
+  "installedVersion": "0.3.14",
+  "dailyConnection": "connected",
+  "passed": true
+}
