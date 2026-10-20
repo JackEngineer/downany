@@ -4,7 +4,7 @@
 
 Downany · 百纳是 macOS / Windows 视频下载应用，唯一产品主线为 **Electron + Python Sidecar + yt-dlp**。不再引入已删除的 PyQt、SwiftUI 或 `legacy/` 旁线。
 
-- 本检出桌面端与 Sidecar 版本为 `0.3.2`，Chrome 扩展独立版本为 `0.9.2`。分别以 `desktop/package.json`、`src/sidecar/protocol.py` 和 `browser-extension/manifest.json` 为准；根目录 `package.json` 的版本不是应用发行版本。
+- 本检出桌面端与 Sidecar 版本为 `0.3.17`，Chrome 扩展独立版本为 `0.9.4`。分别以 `desktop/package.json`、`src/sidecar/protocol.py` 和 `browser-extension/manifest.json` 为准；根目录 `package.json` 的版本不是应用发行版本。
 - 2026-10-10 文档核对时，公开稳定版为 [v0.3.2](https://github.com/JackEngineer/downany/releases/tag/v0.3.2)，包含双平台 cloud-only 安装包与扩展 `0.9.2`。公开状态以 [GitHub Releases](https://github.com/JackEngineer/downany/releases) 为准，不根据旧验收文件或本地版本推断 Latest。
 - 当前变化见 [v0.3.2 发布说明](docs/RELEASE-NOTES-0.3.2.md)；[发布准备记录](docs/acceptance/v0.3.2-release-readiness.md) 保留该轮预检与历史边界，不替代公开发行核验。[发布指南](docs/RELEASE.md) 保留 v0.3.0 双平台发行基线；[v0.3.1 Mac 候选说明](docs/RELEASE-NOTES-0.3.1-MAC-CANDIDATE.md) 与 [Windows 交接](docs/WINDOWS-0.3.1-HANDOFF.md) 记录该轮候选范围，不代表此后发行状态。当前发行的已知限制以对应 Release 说明为准；旧包哈希、扩展版本及未执行项不能套用到新包。
 

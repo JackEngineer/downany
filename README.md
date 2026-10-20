@@ -2,6 +2,12 @@
 
 面向 macOS 与 Windows 的视频下载应用。粘贴链接、选择合集中的视频，或从浏览器发送检测到的媒体，再在桌面端管理下载、字幕和历史记录。产品主线为 **Electron + React + Python Sidecar + yt-dlp**。
 
+## 最新源码与公开下载
+
+2026-10-20：源码已整合本地 Mac 开发进度，版本标识为 **0.3.17**。包含统一品牌、任务/队列/合集/历史/搜索导航、本地媒体预览与保留原文件的导出、显式登录策略，以及 Dailymotion 原生分页搜索。首次无任务和筛选无匹配的提示已在最新源码区分；该空态修正尚未重新打包安装。
+
+公开可下载版本仍以 GitHub Releases 为准；本次只同步源码和官网，不发布新的安装包。Dailymotion 搜索真实返回已验证，但所选外站媒体下载曾返回 `access_denied`；X、抖音、快手原生搜索尚未通过，现有入口是浏览器搜索和手动导入。完整边界见 [品牌与安装验收](docs/acceptance/v0.3.17-brand.md)、[原生搜索候选](docs/acceptance/v0.3.16-native-search.md) 和 [设计基线](DESIGN.md)。
+
 ## 版本与下载
 
 截至 **2026-10-10**，最新正式版为 [Downany v0.3.2](https://github.com/JackEngineer/downany/releases/tag/v0.3.2)，同时提供 Apple Silicon Mac、Windows x64 安装包与 Chrome 扩展 `0.9.2`。
@@ -9,7 +15,7 @@
 | 用途 | 版本与入口 |
 | --- | --- |
 | 安装使用 | [v0.3.2 正式版](https://github.com/JackEngineer/downany/releases/tag/v0.3.2)；后续版本见 [GitHub Releases](https://github.com/JackEngineer/downany/releases) |
-| 当前检出源码 | 桌面端与 Sidecar 为 `0.3.2`，Chrome 扩展为 `0.9.2`；分别以 `desktop/package.json`、`src/sidecar/protocol.py` 与 `browser-extension/manifest.json` 为准 |
+| 当前检出源码 | 桌面端与 Sidecar 为 `0.3.17`，Chrome 扩展为 `0.9.4`；分别以 `desktop/package.json`、`src/sidecar/protocol.py` 与 `browser-extension/manifest.json` 为准 |
 | 当前版本说明 | [v0.3.2 发布说明](docs/RELEASE-NOTES-0.3.2.md)；[发布准备记录](docs/acceptance/v0.3.2-release-readiness.md) 保留该轮预检与历史候选边界，公开状态以 Release 为准 |
 | 历史基线 | [v0.3.0 发布说明](docs/RELEASE-NOTES-0.3.0.md) 与 [公开发布验收](docs/acceptance/v0.3.0-public-release.md) |
 | 历史候选 | [v0.3.1 Mac 候选说明](docs/RELEASE-NOTES-0.3.1-MAC-CANDIDATE.md)、[验收记录](docs/acceptance/v0.3.1-acceptance.md)、[Windows 交接](docs/WINDOWS-0.3.1-HANDOFF.md)；结果只适用于各记录对应的源码和安装包 |

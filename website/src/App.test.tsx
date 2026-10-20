@@ -34,6 +34,9 @@ describe("App content contract", () => {
         expect(link).toHaveAttribute("data-release-source", "fallback");
       }
       expect(screen.getByText("可下载版本 v0.3.2")).toBeVisible();
+      expect(screen.getByRole("heading", { name: "最近的开发进度" })).toBeVisible();
+      expect(screen.getByText("0.3.17 开发版 · 2026 年 10 月")).toBeVisible();
+      expect(screen.queryAllByRole("link").some(link => link.getAttribute("href")?.includes("/download/v0.3.17/"))).toBe(false);
     });
   });
 
@@ -82,7 +85,7 @@ describe("App content contract", () => {
     ).toBeVisible();
     expect(screen.queryByText("随下一版本提供。")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("img", { name: "Downany 主窗口：粘贴链接、网页识别和下载列表" })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Downany Mac 开发版：统一导航、本地媒体预览和任务列表" })).toHaveAttribute(
       "src",
       "/assets/downany-app-preview.png",
     );

@@ -151,12 +151,12 @@ describe("Faq", () => {
     first.focus();
     await user.keyboard("{Enter}");
     expect(first).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/支持识别 YouTube、Bilibili、抖音/)).toBeVisible();
+    expect(screen.getByText(/YouTube、Bilibili 等平台提供视频识别入口/)).toBeVisible();
 
     await user.click(second);
     expect(first).toHaveAttribute("aria-expanded", "false");
     expect(second).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByText(/支持识别 YouTube、Bilibili、抖音/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/YouTube、Bilibili 等平台提供视频识别入口/)).not.toBeInTheDocument();
     expect(screen.getByText(/Downloads\/Downany/)).toBeVisible();
 
     await user.click(second);

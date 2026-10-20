@@ -1,9 +1,9 @@
 :root {
   color-scheme: dark;
 
-  --color-surface-window: #0b0d10;
-  --color-surface-chrome: #101318;
-  --color-surface-raised: #15191f;
+  --color-surface-window: #202321;
+  --color-surface-chrome: #252825;
+  --color-surface-raised: #2d312d;
   --color-surface-control: rgba(255, 255, 255, 0.035);
   --color-surface-control-hover: rgba(255, 255, 255, 0.065);
   --color-text-primary: rgba(255, 255, 255, 0.92);
@@ -11,10 +11,10 @@
   --color-text-tertiary: rgba(255, 255, 255, 0.42);
   --color-stroke-subtle: rgba(255, 255, 255, 0.08);
   --color-stroke-strong: rgba(255, 255, 255, 0.14);
-  --color-accent: #397bff;
-  --color-accent-hover: #4f89ff;
-  --color-accent-soft: rgba(57, 123, 255, 0.16);
-  --color-success: #42e6c6;
+  --color-accent: #f08c6e;
+  --color-accent-hover: #f5a48c;
+  --color-accent-soft: rgba(240, 140, 110, 0.14);
+  --color-success: #79c59b;
   --color-focus-ring: rgba(91, 124, 250, 0.46);
   --color-glass-tint: rgba(15, 17, 20, 0.4);
   --color-glass-fallback: rgba(15, 17, 20, 0.92);

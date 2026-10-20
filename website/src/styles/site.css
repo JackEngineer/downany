@@ -792,3 +792,15 @@ section[id] {
     gap: var(--space-6);
   }
 }
+
+.product-preview figcaption { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; margin-top: 12px; text-align: center; }
+.development { padding-block: var(--space-16); border-top: 1px solid var(--color-stroke-subtle); }
+.development__heading { max-width: 760px; }
+.development__version { color: var(--color-accent); font-size: var(--type-meta-size); margin-bottom: 12px; }
+.development h2 { font-size: var(--type-section-size); line-height: var(--type-section-line); margin-bottom: 16px; }
+.development__heading > p:last-child, .development__list p { color: var(--color-text-secondary); }
+.development__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 48px; margin-block: 32px; }
+.development__list li { padding-top: 20px; border-top: 1px solid var(--color-stroke-subtle); }
+.development__list h3 { font-size: 18px; line-height: 1.5; margin-bottom: 8px; }
+.button--primary { color: #252825; }
+@media(max-width: 640px) { .development__list { grid-template-columns: 1fr; gap: 20px; } }

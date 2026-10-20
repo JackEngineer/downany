@@ -18,7 +18,18 @@ export const siteContent = {
   ],
   hero: {
     title: "把网页里的视频，稳稳收进本地。",
-    description: "粘贴视频链接，选择画质、字幕与合集条目。支持 Apple Silicon Mac 与 Windows x64。",
+    description: "粘贴视频链接，选择画质、字幕与合集条目，在本地管理下载与历史记录。正式版提供 Apple Silicon Mac 与 Windows x64 下载。",
+  },
+  development: {
+    title: "最近的开发进度",
+    version: "0.3.17 开发版 · 2026 年 10 月",
+    description: "以下功能已进入最新源码；Mac 本地安装验证与公开发行分开记录。下载按钮仍指向现有正式版，不提供尚未发布的安装包。",
+    items: [
+      { title: "从窗口到 Dock，标识一致", description: "统一珊瑚橙标识、顶部导航和新建下载入口。首次无任务与筛选无匹配在最新源码中分别提示。" },
+      { title: "本地预览与媒体导出", description: "在工作台查看本地媒体，按需裁剪或转换；导出保留原文件。" },
+      { title: "在应用内查找视频", description: "YouTube、Bilibili 与 Dailymotion 提供应用内搜索；Dailymotion 支持加载更多、去重与取消。搜索有结果不代表媒体一定可下载。" },
+      { title: "如实说明平台边界", description: "X、抖音、快手目前提供浏览器搜索与作品链接导入；三个平台的原生搜索尚未通过。登录、验证码及网站拒绝仍可能阻止下载。" },
+    ],
   },
   workflow: {
     title: "你只需要三步",
@@ -85,7 +96,7 @@ export const siteContent = {
       {
         question: "Downany 支持哪些网站？",
         answer:
-          "支持识别 YouTube、Bilibili、抖音、TikTok、Twitter、Instagram 等常见平台的视频。可下载内容取决于实际识别结果和访问权限；部分页面需要有效登录状态，网页可播放不保证能够下载。",
+          "YouTube、Bilibili 等平台提供视频识别入口；抖音支持仍属实验性。网站、作品权限、登录或验证要求都会影响结果，网页可播放不保证能下载。开发版新增能力请查看开发进度，不代表当前正式安装包已包含。",
       },
       {
         question: "下载的视频存放在哪里？",

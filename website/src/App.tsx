@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { DevelopmentProgress } from "./components/DevelopmentProgress";
 import { CapabilityList } from "./components/CapabilityList";
 import { DownloadPanel } from "./components/DownloadPanel";
 import { Faq } from "./components/Faq";
@@ -29,6 +30,7 @@ export function App() {
       <SiteHeader />
       <main>
         <Hero platform={platform} releaseState={releaseState} />
+        <DevelopmentProgress />
         <Workflow />
         <RecognitionSpotlight />
         <CapabilityList />
