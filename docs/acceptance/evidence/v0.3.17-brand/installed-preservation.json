@@ -1,0 +1,15 @@
+{
+  "appVersion": "0.3.17",
+  "sidecarVersion": "0.3.17",
+  "connection": "connected",
+  "versionMismatch": false,
+  "queueCount": 48,
+  "historyCount": 41,
+  "existingFiles": 33,
+  "allQueueFieldsUnchanged": true,
+  "allHistoryFieldsUnchanged": true,
+  "configBytesUnchanged": true,
+  "existingFilesUnchanged": true,
+  "exportIndexUnchanged": true,
+  "installedCoreMatchesCandidate": true
+}

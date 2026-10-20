@@ -1,5 +1,6 @@
 /** 菜单栏模式：Tray 图标与菜单。 */
 import { Menu, Tray, nativeImage } from "electron";
+import path from "node:path";
 
 import type { TrackedTask } from "./taskTracker";
 
@@ -13,33 +14,10 @@ export interface TrayCallbacks {
 }
 
 function buildTrayIcon(): Electron.NativeImage {
-  // 运行时绘制 18x18 模板图标（下载箭头），避免打包资源路径问题
-  const size = 18;
-  const buffer = Buffer.alloc(size * size * 4);
-  const set = (x: number, y: number) => {
-    if (x < 0 || x >= size || y < 0 || y >= size) return;
-    const i = (y * size + x) * 4;
-    buffer[i] = 0;
-    buffer[i + 1] = 0;
-    buffer[i + 2] = 0;
-    buffer[i + 3] = 255;
-  };
-  for (let y = 2; y <= 9; y += 1) {
-    set(8, y);
-    set(9, y);
-  }
-  for (let y = 8; y <= 14; y += 1) {
-    const half = 14 - y;
-    for (let x = 9 - half; x <= 8 + half; x += 1) set(x, y);
-  }
-  for (let x = 4; x <= 13; x += 1) {
-    set(x, 15);
-    set(x, 16);
-  }
-  const image = nativeImage.createFromBitmap(buffer, { width: size, height: size });
-  if (process.platform === "darwin") {
-    image.setTemplateImage(true);
-  }
+  // NativeImage discovers the paired @2x asset; macOS supplies light/dark tint.
+  const file = process.platform === "darwin" ? "brand-trayTemplate.png" : "brand-tray.png";
+  const image = nativeImage.createFromPath(path.join(__dirname, file));
+  if (process.platform === "darwin") image.setTemplateImage(true);
   return image;
 }
 

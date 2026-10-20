@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "../../electron/preload";
 import type { MediaInfo } from "../../electron/mediaTypes";
@@ -13,10 +13,59 @@ const second=taskFixture({id:"two",title:"第二段",status:"completed",file_pat
 const info=(id:string):MediaInfo=>({taskId:id,duration:24,width:1280,height:720,video:"h264",audio:"aac",files:[{id:"original",name:id+".mp4",path:"/safe/"+id+".mp4",bytes:1000,kind:"video",url:"downany-media://local/"+"a".repeat(48)}]});
 beforeEach(()=>{localStorage.clear();setLocale("zh-CN");inspect.mockReset().mockImplementation(async id=>info(id));request.mockReset().mockImplementation(async method=>method==="app.getSnapshot"?{tasks:[first,second],settings:settingsFixture()}:{});exportMedia.mockReset();cancel.mockReset();
 Object.defineProperty(HTMLMediaElement.prototype,"pause",{configurable:true,value:vi.fn()});Object.defineProperty(HTMLMediaElement.prototype,"load",{configurable:true,value:vi.fn()});
+Object.defineProperty(HTMLDialogElement.prototype,"showModal",{configurable:true,value:function(this:HTMLDialogElement){this.open=true;}});
+Object.defineProperty(HTMLDialogElement.prototype,"close",{configurable:true,value:function(this:HTMLDialogElement){this.open=false;}});
 window.api={platform:"darwin",request,media:{inspect,jobs:vi.fn().mockResolvedValue([]),export:exportMedia,cancel,open:vi.fn().mockResolvedValue(undefined)},onHighlightTask:()=>()=>undefined,onEvent:()=>()=>undefined,openSettings:vi.fn(),openExtractWindow:vi.fn().mockResolvedValue(undefined)} as unknown as DesktopApi;
-useAppStore.setState({tasks:[first,second],settings:settingsFixture(),connection:"connected",filter:"all",searchMode:"filter",searchQuery:"",sortOrder:"oldest",toasts:[],addFocusSignal:0});});
+useAppStore.setState({tasks:[first,second],settings:settingsFixture(),connection:"connected",filter:"all",searchMode:"filter",searchQuery:"",sortOrder:"oldest",toasts:[],addFocusSignal:0,pendingAddUrls:null});});
 afterEach(()=>{cleanup();vi.restoreAllMocks()});
 describe("production task workbench",()=>{
+ it("offers the existing add dialog for an empty library without creating a task",async()=>{
+  useAppStore.setState({tasks:[]});
+  render(<TaskWorkbench/>);
+  const empty=within(screen.getByRole("main"));
+  expect(empty.getByRole("heading",{name:"还没有下载任务"})).toBeInTheDocument();
+  expect(empty.queryByRole("button",{name:"显示全部任务"})).not.toBeInTheDocument();
+  fireEvent.click(empty.getByRole("button",{name:"新建下载"}));
+  expect(await screen.findByRole("dialog",{name:"新建下载"})).toBeInTheDocument();
+  await waitFor(()=>expect(screen.getByRole("textbox",{name:"视频或网页链接"})).toHaveFocus());
+  fireEvent.click(screen.getByRole("button",{name:"关闭新建下载，保留草稿"}));
+  await waitFor(()=>expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(useAppStore.getState().tasks).toEqual([]);
+  expect(request).not.toHaveBeenCalledWith("download.createTasks",expect.anything());
+ });
+ it.each(["search","status","attention"])("restores existing tasks from an empty %s result",async reason=>{
+  render(<TaskWorkbench/>);
+  if(reason==="attention")fireEvent.click(screen.getByRole("button",{name:/^需处理/}));
+  act(()=>useAppStore.setState({searchQuery:reason==="search"?"no-such-task":"第一段",filter:reason==="status"?"active":"all"}));
+  const empty=within(screen.getByRole("main"));
+  expect(empty.getByRole("heading",{name:"没有匹配的任务"})).toBeInTheDocument();
+  expect(empty.queryByRole("button",{name:"新建下载"})).not.toBeInTheDocument();
+  fireEvent.click(empty.getByRole("button",{name:"显示全部任务"}));
+  expect(useAppStore.getState().searchQuery).toBe("");
+  expect(useAppStore.getState().filter).toBe("all");
+  expect(screen.getByRole("button",{name:/^全部任务/})).toHaveAttribute("aria-pressed","true");
+  expect(screen.getByRole("button",{name:"选择任务 第一段"})).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"选择任务 第二段"})).toBeInTheDocument();
+  expect(await screen.findByRole("heading",{name:"第一段"})).toBeInTheDocument();
+ });
+ it("keeps the first visible task selected when the stored selection is stale",async()=>{
+  localStorage.setItem("downany.selected-task","removed-task");
+  render(<TaskWorkbench/>);
+  expect(await screen.findByRole("heading",{name:"第一段"})).toBeInTheDocument();
+  expect(screen.queryByRole("heading",{name:"还没有下载任务"})).not.toBeInTheDocument();
+ });
+ it("translates both empty states when the locale changes",()=>{
+  useAppStore.setState({tasks:[]});
+  render(<TaskWorkbench/>);
+  act(()=>setLocale("en"));
+  let empty=within(screen.getByRole("main"));
+  expect(empty.getByRole("heading",{name:"No downloads yet"})).toBeInTheDocument();
+  expect(empty.getByRole("button",{name:"New download"})).toBeInTheDocument();
+  act(()=>useAppStore.setState({tasks:[first,second],searchQuery:"no-such-task"}));
+  empty=within(screen.getByRole("main"));
+  expect(empty.getByRole("heading",{name:"No matching tasks"})).toBeInTheDocument();
+  expect(empty.getByRole("button",{name:"Show all tasks"})).toBeInTheDocument();
+ });
  it("uses reliable host names without exposing URL credentials or signed query strings",()=>{expect(sourceName(first)).toBe("media.example.com");expect(sourceName({...first,url:"javascript:alert(1)"})).toBe("来源待确认");expect(sourceName({...first,url:"file:///safe/a.mp4"})).toBe("本地文件");});
  it("shows completed details and local preview without autoplay",async()=>{const view=render(<TaskWorkbench/>);await screen.findByText("one.mp4");expect(screen.getByRole("heading",{name:"第一段"})).toBeInTheDocument();expect(view.container.querySelector("video")).not.toHaveAttribute("autoplay");expect(view.container.textContent).not.toContain("token=secret");});
  it("ignores a late metadata reply after switching tasks",async()=>{let resolve!: (v:MediaInfo)=>void;inspect.mockImplementation(id=>id==="one"?new Promise(r=>{resolve=r}):Promise.resolve(info(id)));render(<TaskWorkbench/>);fireEvent.click(screen.getByRole("button",{name:"选择任务 第二段"}));await screen.findByText("two.mp4");await act(async()=>resolve(info("one")));expect(screen.queryByText("one.mp4")).not.toBeInTheDocument();});

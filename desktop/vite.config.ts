@@ -15,6 +15,9 @@ function buildExtractAssets(): { name: string; closeBundle: () => Promise<void> 
         path.join(outDir, "extract.html"),
       );
       fs.copyFileSync(path.resolve(__dirname, "electron/extractView.js"), path.join(outDir, "extractView.js"));
+      for (const file of ["brand-trayTemplate.png", "brand-trayTemplate@2x.png", "brand-tray.png", "brand-tray@2x.png"]) {
+        fs.copyFileSync(path.resolve(__dirname, "electron/assets", file), path.join(outDir, file));
+      }
       await viteBuild({
         configFile: false,
         build: {

@@ -1,0 +1,12 @@
+{
+  "movedToTrash": 4,
+  "failed": 0,
+  "permanentlyDeleted": 0,
+  "allocatedKiBBefore": 932892,
+  "freeBytesBefore": 59393544192,
+  "freeBytesAfter": 59359887360,
+  "observedSpaceDelta": -33656832,
+  "trashDoesNotReleaseSpace": true,
+  "currentCandidateRetained": true,
+  "dataBackupRetained": true
+}

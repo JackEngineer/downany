@@ -1,0 +1,41 @@
+{
+  "desktop/build/icon.png": {
+    "dimensions": [
+      1024,
+      1024
+    ],
+    "sha256": "3a92af761d3061f6558968308f3ac9b07613c172e00664b8326daa72733f393e"
+  },
+  "browser-extension/icons/icon16.png": {
+    "dimensions": [
+      16,
+      16
+    ],
+    "sha256": "dd07e750b74b77df9b49080af0eaa652b9622baee8d2b4ffd62694f9e9bfa651"
+  },
+  "browser-extension/icons/icon32.png": {
+    "dimensions": [
+      32,
+      32
+    ],
+    "sha256": "40695cb9774a90d7226d36fa0c6c7d3e0529acf40919e6eae952c95bb853065f"
+  },
+  "browser-extension/icons/icon48.png": {
+    "dimensions": [
+      48,
+      48
+    ],
+    "sha256": "bcfaad9ba4780ac89feb4913b898cc743feb0683e69026a5fb46439106d6f806"
+  },
+  "browser-extension/icons/icon128.png": {
+    "dimensions": [
+      128,
+      128
+    ],
+    "sha256": "5829fd2a09e12ef6e872d85c701f266ffd76e75fc6d6fece7bfc9f308883bff8"
+  },
+  "sameMasterCopies": true,
+  "packagedIcnsMatches": true,
+  "icoRepresentations": 7,
+  "icnsSystemDecoded": true
+}

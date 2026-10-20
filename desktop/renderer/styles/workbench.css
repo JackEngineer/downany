@@ -639,3 +639,6 @@
 
 .workbench .task-list { display:block; }
 .workbench .task-row { flex-shrink:0; }
+
+/* Shared product identity; independent of task/action icons. */
+.downany-brand-mark { display: block; flex-shrink: 0; max-width: 100%; height: auto; object-fit: contain; }

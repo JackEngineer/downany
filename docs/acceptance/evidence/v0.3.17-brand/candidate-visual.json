@@ -1,0 +1,40 @@
+{
+  "checks": [
+    "packaged-brand-loaded-native-tray-1x-2x-template-menu-bar-and-dock-mode",
+    "actual-candidate-wide-narrow-light-dark-brand-visible-no-horizontal-overflow",
+    "brand-menu-keyboard-new-download-dismiss-and-search-navigation-preserved-no-task-created",
+    "existing-extension-popup-and-install-local-static-brand-resources-load"
+  ],
+  "screenshots": [
+    "candidate-1120x800-light.png",
+    "candidate-1120x800-dark.png",
+    "candidate-760x600-light.png",
+    "candidate-760x600-dark.png",
+    "candidate-search-dark.png",
+    "extension-popup.png",
+    "extension-install.png"
+  ],
+  "browser": "isolated local Chromium and Electron; no user profile or cloud browser",
+  "native": {
+    "version": "0.3.17",
+    "templateSize": {
+      "width": 18,
+      "height": 18
+    },
+    "templateScales": [
+      1,
+      2
+    ],
+    "isTemplate": true,
+    "coloredSize": {
+      "width": 18,
+      "height": 18
+    },
+    "coloredScales": [
+      1,
+      2
+    ],
+    "dockVisible": false
+  },
+  "passed": true
+}

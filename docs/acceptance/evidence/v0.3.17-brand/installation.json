@@ -1,0 +1,13 @@
+{
+  "version": "0.3.17",
+  "previousVersion": "0.3.16",
+  "dmgSha256": "bb7738df5eb422c0e402a89693bd9c6836354498d10deec5f3cda34a322b08a1",
+  "mountedDmgCoreVerified": true,
+  "normalShutdown": true,
+  "dataBackupVerified": true,
+  "candidateAllFilesVerified": true,
+  "atomicReplacement": true,
+  "oldAppRetainedUntilVerification": true,
+  "queueCount": 48,
+  "historyCount": 41
+}
