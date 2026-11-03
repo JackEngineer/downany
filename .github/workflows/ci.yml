@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, master]
@@ -89,11 +92,7 @@ jobs:
           node-version: "20"
       - name: Extension tests
         working-directory: browser-extension
-        run: |
-          node shared.test.js
-          node sniff-core.test.js
-          node bridge-timeout.test.js
-          node install-ui.test.js
+        run: node --test *.test.js
       - name: Package verified extension
         id: extension_package
         shell: bash
@@ -108,6 +107,28 @@ jobs:
           name: downany-chrome-extension-${{ steps.extension_package.outputs.version }}
           if-no-files-found: error
           path: ${{ steps.extension_package.outputs.artifact }}
+
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck and build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+      - name: Sites worker tests
+        run: npm run test:sites
 
   # Native resources are expensive and require platform-specific toolchains.
   # A release tag always produces a usable cloud-only package; native mode is
